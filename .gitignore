@@ -16,3 +16,4 @@ __pycache__/
 # internal working notes stay out of the repo
 HANDOFF*.md
 [S]PEC*
+linking-report.json

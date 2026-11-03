@@ -6,7 +6,7 @@ leaderboard or a liquidation map). Goals: find the owner / origin of funds,
 find sibling shards, learn stops, sizes and timing.
 
 Each attack prints LINKED / NOT LINKED / PARTIAL with the evidence, and the
-whole run is written to attacks/linking-report.json in the private folder. Polite rates (<= 5 req/s).
+whole run is written to linking-report.json in the current folder. Polite rates (<= 5 req/s).
 usage: linking_attacks.py <target_hl_address> [private_deposit_address_to_check]
 """
 import hashlib, json, os, sys, time, urllib.request
@@ -14,13 +14,13 @@ import hashlib, json, os, sys, time, urllib.request
 HL = "https://api.hyperliquid.xyz/info"
 OL = "https://api.outlayer.ai"
 ONECLICK = "https://1click.chaindefuser.com/v0/status?depositAddress="
-OUT = os.path.join(os.environ.get("UNHUNTABLE_PRIVATE", os.path.expanduser("~/unhuntable-private")), "attacks", "linking-report.json")
+OUT = os.path.join(os.getcwd(), "linking-report.json")
 
 
 def get(url, body=None, pause=0.2):
     time.sleep(pause)
     req = urllib.request.Request(url, data=json.dumps(body).encode() if body else None,
-                                 headers={"Content-Type": "application/json", "User-Agent": "unhuntable-attack-v0"})
+                                 headers={"Content-Type": "application/json", "User-Agent": "unhuntable-linking-check"})
     try:
         with urllib.request.urlopen(req, timeout=20) as r:
             return r.status, json.loads(r.read() or b"null")
