@@ -1,0 +1,100 @@
+{
+ "addr": "0x19e7e376e7c213b7e7e7e46cc70a5dd086daff2a",
+ "cases": [
+  {
+   "action": {
+    "type": "order",
+    "orders": [
+     {
+      "a": 1,
+      "b": false,
+      "p": "2187.3",
+      "s": "0.0051",
+      "r": true,
+      "t": {
+       "limit": {
+        "tif": "Ioc"
+       }
+      }
+     }
+    ],
+    "grouping": "na"
+   },
+   "nonce": 1730000000000,
+   "sig": {
+    "r": "0xc9de37fb2b06031aa9726d446c1b6c4a52785356101efe4f2c9acc066917fb16",
+    "s": "0x7dd9e48bb3d94c7df246a008d5ebf3121fa868236346f83a21c7bf7a599c3bc6",
+    "v": 28
+   }
+  },
+  {
+   "action": {
+    "type": "order",
+    "orders": [
+     {
+      "a": 1,
+      "b": true,
+      "p": "2316.6",
+      "s": "0.0123",
+      "r": true,
+      "t": {
+       "limit": {
+        "tif": "Ioc"
+       }
+      }
+     }
+    ],
+    "grouping": "na",
+    "builder": {
+     "b": "0x1234567890abcdef1234567890abcdef12345678",
+     "f": 10
+    }
+   },
+   "nonce": 1730000000001,
+   "sig": {
+    "r": "0xed1e695b8de25f0ce3a0c021bdf62f1ad1085a0585833a5a06fbf534299f8bd9",
+    "s": "0x345f7d5ed91fbf91e2d30385acc0fe220db8506abe078c2f2735ca6e0c690a17",
+    "v": 28
+   }
+  },
+  {
+   "action": {
+    "type": "order",
+    "orders": [
+     {
+      "a": 0,
+      "b": false,
+      "p": "104321",
+      "s": "0.00011",
+      "r": true,
+      "t": {
+       "limit": {
+        "tif": "Ioc"
+       }
+      }
+     }
+    ],
+    "grouping": "na"
+   },
+   "nonce": 1730000000002,
+   "sig": {
+    "r": "0x7be651ba6f87c8b06eb6dd59902f21bc678639cbdd4ea43bc1b1f1e4da87d4f5",
+    "s": "0x231b9dd9dd2332c0b25fe809ec96b3410661830f7886fc469fab2c4de8dc714a",
+    "v": 27
+   }
+  }
+ ],
+ "builder_fee": {
+  "action": {
+   "maxFeeRate": "0.01%",
+   "builder": "0x1234567890abcdef1234567890abcdef12345678",
+   "nonce": 1730000000003,
+   "type": "approveBuilderFee"
+  },
+  "sig": {
+   "r": "0x80f3510656c4269c43185709a2c2866e9eb2ae9ad79787958b4a7f2bba51c3c1",
+   "s": "0x198a211dd42faa2477b47c78f0bbb49d5b9926c0062f2b06c7d2b48a8b60e0ee",
+   "v": 27
+  }
+ }
+}

@@ -1,0 +1,14 @@
+# never in this repo
+keys/
+*.key
+*.pem
+.env*
+g0/
+findings/
+*.jsonl
+report-*.json
+# build output
+target/
+node_modules/
+*.wasm
+__pycache__/
