@@ -1,6 +1,6 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { LADDER, isPlanError, maintenanceRatio, pieceEquity, plan, type PlanInput } from "../src/planner.js";
+import { LADDER, MAX_PIECE_NOTIONAL_USD, isPlanError, maintenanceRatio, pieceEquity, plan, type PlanInput } from "../src/planner.js";
 
 const COINS = [
   { coin: "BTC", szDecimals: 5, maxLeverage: 40, px: [20_000, 200_000] },
@@ -73,5 +73,23 @@ describe("plan properties", () => {
       }),
       { numRuns: 500 },
     );
+  });
+
+  it("plan_never_exceeds_piece_cap", () => {
+    // a venue limit of 50x keeps the reserve small, so the ladder alone would allow pieces over the cap
+    const wide = fc.tuple(input, fc.integer({ min: 1, max: 50 })).map(([inp, maxLeverage]) => ({ ...inp, maxLeverage }));
+    fc.assert(
+      fc.property(wide, vrf, (inp, bytes) => {
+        const r = plan(inp, bytes);
+        if (isPlanError(r)) return;
+        for (const p of r.pieces) expect(p.notionalUsd).toBeLessThanOrEqual(MAX_PIECE_NOTIONAL_USD);
+      }),
+      { numRuns: 1000 },
+    );
+    const one = { coin: "ETH", side: "long", notionalUsd: 5100, leverage: 10, hiding: "normal", markPx: 2000, szDecimals: 4, maxLeverage: 50 } as const;
+    const r = plan(one, new Uint8Array([1, 2, 3]));
+    expect(isPlanError(r) && r.code).toBe("over_cap");
+    const ok = plan({ ...one, notionalUsd: 5000 }, new Uint8Array([1, 2, 3]));
+    expect(isPlanError(ok)).toBe(false);
   });
 });

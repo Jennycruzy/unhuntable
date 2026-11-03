@@ -60,6 +60,8 @@ export const LADDER: readonly number[] = [12, 15, 20, 25, 30, 40, 50, 75, 100, 1
 export const MIN_PIECE_USD = 12;
 export const MAX_PLAN_LEVERAGE = 10;
 export const MAX_PIECES = 12;
+/** The guard refuses to open more than this notional in one piece. */
+export const MAX_PIECE_NOTIONAL_USD = 5000;
 /** Liquidation must be at least this far from the entry price at open. */
 export const MIN_LIQ_DISTANCE = 0.18;
 export const TRADING_FEE_RESERVE = 0.002;
@@ -157,7 +159,8 @@ export function plan(input: PlanInput, vrf: Uint8Array): Plan | PlanError {
 
   const notionalOf = (u: number) => (u / scale) * markPx;
   const minOk = (units: number[]) => units.every((u) => notionalOf(u) >= MIN_PIECE_USD);
-  const capOk = (units: number[]) => units.every((u) => ladderAmount(fundingNeed(notionalOf(u), leverage, maxLeverage)) !== undefined);
+  const capOk = (units: number[]) =>
+    units.every((u) => notionalOf(u) <= MAX_PIECE_NOTIONAL_USD && ladderAmount(fundingNeed(notionalOf(u), leverage, maxLeverage)) !== undefined);
   // Each candidate piece count reads the VRF stream from the start, so the plan depends only on the count chosen.
   const attempt = (n: number) => {
     const s = new VrfStream(vrf);

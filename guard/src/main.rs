@@ -6,10 +6,11 @@
 //! itself refuses withdrawals signed by an agent, so this code can trade and
 //! can never move money out.
 //!
-//! Stops arrive encrypted to the guard's sealed X25519 key (the public input
-//! hash of an OutLayer call reveals nothing), are stored sealed, and fire only
-//! when at least three of seven price sources agree. Answers never contain a
-//! stop level.
+//! Stops and take-profits arrive encrypted to the guard's sealed X25519 key (the
+//! public input hash of an OutLayer call reveals nothing), are stored sealed, and
+//! fire only when at least three of seven price sources agree. Answers never
+//! contain a trigger level or a master address. Every decision is a pure function
+//! in lib.rs; this file only reads, writes and sends.
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() {}
@@ -143,7 +144,8 @@ mod guest {
         let sig = sign_with(&agent_secret(shard)?, &l1_digest(action, nonce))?;
         let body = json!({ "action": to_json(action), "nonce": nonce, "signature": sig_json(&sig), "vaultAddress": null });
         let (st, b) = post_json(&format!("{HL}/exchange"), &body)?;
-        Ok(json!({ "http": st, "body": serde_json::from_str::<Value>(&b).unwrap_or(Value::String(b)) }))
+        let body = serde_json::from_str::<Value>(&b).unwrap_or(Value::String(b));
+        Ok(json!({ "http": st, "body": redact_addresses(&body) }))
     }
 
     fn coin_of(v: &Value) -> Result<String, String> {
@@ -160,6 +162,123 @@ mod guest {
         hex::decode(v[k].as_str().ok_or(format!("box.{k}"))?).map_err(e)
     }
 
+    fn tp_name(shard: &str, coin: &str) -> String {
+        format!("tp:{shard}:{coin}")
+    }
+
+    fn defend_name(shard: &str, coin: &str) -> String {
+        format!("defend:{shard}:{coin}")
+    }
+
+    /// One price fetch: agreeing prices (if at least three agree), their median, and the summary.
+    fn price_round(coin: &str) -> (Option<Vec<f64>>, Option<f64>, PriceInfo) {
+        let (ps, bad, price_ms) = prices(coin);
+        let vals: Vec<f64> = ps.iter().map(|p| p.1).collect();
+        let agree = agreed(&vals);
+        let mid = agree.as_ref().map(|a| median(a));
+        let info = PriceInfo { sources_ok: ps.len(), sources_agree: agree.as_ref().map(|a| a.len()), source_errors: bad, price_ms };
+        (agree, mid, info)
+    }
+
+    /// The shard's registered master account. Never put in an output.
+    fn master_of(shard: &str) -> Result<String, String> {
+        let r = sealed::get(ENC, None, &format!("master:{shard}")).map_err(e)?.ok_or("shard is not registered")?;
+        String::from_utf8(r.into_plaintext()).map_err(e)
+    }
+
+    fn position(master: &str, coin: &str) -> Result<Option<Position>, String> {
+        let (st, b) = post_json(&format!("{HL}/info"), &json!({"type": "clearinghouseState", "user": master}))?;
+        if st != 200 {
+            return Err(format!("clearinghouseState {st}"));
+        }
+        let v: Value = serde_json::from_str(&b).map_err(e)?;
+        Ok(position_of(&v, coin).filter(|p| p.szi != 0.0))
+    }
+
+    /// Read a sealed stop or take-profit together with its record (for compare-and-swap).
+    fn read_trigger(name: &str) -> Result<(Option<sealed::Sealed>, Option<Stop>), String> {
+        let rec = sealed::get(ENC, None, name).map_err(e)?;
+        let t = rec.as_ref().and_then(|r| serde_json::from_slice(r.plaintext()).ok());
+        Ok((rec, t))
+    }
+
+    /// Mark a trigger fired with compare-and-swap. false when another run got there first.
+    fn mark_fired(name: &str, rec: &sealed::Sealed, t: &Stop) -> Result<bool, String> {
+        let mut f = t.clone();
+        f.fired = true;
+        Ok(sealed::set_if_equals(ENC, None, name, rec, &serde_json::to_vec(&f).unwrap()).map_err(e)?.0)
+    }
+
+    /// Stop and take-profit for one shard at the prices already fetched, then the defence step.
+    fn tick_shard(shard: &str, coin: &str, agree: Option<&[f64]>, mid: Option<f64>, dry: bool, defend: bool, builder: Option<(&str, u64)>) -> Result<Value, String> {
+        let (stop_rec, stop) = read_trigger(&stop_name(shard, coin))?;
+        let (tp_rec, tp) = read_trigger(&tp_name(shard, coin))?;
+        let (rnd, _, _) = vrf::random_bytes(&format!("band-{shard}-{coin}-{}", now_ms()))?;
+        let d = decide_shard(stop.as_ref(), tp.as_ref(), agree, mid, u01(&rnd[0..8]), u01(&rnd[8..16]));
+        let mut done = d.done(dry);
+        let mut order = Value::Null;
+        let fired_now = |f: Fire| d.fire == f && !dry;
+        if !dry && d.fire != Fire::Nothing {
+            // at most once: mark fired BEFORE sending
+            let (name, rec, t) = match d.fire {
+                Fire::Stop => (stop_name(shard, coin), stop_rec.as_ref(), stop.as_ref()),
+                _ => (tp_name(shard, coin), tp_rec.as_ref(), tp.as_ref()),
+            };
+            let (rec, t) = (rec.ok_or("record vanished")?, t.ok_or("record vanished")?);
+            if mark_fired(&name, rec, t)? {
+                order = send(shard, &close_order(t, mid.ok_or("no mid")?, builder).ok_or("asset")?)?;
+            } else {
+                done = "already_fired_elsewhere";
+            }
+        }
+        let defence = if defend && (dry || d.fire == Fire::Nothing) {
+            defence_shard(shard, coin, mid, dry).unwrap_or_else(|err| json!({ "error": err }))
+        } else {
+            Value::Null
+        };
+        Ok(shard_report(done, d.band, still_live(stop.as_ref(), fired_now(Fire::Stop)), still_live(tp.as_ref(), fired_now(Fire::TakeProfit)), defence, order))
+    }
+
+    /// One defence ladder step for a shard's position in a coin.
+    fn defence_shard(shard: &str, coin: &str, mid: Option<f64>, dry: bool) -> Result<Value, String> {
+        let master = master_of(shard)?;
+        let a = asset(coin).ok_or("asset")?;
+        let name = defend_name(shard, coin);
+        let rec = sealed::get(ENC, None, &name).map_err(e)?;
+        let rung: u8 = rec.as_ref().and_then(|r| std::str::from_utf8(r.plaintext()).ok()?.parse().ok()).unwrap_or(0).min(3);
+        let pos = position(&master, coin)?;
+        let (step, distance) = match (pos.as_ref(), mid) {
+            // no position: the ladder starts again from 0
+            (None, _) => (DefenceAction { kind: DefenceKind::Nothing, rung: 0, size: 0.0 }, None),
+            (Some(p), Some(m)) => match p.liquidation_px.and_then(|l| liq_distance(m, l)) {
+                Some(d) => (defence_step(d, rung, p.szi.abs(), m, a.sz_decimals), Some(d)),
+                None => (DefenceAction { kind: DefenceKind::Nothing, rung, size: 0.0 }, None),
+            },
+            // no price agreement: no action
+            (Some(_), None) => (DefenceAction { kind: DefenceKind::Nothing, rung, size: 0.0 }, None),
+        };
+        if dry {
+            return Ok(defend_report(&step, distance, None));
+        }
+        if step.rung != rung {
+            let bytes = step.rung.to_string();
+            let won = match &rec {
+                Some(r) => sealed::set_if_equals(ENC, None, &name, r, bytes.as_bytes()).map_err(e)?.0,
+                None => sealed::set_if_absent(ENC, None, &name, bytes.as_bytes()).map_err(e)?,
+            };
+            if !won {
+                // another run moved the ladder first; it sends the order
+                return Ok(defend_report(&DefenceAction { kind: DefenceKind::Nothing, rung, size: 0.0 }, distance, None));
+            }
+        }
+        let hl = match (step.kind, pos.as_ref(), mid) {
+            (DefenceKind::Nothing, _, _) => None,
+            (_, Some(p), Some(m)) => Some(send(shard, &reduce_order(a, p.szi < 0.0, m, step.size, None))?),
+            _ => None,
+        };
+        Ok(defend_report(&step, distance, hl))
+    }
+
     pub fn run(outer: &Value) -> Result<Value, String> {
         let t0 = Instant::now();
         // Every op except addr/box_pub arrives as ONE sealed box: {"box":{epk,nonce,ct}}, aad "unhuntable-call-v1".
@@ -171,6 +290,7 @@ mod guest {
             let b = &outer["box"];
             let pt = box_open(&secret("box")?, &hexf(b, "epk")?, &hexf(b, "nonce")?, &hexf(b, "ct")?, CALL_AAD)?;
             opened = serde_json::from_slice::<Value>(&pt).map_err(|_| "box content is not JSON")?;
+            check_outer_shard(outer, &opened)?;
             &opened
         } else {
             outer
@@ -210,24 +330,29 @@ mod guest {
                 };
                 let size = input["size"].as_f64().filter(|x| *x > 0.0).ok_or("size")?;
                 let (mid, _, info) = agreed_mid(&coin)?;
-                if size * mid > MAX_NOTIONAL_USD {
-                    return Err(format!("notional over the {MAX_NOTIONAL_USD} USD cap"));
-                }
+                check_open_cap(size, mid)?;
                 let order = open_order(asset(&coin).unwrap(), is_buy, mid, size, builder);
                 json!({ "mid": mid, "prices": info, "action": to_json(&order), "hl": send(&shard, &order)? })
             }
 
             // The stop travels inside the one sealed call (aad "unhuntable-call-v1") as input["stop"].
+            // With jitter_bps the stored trigger moves by a VRF-drawn amount within ±jitter_bps.
             "seal" => {
                 let shard = shard_of(input)?;
-                let mut st: Stop = serde_json::from_value(input["stop"].clone()).map_err(|_| "stop missing or malformed")?;
-                st.coin = st.coin.to_uppercase();
-                asset(&st.coin).ok_or("unsupported coin")?;
-                if (st.side != "long" && st.side != "short") || !(st.trigger > 0.0) || !(st.size > 0.0) {
-                    return Err("bad stop".into());
+                let mut st = check_trigger(&input["stop"], "stop")?;
+                let bps = check_jitter_bps(&input["jitter_bps"])?;
+                if bps > 0 {
+                    let (rnd, _, _) = vrf::random_bytes(&format!("jitter-{shard}-{}-{}", st.coin, now_ms()))?;
+                    st.trigger = jitter_trigger(st.trigger, bps, u01(&rnd[0..8]));
                 }
-                st.fired = false;
                 sealed::set(ENC, None, &stop_name(&shard, &st.coin), &serde_json::to_vec(&st).unwrap()).map_err(e)?;
+                json!({ "sealed": true })
+            }
+
+            "seal_tp" => {
+                let shard = shard_of(input)?;
+                let tp = check_trigger(&input["tp"], "take-profit")?;
+                sealed::set(ENC, None, &tp_name(&shard, &tp.coin), &serde_json::to_vec(&tp).unwrap()).map_err(e)?;
                 json!({ "sealed": true })
             }
 
@@ -235,46 +360,60 @@ mod guest {
                 let shard = shard_of(input)?;
                 let coin = coin_of(input)?;
                 let dry = input["dry"].as_bool().unwrap_or(false);
-                let (ps, bad, price_ms) = prices(&coin);
-                let vals: Vec<f64> = ps.iter().map(|p| p.1).collect();
-                let agree = agreed(&vals);
-                let name = stop_name(&shard, &coin);
-                let rec = sealed::get(ENC, None, &name).map_err(e)?;
-                let stop: Option<Stop> = rec.as_ref().and_then(|r| serde_json::from_slice(r.plaintext()).ok());
-                let (rnd, _, _) = vrf::random_bytes(&format!("band-{shard}-{coin}-{}", now_ms()))?;
-                let mid = agree.as_ref().map(|a| median(a));
-                let mut order = Value::Null;
-                let mut done = if agree.is_none() { "no_agreement" } else { "watch" };
-                if let (Some(a), Some(st)) = (agree.as_ref(), stop.as_ref()) {
-                    if should_fire(st, a) {
-                        done = if dry { "would_fire" } else { "fired" };
-                        if !dry {
-                            // at most once: mark fired BEFORE sending
-                            let mut f = st.clone();
-                            f.fired = true;
-                            let (won, _) = sealed::set_if_equals(ENC, None, &name, rec.as_ref().unwrap(), &serde_json::to_vec(&f).unwrap()).map_err(e)?;
-                            if !won {
-                                return Ok(json!({ "done": "already_fired_elsewhere" }));
-                            }
-                            let close = close_order(st, mid.unwrap(), builder).ok_or("asset")?;
-                            order = send(&shard, &close)?;
+                let defend = input["defend"].as_bool().unwrap_or(false);
+                let (agree, mid, info) = price_round(&coin);
+                tick_report(tick_shard(&shard, &coin, agree.as_deref(), mid, dry, defend, builder)?, &info)
+            }
+
+            // One price fetch for a coin, then every listed shard's stop, take-profit and defence.
+            "tick_coin" => {
+                let shards = check_shards(&input["shards"])?;
+                let coin = coin_of(input)?;
+                let dry = input["dry"].as_bool().unwrap_or(false);
+                let defend = input["defend"].as_bool().unwrap_or(false);
+                let (agree, mid, info) = price_round(&coin);
+                let reports = shards
+                    .iter()
+                    .map(|sh| {
+                        let r = tick_shard(sh, &coin, agree.as_deref(), mid, dry, defend, builder).unwrap_or_else(|err| json!({ "error": err }));
+                        (sh.clone(), r)
+                    })
+                    .collect();
+                tick_coin_report(reports, &info)
+            }
+
+            "defend" => {
+                let shard = shard_of(input)?;
+                let coin = coin_of(input)?;
+                let dry = input["dry"].as_bool().unwrap_or(false);
+                let (_, mid, info) = price_round(&coin);
+                tick_report(defence_shard(&shard, &coin, mid, dry)?, &info)
+            }
+
+            // Close the shard's whole position in a coin, read from Hyperliquid.
+            "close" => {
+                let shard = shard_of(input)?;
+                let coin = coin_of(input)?;
+                let master = master_of(&shard)?;
+                match position(&master, &coin)? {
+                    None => json!({ "done": "nothing_open" }),
+                    Some(p) => {
+                        let (_, mid, info) = price_round(&coin);
+                        let a = asset(&coin).unwrap();
+                        match mid.and_then(|m| close_position_order(a, p.szi, m)) {
+                            None if mid.is_none() => tick_report(json!({ "done": "no_agreement" }), &info),
+                            None => json!({ "done": "nothing_open" }),
+                            Some(order) => tick_report(close_report(round_sz(p.szi.abs(), a.sz_decimals), send(&shard, &order)?), &info),
                         }
                     }
                 }
-                let band = mid.map(|m| {
-                    let (lo, hi) = wake_band(m, stop.as_ref(), u01(&rnd[0..8]), u01(&rnd[8..16]));
-                    json!([lo, hi])
-                });
-                json!({
-                    "done": done,
-                    "band": band,
-                    "has_stop": stop.as_ref().map(|s| !s.fired && done != "fired"),
-                    "sources_ok": ps.len(),
-                    "sources_agree": agree.as_ref().map(|a| a.len()),
-                    "source_errors": bad,
-                    "price_ms": price_ms,
-                    "order": order,
-                })
+            }
+
+            // Verifiable random draw for a plan: anyone can check it against vrf_public_key from addr.
+            "vrf" => {
+                let label = input["label"].as_str().filter(|l| valid_vrf_label(l)).ok_or("label must be 1-64 of a-z, 0-9 and -")?;
+                let r = vrf::random(&format!("plan-{label}"))?;
+                json!({ "output_hex": r.output_hex, "proof": r.signature_hex, "alpha": r.alpha })
             }
 
             // Records which Hyperliquid master account a shard trades for (sealed; never echoed).
@@ -359,7 +498,7 @@ mod guest {
                 })
             }
 
-            // Safety proof: the shard's AGENT signs a 1 USDC usdSend to the guard's own
+            // Safety proof: the shard's AGENT signs a 1 USDC USD send to the guard's own
             // keystore address (fixed here). Hyperliquid must refuse it: agents cannot move funds.
             "withdraw_probe" => {
                 let shard = shard_of(input)?;

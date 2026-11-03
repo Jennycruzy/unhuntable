@@ -120,3 +120,101 @@ describe("checks before any call", () => {
     expect(() => new GuardClient({ owner: "o", project: "p", paymentKey: PAYMENT_KEY, boxPub: "xy" })).toThrow();
   });
 });
+
+describe("trading and defence ops", () => {
+  const ok = () => ({ body: { output: { ok: true } } });
+  const tp = { coin: "ETH" as const, side: "long" as const, trigger: 2600.25, size: 0.0045 };
+  const stop = { coin: "ETH" as const, side: "long" as const, trigger: 2100.5, size: 0.0045 };
+
+  it("each new op is one sealed box with the guard's field names", async () => {
+    const { c, sent } = client(Array.from({ length: 9 }, ok));
+    await c.close({ shard: "alpha", coin: "eth" as any });
+    await c.sealTp({ shard: "alpha", tp });
+    await c.seal({ shard: "alpha", stop, jitterBps: 40 });
+    await c.seal({ shard: "alpha", stop, jitterBps: 0 });
+    await c.tickCoin({ coin: "BTC", shards: ["alpha", "beta2"], dry: true, defend: true });
+    await c.tickCoin({ coin: "SOL", shards: ["alpha"] });
+    await c.defend({ shard: "alpha", coin: "SOL" });
+    await c.tick({ shard: "alpha", coin: "ETH", defend: true });
+    await c.vrf("plan-7-eth");
+    expect(sent.map((s) => inner(s.body))).toEqual([
+      { op: "close", shard: "alpha", coin: "ETH" },
+      { op: "seal_tp", shard: "alpha", tp },
+      { op: "seal", shard: "alpha", stop, jitter_bps: 40 },
+      { op: "seal", shard: "alpha", stop, jitter_bps: 0 },
+      { op: "tick_coin", coin: "BTC", shards: ["alpha", "beta2"], dry: true, defend: true },
+      { op: "tick_coin", coin: "SOL", shards: ["alpha"] },
+      { op: "defend", shard: "alpha", coin: "SOL" },
+      { op: "tick", shard: "alpha", coin: "ETH", defend: true },
+      { op: "vrf", label: "plan-7-eth" },
+    ]);
+    // the take-profit level only travels inside the box
+    expect(JSON.stringify(sent[1].body)).not.toContain("2600.25");
+  });
+
+  it("outer shard goes in plain next to the box and matches the shard inside", async () => {
+    const { c, sent } = client(Array.from({ length: 9 }, ok));
+    const route = { outerShard: true };
+    await c.agent("alpha", route);
+    await c.leverage({ shard: "alpha", coin: "ETH", leverage: 2, ...route });
+    await c.open({ shard: "alpha", coin: "ETH", side: "long", size: 0.01, ...route });
+    await c.seal({ shard: "alpha", stop, ...route });
+    await c.sealTp({ shard: "alpha", tp, ...route });
+    await c.tick({ shard: "alpha", coin: "ETH", ...route });
+    await c.defend({ shard: "alpha", coin: "ETH", ...route });
+    await c.close({ shard: "alpha", coin: "ETH", ...route });
+    await c.register({ shard: "alpha", master: MASTER, ...route });
+    for (const s of sent) {
+      expect(Object.keys(s.body.input).sort()).toEqual(["box", "shard"]);
+      expect(s.body.input.shard).toBe("alpha");
+      const v = JSON.parse(boxOpen(GUARD_SECRET, s.body.input.box, CALL_AAD).toString());
+      expect(v.shard).toBe("alpha");
+    }
+  });
+
+  it("without outerShard the shard stays inside the box only", async () => {
+    const { c, sent } = client([ok()]);
+    await c.close({ shard: "alpha", coin: "ETH" });
+    expect(Object.keys(sent[0].body.input)).toEqual(["box"]);
+    expect(JSON.stringify(sent[0].body)).not.toContain("alpha");
+  });
+
+  const bad: Array<[string, (c: GuardClient) => Promise<unknown>]> = [
+    ["close shard", (c) => c.close({ shard: "A", coin: "ETH" })],
+    ["close coin", (c) => c.close({ shard: "a", coin: "XRP" as any })],
+    ["tp side", (c) => c.sealTp({ shard: "a", tp: { ...tp, side: "up" as any } })],
+    ["tp trigger", (c) => c.sealTp({ shard: "a", tp: { ...tp, trigger: 0 } })],
+    ["tp size", (c) => c.sealTp({ shard: "a", tp: { ...tp, size: -1 } })],
+    ["tp coin", (c) => c.sealTp({ shard: "a", tp: { ...tp, coin: "DOGE" as any } })],
+    ["no tp", (c) => c.sealTp({ shard: "a", tp: undefined as any })],
+    ["jitter 101", (c) => c.seal({ shard: "a", stop, jitterBps: 101 })],
+    ["jitter -1", (c) => c.seal({ shard: "a", stop, jitterBps: -1 })],
+    ["jitter 2.5", (c) => c.seal({ shard: "a", stop, jitterBps: 2.5 })],
+    ["no shards", (c) => c.tickCoin({ coin: "ETH", shards: [] })],
+    ["33 shards", (c) => c.tickCoin({ coin: "ETH", shards: Array.from({ length: 33 }, (_, i) => `s${i}`) })],
+    ["duplicate shards", (c) => c.tickCoin({ coin: "ETH", shards: ["a", "b", "a"] })],
+    ["bad shard in list", (c) => c.tickCoin({ coin: "ETH", shards: ["a", "B"] })],
+    ["shards not a list", (c) => c.tickCoin({ coin: "ETH", shards: "a" as any })],
+    ["tick_coin coin", (c) => c.tickCoin({ coin: "XRP" as any, shards: ["a"] })],
+    ["defend shard", (c) => c.defend({ shard: "a:b", coin: "ETH" })],
+    ["defend coin", (c) => c.defend({ shard: "a", coin: "XRP" as any })],
+    ["vrf empty", (c) => c.vrf("")],
+    ["vrf long", (c) => c.vrf("a".repeat(65))],
+    ["vrf upper", (c) => c.vrf("Plan")],
+    ["vrf underscore", (c) => c.vrf("a_b")],
+  ];
+  for (const [name, op] of bad) {
+    it(`refuses ${name} before any call`, async () => {
+      const { c, sent } = client([], null);
+      await expect(op(c)).rejects.toBeInstanceOf(TypeError);
+      expect(sent).toHaveLength(0);
+    });
+  }
+
+  it("accepts 32 shards and a 64-character label", async () => {
+    const { c, sent } = client([ok(), ok()]);
+    await c.tickCoin({ coin: "ETH", shards: Array.from({ length: 32 }, (_, i) => `s${i}`) });
+    await c.vrf("a".repeat(64));
+    expect(inner(sent[0].body).shards).toHaveLength(32);
+  });
+});
