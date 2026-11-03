@@ -1,0 +1,43 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Labels, attribution and key material
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            RANGE="${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
+          elif [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
+            RANGE="origin/main..${{ github.sha }}"
+          else
+            RANGE="${{ github.event.before }}..${{ github.sha }}"
+          fi
+          scripts/check-repo.sh "$RANGE"
+
+  guard:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: guard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip2
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: guard
+      - name: Native tests
+        run: cargo test --lib --test guard_tests
+      - name: Deployable wasm build
+        run: cargo build --target wasm32-wasip2 --release
+      - name: Manifest is embedded
+        run: grep -q -a 'outlayer.manifest' target/wasm32-wasip2/release/guard.wasm

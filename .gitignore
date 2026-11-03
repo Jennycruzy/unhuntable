@@ -12,3 +12,7 @@ target/
 node_modules/
 *.wasm
 __pycache__/
+
+# internal working notes stay out of the repo
+HANDOFF*.md
+SPEC*
