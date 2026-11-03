@@ -92,7 +92,7 @@ range=${1:-}
 if [ -n "$range" ]; then
   msgs=$(git log --format='%H%n%B' "$range" 2>/dev/null || true)
   if echo "$msgs" | grep -n -E "$LABELS"; then echo "FAIL: internal label in commit messages ($range)"; fail=1; fi
-  if echo "$msgs" | grep -n -i -E "$ATTRIB"; then echo "FAIL: AI attribution in commit messages ($range)"; fail=1; fi
+  if echo "$msgs" | grep -n -i -E "$TEXT_ATTRIB"; then echo "FAIL: AI attribution in commit messages ($range)"; fail=1; fi
   report "banned word in commit messages ($range):" "$(printf '%s\n' "$msgs" | words_in_text)"
 fi
 
