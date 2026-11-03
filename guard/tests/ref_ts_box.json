@@ -1,0 +1,15 @@
+{
+ "gpk": "7b0d47d93427f8311160781c7c733fd89f88970aef490d8aa0ee19a4cb8a1b14",
+ "epk": "0faa684ed28867b97f4a6a2dee5df8ce974e76b7018e3f22a1c4cf2678570f20",
+ "nonce": "111111111111111111111111",
+ "ct": "70a54aa5f7bd895c93515eee4aab592c905dbb671a56938cac5b2b8de2892a3ec5e901ea29e9ae8276ee2b688a25aadc056634876362c92a2c3cfaf19785ffeaf2b4494b2d1294b4c03bf9c45bce8941630e1f9c962e7073ba4dfa670930e60d467b409f3311835935d74f4e62dbccdbfd21abf0c035a6a27eb0d6e178ce97a84a51b5d3e45f36b74d1c7ee2fb854f34a2928c6753daed57c2d73d7c40575b6350c85107fd35129ddaf11c0b5453709b8cb457dd6798a23321da",
+ "aad": "unhuntable-call-v1",
+ "pt": "{\"op\":\"seal\",\"shard\":\"alpha\",\"stop\":{\"coin\":\"ETH\",\"side\":\"long\",\"trigger\":2100.5,\"size\":0.0045},\"salt\":\"1111111111111111111111111111111111111111111111111111111111111111\"}",
+ "shard": "alpha",
+ "stop": {
+  "coin": "ETH",
+  "side": "long",
+  "trigger": 2100.5,
+  "size": 0.0045
+ }
+}

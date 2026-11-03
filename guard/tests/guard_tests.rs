@@ -133,11 +133,31 @@ fn sealed_box_from_python_client_opens() {
     assert_eq!(box_public(&sk).to_vec(), h("gpk"));
     let pt = box_open(&sk, &h("epk"), &h("nonce"), &h("ct"), b"a").unwrap();
     assert_eq!(String::from_utf8(pt).unwrap(), b["pt"].as_str().unwrap());
-    // wrong shard (aad) or tampered ciphertext must not open
+    // wrong aad or tampered ciphertext must not open
     assert!(box_open(&sk, &h("epk"), &h("nonce"), &h("ct"), b"b").is_err());
     let mut ct = h("ct");
     ct[0] ^= 1;
     assert!(box_open(&sk, &h("epk"), &h("nonce"), &ct, b"a").is_err());
+}
+
+#[test]
+fn sealed_call_from_ts_client_opens() {
+    let r: serde_json::Value = serde_json::from_str(include_str!("ref_ts_box.json")).unwrap();
+    let h = |k: &str| hex::decode(r[k].as_str().unwrap()).unwrap();
+    let sk = [0x33u8; 32];
+    assert_eq!(box_public(&sk).to_vec(), h("gpk"));
+    let pt = box_open(&sk, &h("epk"), &h("nonce"), &h("ct"), b"unhuntable-call-v1").unwrap();
+    assert_eq!(String::from_utf8(pt.clone()).unwrap(), r["pt"].as_str().unwrap());
+    let input: serde_json::Value = serde_json::from_slice(&pt).unwrap();
+    assert_eq!(input["op"], "seal");
+    assert_eq!(input["shard"], r["shard"]);
+    assert!(valid_shard(input["shard"].as_str().unwrap()));
+    assert_eq!(input["salt"].as_str().unwrap().len(), 64);
+    // the guard reads the stop from input["stop"] exactly like this
+    let st: Stop = serde_json::from_value(input["stop"].clone()).unwrap();
+    assert_eq!(st, Stop { coin: "ETH".into(), side: "long".into(), trigger: 2100.5, size: 0.0045, fired: false });
+    // a box made for a call never opens with the shard name as aad
+    assert!(box_open(&sk, &h("epk"), &h("nonce"), &h("ct"), b"alpha").is_err());
 }
 
 #[test]

@@ -1,5 +1,5 @@
 // Verify a guard proof with the official EAS SDK and print an easscan link.
-// usage: node easverify.cjs <gcall output file>
+// usage: node easverify.cjs <file holding the OutLayer answer to a proof call, {"output": ...}>
 const fs = require("fs");
 const { Offchain, OffchainAttestationVersion, SchemaEncoder, createOffchainURL } = require("@ethereum-attestation-service/eas-sdk");
 const { ZeroAddress, ZeroHash, verifyTypedData } = require("ethers");

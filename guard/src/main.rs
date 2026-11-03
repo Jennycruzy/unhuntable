@@ -217,7 +217,7 @@ mod guest {
                 json!({ "mid": mid, "prices": info, "action": to_json(&order), "hl": send(&shard, &order)? })
             }
 
-            // Stop arrives as a sealed box; aad = shard, so a box made for one shard opens for no other.
+            // The stop travels inside the one sealed call (aad "unhuntable-call-v1") as input["stop"].
             "seal" => {
                 let shard = shard_of(input)?;
                 let mut st: Stop = serde_json::from_value(input["stop"].clone()).map_err(|_| "stop missing or malformed")?;

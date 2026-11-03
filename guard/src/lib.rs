@@ -340,8 +340,10 @@ pub fn address_of(secret: &[u8; 32]) -> Result<String, String> {
 }
 
 /// Sealed box: client makes an ephemeral X25519 key, key = sha256(tag ‖ shared ‖ epk ‖ gpk),
-/// ChaCha20-Poly1305 with a random 12-byte nonce, aad = shard name.
-/// Only ciphertext reaches OutLayer's input, so the public input_hash reveals nothing.
+/// ChaCha20-Poly1305 with a random 12-byte nonce. Every guard call except addr/box_pub is
+/// one such box with aad "unhuntable-call-v1"; the op, shard, fields (a stop too) and a
+/// random salt are inside it. Only ciphertext reaches OutLayer's input, so the public
+/// input_hash reveals nothing.
 pub const BOX_TAG: &[u8] = b"unhuntable-box-v1";
 
 pub fn box_public(secret: &[u8; 32]) -> [u8; 32] {
