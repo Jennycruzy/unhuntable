@@ -1,0 +1,6 @@
+{
+  "display": { "name": "Unhuntable guard" },
+  "operations": ["addr", "box_pub", "agent", "leverage", "open", "seal", "tick", "withdraw_probe", "register", "proof"],
+  "signing_keys": [ {"path": "hl", "type": "secp256k1"} ],
+  "encryption_keys": [ {"path": "stops"} ]
+}
