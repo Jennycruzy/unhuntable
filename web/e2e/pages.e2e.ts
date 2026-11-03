@@ -44,3 +44,28 @@ test("a bottom nav on phones, a side nav on desktop", async ({ page, apiRequests
   else expect(box!.height).toBeGreaterThan(700);
   for (const link of await page.locator("nav.nav a").all()) expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
 });
+
+test("every choice tile is one tap target, clear of the fixed nav", async ({ page, apiRequests, signedIn }) => {
+  void apiRequests;
+  await signedIn();
+  // the real height, and one a bit shorter, where a tile ends up next to the bottom nav
+  for (const height of [page.viewportSize()!.height, page.viewportSize()!.height - 30]) {
+    await page.setViewportSize({ width: page.viewportSize()!.width, height });
+    for (const path of ["/trade/", "/deposit/"]) {
+      await page.goto(path);
+      await expect(page.locator(".choice input").first()).toBeVisible();
+      for (const input of await page.locator(".choice input").all()) {
+        await input.scrollIntoViewIfNeeded();
+        const tile = (await input.locator("xpath=ancestor::label[1]").boundingBox())!;
+        const box = (await input.boundingBox())!;
+        expect(box).toEqual(tile);
+        expect(box.height).toBeGreaterThanOrEqual(44);
+        const hit = await input.evaluate((el) => {
+          const r = el.getBoundingClientRect();
+          return document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) === el;
+        });
+        expect(hit).toBe(true);
+      }
+    }
+  }
+});

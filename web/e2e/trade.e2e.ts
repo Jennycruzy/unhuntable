@@ -6,9 +6,9 @@ test("review shows the plan, confirm sends the policy batch in one approval and 
   await signedIn();
   await restoreKey(page);
   await page.goto("/trade/");
-  await page.getByRole("radio", { name: "ETH" }).check({ force: true });
+  await page.getByRole("radio", { name: "ETH" }).check();
   await page.getByLabel("Size in USD").fill("300");
-  await page.getByRole("radio", { name: "Whale (several pieces)" }).check({ force: true });
+  await page.getByRole("radio", { name: "Whale (several pieces)" }).check();
   await page.getByLabel("Stop price").fill(STOP);
   await shot(page, "trade", info.project.name);
   await page.getByRole("button", { name: "Review" }).click();
