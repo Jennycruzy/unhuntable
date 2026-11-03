@@ -50,7 +50,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
-  "license": "ISC",
+  "license": "MIT",
   "devDependencies": {
     "@metamask/eth-sig-util": "^8.2.0",
     "@types/node": "^20.19.43",

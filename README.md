@@ -272,3 +272,7 @@ Every folder has its own README with the details.
 ## Security
 
 Found a problem? Open a GitHub issue without exploit details and ask for a private channel, and we will reply there.
+
+## Licence
+
+MIT. See `LICENSE`.

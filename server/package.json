@@ -14,7 +14,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
     "@noble/curves": "^1.9.7",
     "@noble/hashes": "^1.8.0",

@@ -3,7 +3,7 @@ name = "unhuntable-records"
 description = "Public records for unhuntable: piece hashes, guard builds, fees and treasury settings"
 version = "1.0.0"
 edition = "2021"
-license = "ISC"
+license = "MIT"
 publish = false
 
 [lib]
