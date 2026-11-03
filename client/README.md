@@ -63,6 +63,52 @@ and keeps it. Pass `boxPub` to the constructor to skip that call.
 To check a proof with `tools/easverify.cjs`, save it as `{"output": proof}`
 and pass that file.
 
+## Planning a position
+
+`plan(input, vrfBytes)` turns one position into an exact plan for splitting it
+across separate accounts ("pieces"). It is pure: no network, no clock, no
+`Math.random`. The same input and the same VRF bytes always give the same plan,
+so anyone with the VRF output can check the plan later.
+
+```ts
+import { plan, isPlanError } from "unhuntable-client/planner";
+
+const p = plan(
+  { coin: "ETH", side: "long", notionalUsd: 600, leverage: 5, hiding: "whale",
+    markPx: 2300, szDecimals: 4, maxLeverage: 25 },
+  vrfBytes,
+);
+if (isPlanError(p)) console.log(p.message);
+else for (const piece of p.pieces) console.log(piece.size, piece.fundingUsd, piece.entryOffsetMs);
+```
+
+- `normal` is one piece entering within 90 s. `whale` is 2-12 pieces
+  (about $50 each; past 12 pieces they grow), entering between 2 and 20 minutes from now, at least 20 s apart.
+- Sizes get a random ±15% each and add up exactly to the total size, rounded
+  down to the coin's size decimals.
+- Every piece is at least $12, since Hyperliquid refuses orders under $10,
+  reduce-only closes included.
+- Each piece is funded with one ladder amount (12, 15, 20 ... 1000 USDC) that
+  covers its margin, a reserve that keeps liquidation at least 18% away at
+  open, trading fees and the $0.33 funding route fee. A piece never needs money
+  from another piece.
+- Refusals come back as `{ code, message }` with a plain sentence:
+  `shard_min_notional`, `max_leverage`, `over_cap` or `bad_input`.
+
+Random numbers are read from the VRF bytes as big-endian u32 / 2^32. When the
+bytes run out the stream goes on with sha256(vrf ‖ counter), counter from 0.
+
+## Fill savings
+
+`fillSavings(book, side, totalSize, fills)` compares your fills with taking the
+whole size from a Hyperliquid `l2Book` reply in one go (`buy` walks the asks,
+`sell` the bids). It returns `{ benchmarkAvgPx, ourAvgPx, savedUsd, savedBps }`,
+positive when your fills were better, or `{ code: "book_too_thin" }` when the
+book cannot fill the size.
+
+The planner, fill savings and VRF helpers have no `node:` imports, so
+`unhuntable-client/planner`, `/fills` and `/vrf` also run in browsers.
+
 ## Build and test
 
 ```bash
@@ -84,3 +130,6 @@ after a deliberate change to the box format:
 ```bash
 WRITE_VECTOR=1 npm test
 ```
+
+The planner also has property tests (fast-check) that check hundreds of random
+positions for the rules above.
