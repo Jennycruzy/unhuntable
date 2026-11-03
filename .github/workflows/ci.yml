@@ -96,3 +96,22 @@ jobs:
       - name: Test
         working-directory: server
         run: npm test
+
+  contract:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contract
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: contract
+          cache-bin: true
+      - name: Install cargo-near
+        run: cargo near --version || cargo install cargo-near --locked --no-default-features
+      - name: Unit and sandbox tests
+        run: cargo test
