@@ -72,3 +72,27 @@ jobs:
         run: npm run typecheck
       - name: Test
         run: npm test
+
+  server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            client/package-lock.json
+            server/package-lock.json
+      - name: Build the client library
+        working-directory: client
+        run: npm ci && npm run build
+      - name: Install
+        working-directory: server
+        run: npm ci
+      - name: Typecheck
+        working-directory: server
+        run: npm run typecheck
+      - name: Test
+        working-directory: server
+        run: npm test

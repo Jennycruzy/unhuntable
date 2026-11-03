@@ -1,0 +1,4 @@
+{
+  "error": "policy_denied",
+  "message": "{\"error\": \"EVM signing is not enabled by policy (set capabilities.evm_sign.allowed = true)\"}"
+}

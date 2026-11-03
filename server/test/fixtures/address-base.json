@@ -1,0 +1,8 @@
+{
+  "wallet_id": "00000000-0000-4000-8000-000000000001",
+  "chain": "base",
+  "address": "0x1234567890abcdef1234567890abcdef12345678",
+  "public_key": "secp256k1:02abababababababababababababababababababababababababababababababab",
+  "asset_account_id": null,
+  "executor_account_id": null
+}

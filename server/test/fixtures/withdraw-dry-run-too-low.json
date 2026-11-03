@@ -1,0 +1,4 @@
+{
+  "error": "upstream_rejected",
+  "message": "Amount is too low for the destination chain"
+}

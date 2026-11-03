@@ -1,0 +1,4 @@
+{
+  "error": "policy_denied",
+  "message": "Address '0x1234567890abcdef1234567890abcdef12345678' is not in whitelist"
+}

@@ -1,0 +1,4 @@
+{
+  "error": "policy_denied",
+  "message": "Transaction type 'confidential' is not allowed by policy"
+}

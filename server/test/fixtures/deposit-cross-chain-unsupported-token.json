@@ -1,0 +1,4 @@
+{
+  "error": "unsupported_token",
+  "message": "Token is not carried on this chain. That chain carries: USDC, wNEAR. Pick one of those."
+}

@@ -1,0 +1,27 @@
+{
+  "wallet_id": "00000000-0000-4000-8000-000000000001",
+  "controller": "ed25519:3333333333333333333333333333333333333333333333333333333333333333",
+  "frozen": false,
+  "policy": "stored",
+  "rules": {
+    "addresses": {
+      "mode": "whitelist",
+      "list": [
+        "0x1234567890abcdef1234567890abcdef12345678"
+      ]
+    },
+    "transaction_types": [
+      "confidential_withdraw",
+      "confidential_swap"
+    ]
+  },
+  "approval": null,
+  "capabilities": {
+    "evm_sign": {
+      "allowed": false
+    }
+  },
+  "authorized_key_hashes": [
+    "1111111111111111111111111111111111111111111111111111111111111111"
+  ]
+}
