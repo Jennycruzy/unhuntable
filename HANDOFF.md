@@ -47,6 +47,13 @@ Every signature test uses throwaway keys (0x11…, 0x22…, 0x33…). Never put 
 7. Commits only at real milestones. No AI attribution lines.
 8. No internal labels anywhere in code, docs or commits: no version tags, stage or gate names, test numbers or dates. Describe what the thing does.
 
+## How work lands
+
+1. Work on a branch, never on `main`.
+2. Before pushing: `scripts/check-repo.sh origin/main..HEAD` must print `check-repo: clean`.
+3. Open a pull request. CI runs the same check, the guard tests and a deployable wasm build; all must pass.
+4. The owner's machine reviews the diff, runs live checks if money paths changed, and merges.
+
 ## Known limits (keep them honest in any public text)
 
 - OutLayer's public call records show when the guard runs. Matching those times with fills can show that an account uses the guard. It does not show the owner, sibling shards, stops or sizes.
