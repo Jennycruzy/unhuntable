@@ -1,0 +1,20 @@
+{
+  "source": "https://raw.githubusercontent.com/hyperliquid-dex/hyperliquid-python-sdk/master/tests/cassettes/info_test/test_get_info.yaml",
+  "universe": [
+    {
+      "maxLeverage": 40,
+      "name": "BTC",
+      "szDecimals": 5
+    },
+    {
+      "maxLeverage": 25,
+      "name": "ETH",
+      "szDecimals": 4
+    },
+    {
+      "maxLeverage": 20,
+      "name": "SOL",
+      "szDecimals": 2
+    }
+  ]
+}

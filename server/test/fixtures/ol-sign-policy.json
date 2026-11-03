@@ -1,0 +1,6 @@
+{
+  "source": "https://raw.githubusercontent.com/out-layer/outlayer/main/contract/src/wallet.rs",
+  "wallet_pubkey": "ed25519:29d2S7vB453rNYFdR5Ycwt7y9haRT5fwVwL9zTmBhfV2",
+  "encrypted_data": "ZW5jcnlwdGVkLXBvbGljeS1ieXRlcw==",
+  "wallet_signature": "c2lnbmVkLXBvbGljeS1ieXRlcw=="
+}

@@ -1,0 +1,7 @@
+{
+  "source": "https://github.com/Jennycruzy/unhuntable/blob/main/guard/src/main.rs",
+  "output": {
+    "sealed": true,
+    "guard_ms": 30
+  }
+}

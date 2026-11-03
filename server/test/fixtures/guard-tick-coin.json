@@ -1,0 +1,27 @@
+{
+  "source": "https://github.com/Jennycruzy/unhuntable/blob/main/guard/src/lib.rs",
+  "output": {
+    "shards": {
+      "0123456789abcdef": {
+        "done": "watch",
+        "band": [
+          2400.0,
+          2600.0
+        ],
+        "has_stop": true,
+        "has_tp": null,
+        "defence": {
+          "action": "none",
+          "rung": 0,
+          "distance": 0.31
+        },
+        "order": null
+      }
+    },
+    "sources_ok": 7,
+    "sources_agree": 6,
+    "source_errors": [],
+    "price_ms": 300,
+    "guard_ms": 400
+  }
+}

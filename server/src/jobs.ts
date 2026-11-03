@@ -79,16 +79,17 @@ export class JobRunner {
     this.handlers.set(kind, handler);
   }
 
-  /** Add a job. The same idempotency key twice gives the one job already stored. */
-  enqueue(kind: string, payload: unknown, idempotencyKey: string): string {
+  /** Add a job, due at runAtMs (default now). The same idempotency key twice gives the one job already stored. */
+  enqueue(kind: string, payload: unknown, idempotencyKey: string, runAtMs?: number): string {
     if (!idempotencyKey) throw new Error("idempotency key is required");
     const now = this.now();
+    const due = runAtMs ?? now;
     this.db
       .prepare(
         `INSERT OR IGNORE INTO jobs (id, kind, payload_json, state, attempts, next_run_ms, idempotency_key, created_ms, network)
          VALUES (?, ?, ?, 'queued', 0, ?, ?, ?, ?)`,
       )
-      .run(newId(), kind, JSON.stringify(payload ?? null), now, idempotencyKey, now, this.opts.network);
+      .run(newId(), kind, JSON.stringify(payload ?? null), due, idempotencyKey, now, this.opts.network);
     const r = this.db.prepare("SELECT id FROM jobs WHERE idempotency_key = ?").get(idempotencyKey) as { id: string };
     return r.id;
   }

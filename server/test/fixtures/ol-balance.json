@@ -1,0 +1,10 @@
+{
+  "source": "https://raw.githubusercontent.com/out-layer/outlayer/main/API.md",
+  "balances": [
+    {
+      "token": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+      "balance": "100000000"
+    }
+  ],
+  "account_id": "1111111111111111111111111111111111111111111111111111111111111111"
+}

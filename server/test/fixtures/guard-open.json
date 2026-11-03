@@ -1,0 +1,34 @@
+{
+  "source": "https://github.com/Jennycruzy/unhuntable/blob/main/guard/src/main.rs",
+  "output": {
+    "mid": 2500.5,
+    "prices": {
+      "sources_ok": 7,
+      "sources_agree": 6,
+      "source_errors": [],
+      "price_ms": 300
+    },
+    "action": {},
+    "hl": {
+      "http": 200,
+      "body": {
+        "status": "ok",
+        "response": {
+          "type": "order",
+          "data": {
+            "statuses": [
+              {
+                "filled": {
+                  "totalSz": "0.0045",
+                  "avgPx": "2500.5",
+                  "oid": 77738308
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "guard_ms": 500
+  }
+}

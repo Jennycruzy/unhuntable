@@ -1,0 +1,7 @@
+{
+  "source": "https://github.com/Jennycruzy/unhuntable/blob/main/guard/src/main.rs",
+  "output": {
+    "error": "fewer than 3 price sources agree",
+    "guard_ms": 300
+  }
+}
