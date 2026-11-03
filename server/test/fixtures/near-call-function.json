@@ -1,0 +1,16 @@
+{
+  "source": "https://docs.near.org/api/rpc/contracts#call-a-contract-function",
+  "jsonrpc": "2.0",
+  "result": {
+    "result": [
+      110,
+      117,
+      108,
+      108
+    ],
+    "logs": [],
+    "block_height": 100,
+    "block_hash": "11111111111111111111111111111111"
+  },
+  "id": "unhuntable"
+}

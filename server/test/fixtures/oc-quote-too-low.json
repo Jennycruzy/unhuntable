@@ -1,0 +1,4 @@
+{
+  "source": "https://raw.githubusercontent.com/defuse-protocol/one-click-sdk-typescript/main/src/services/OneClickService.ts",
+  "message": "Amount is too low for bridge, try at least 1000000"
+}

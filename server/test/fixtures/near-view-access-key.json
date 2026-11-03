@@ -1,0 +1,19 @@
+{
+  "source": "https://docs.near.org/api/rpc/access-keys#view-access-key",
+  "jsonrpc": "2.0",
+  "result": {
+    "block_hash": "11111111111111111111111111111111",
+    "block_height": 100,
+    "nonce": 5,
+    "permission": {
+      "FunctionCall": {
+        "allowance": "1",
+        "receiver_id": "outlayer.near",
+        "method_names": [
+          "unhuntable_wallet_auth"
+        ]
+      }
+    }
+  },
+  "id": "unhuntable"
+}

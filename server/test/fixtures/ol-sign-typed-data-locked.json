@@ -1,0 +1,5 @@
+{
+  "source": "https://raw.githubusercontent.com/out-layer/outlayer/main/docs/MULTI_CHAIN.md",
+  "error": "policy_denied",
+  "message": "EVM signing is not enabled by policy (set capabilities.evm_sign.allowed = true)"
+}

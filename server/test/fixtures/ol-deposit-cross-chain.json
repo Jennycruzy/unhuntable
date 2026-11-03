@@ -1,0 +1,9 @@
+{
+  "source": "https://raw.githubusercontent.com/out-layer/outlayer/main/API.md",
+  "intent_id": "00000000-0000-4000-8000-000000000031",
+  "deposit_address": "0x3333333333333333333333333333333333333333",
+  "amount": "2500000000",
+  "amount_out": "24680000",
+  "min_amount_out": "24433200",
+  "expires_at": "2030-01-01T00:00:00.000Z"
+}

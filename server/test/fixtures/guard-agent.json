@@ -1,0 +1,8 @@
+{
+  "source": "https://github.com/Jennycruzy/unhuntable/blob/main/guard/src/main.rs",
+  "output": {
+    "shard": "0123456789abcdef",
+    "agent": "0x5555555555555555555555555555555555555555",
+    "guard_ms": 40
+  }
+}

@@ -36,14 +36,24 @@ export function migrate(db: Db, opts: OpenOptions): string[] {
   const names = readdirSync(dir).filter((f) => f.endsWith(".sql")).sort();
   const done = new Set((db.prepare("SELECT name FROM migrations").all() as { name: string }[]).map((r) => r.name));
   const ran: string[] = [];
-  for (const name of names) {
-    if (done.has(name)) continue;
-    const sql = readFileSync(`${dir}/${name}`, "utf8");
-    db.transaction(() => {
-      db.exec(sql);
-      db.prepare("INSERT INTO migrations (name, created_ms, network) VALUES (?, ?, ?)").run(name, now(), opts.network);
-    })();
-    ran.push(name);
+  // A migration may rebuild a table (SQLite cannot change a CHECK in place). Foreign keys are
+  // switched off while it runs, as SQLite's own table-rebuild steps say, and checked after.
+  const fk = db.pragma("foreign_keys", { simple: true }) as number;
+  db.pragma("foreign_keys = OFF");
+  try {
+    for (const name of names) {
+      if (done.has(name)) continue;
+      const sql = readFileSync(`${dir}/${name}`, "utf8");
+      db.transaction(() => {
+        db.exec(sql);
+        const broken = db.pragma("foreign_key_check") as unknown[];
+        if (broken.length > 0) throw new Error(`migration ${name} leaves ${broken.length} broken references`);
+        db.prepare("INSERT INTO migrations (name, created_ms, network) VALUES (?, ?, ?)").run(name, now(), opts.network);
+      })();
+      ran.push(name);
+    }
+  } finally {
+    db.pragma(`foreign_keys = ${fk ? "ON" : "OFF"}`);
   }
   return ran;
 }

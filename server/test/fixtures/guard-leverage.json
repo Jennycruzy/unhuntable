@@ -1,0 +1,15 @@
+{
+  "source": "https://github.com/Jennycruzy/unhuntable/blob/main/guard/src/main.rs",
+  "output": {
+    "hl": {
+      "http": 200,
+      "body": {
+        "status": "ok",
+        "response": {
+          "type": "default"
+        }
+      }
+    },
+    "guard_ms": 200
+  }
+}

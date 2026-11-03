@@ -1,0 +1,12 @@
+{
+  "source": "https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint/spot",
+  "balances": [
+    {
+      "coin": "USDC",
+      "token": 0,
+      "total": "0.0",
+      "hold": "0.0",
+      "entryNtl": "0.0"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "source": "https://raw.githubusercontent.com/hyperliquid-dex/hyperliquid-python-sdk/master/tests/cassettes/info_test/test_get_user_state.yaml",
+  "assetPositions": [],
+  "crossMarginSummary": {
+    "accountValue": "0.0",
+    "totalMarginUsed": "0.0",
+    "totalNtlPos": "0.0",
+    "totalRawUsd": "0.0"
+  },
+  "marginSummary": {
+    "accountValue": "0.0",
+    "totalMarginUsed": "0.0",
+    "totalNtlPos": "0.0",
+    "totalRawUsd": "0.0"
+  },
+  "withdrawable": "0.0"
+}

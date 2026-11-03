@@ -30,6 +30,12 @@ export function testConfig(over: Partial<Config> = {}): Config {
     appName: "unhuntable",
     corsOrigins: ["https://app.example"],
     version: "dev",
+    hyperliquidUrl: "https://hl.test",
+    oneClickUrl: "https://oneclick.test",
+    guardOwner: "guard.near",
+    guardProject: "guard",
+    policyContract: "outlayer.near",
+    appFeeAccount: "fees.near",
     secrets: readSecrets(secretsFile()),
     ...over,
   };

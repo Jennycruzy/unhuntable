@@ -1,0 +1,9 @@
+{
+  "source": "https://raw.githubusercontent.com/out-layer/outlayer/main/contract/src/wallet.rs",
+  "owner": "alice.near",
+  "encrypted_data": "ZW5jcnlwdGVkLXBvbGljeS1ieXRlcw==",
+  "frozen": false,
+  "updated_at": 1700000000000000000,
+  "storage_refund_to": "alice.near",
+  "storage_deposit": "10800000000000000000000"
+}

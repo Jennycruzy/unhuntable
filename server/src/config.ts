@@ -7,6 +7,10 @@ export interface Secrets {
   paymentKey: string;
   /** OutLayer wallet API key per wallet id. */
   walletKeys: Record<string, string>;
+  /** 32 bytes hex: encrypts the wallet key store. */
+  keystoreKey?: string;
+  /** Aurora Swap (1Click) API key. */
+  auroraKey?: string;
 }
 
 export interface Config {
@@ -20,6 +24,17 @@ export interface Config {
   appName: string;
   corsOrigins: string[];
   version: string;
+  /** File of wallet API keys made by the server, encrypted with secrets.keystoreKey. */
+  walletKeysFile?: string;
+  hyperliquidUrl: string;
+  oneClickUrl: string;
+  /** NEAR account and project of the guard on OutLayer. */
+  guardOwner: string;
+  guardProject: string;
+  /** The contract that stores wallet policies. */
+  policyContract: string;
+  /** Account in INTENTS that receives our app fee on Aurora deposits. */
+  appFeeAccount: string;
   secrets: Secrets;
 }
 
@@ -33,6 +48,8 @@ export class ConfigError extends Error {
 const SecretsFile = z.object({
   paymentKey: z.string().min(1),
   walletKeys: z.record(z.string().min(1), z.string().min(1)),
+  keystoreKey: z.string().regex(/^[0-9a-fA-F]{64}$/).optional(),
+  auroraKey: z.string().min(1).optional(),
 });
 
 /** Read and check the secrets file. Error messages never include file contents. */
@@ -54,7 +71,7 @@ export function readSecrets(path: string | undefined): Secrets {
     throw new ConfigError(`secrets file ${path} is not valid JSON`);
   }
   const parsed = SecretsFile.safeParse(raw);
-  if (!parsed.success) throw new ConfigError(`secrets file ${path} must hold { paymentKey, walletKeys: { walletId: apiKey } }`);
+  if (!parsed.success) throw new ConfigError(`secrets file ${path} must hold { paymentKey, walletKeys: { walletId: apiKey } }, and keystoreKey must be 32 bytes of hex`);
   const s = parsed.data;
   // If the object is ever logged or serialised, it prints as "[redacted]".
   Object.defineProperty(s, "toJSON", { value: () => "[redacted]", enumerable: false });
@@ -82,6 +99,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     appName: env.APP_NAME ?? "unhuntable",
     corsOrigins: (env.CORS_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean),
     version: env.GIT_SHA || "dev",
+    walletKeysFile: env.WALLET_KEYS_FILE || undefined,
+    hyperliquidUrl: (env.HYPERLIQUID_URL ?? "https://api.hyperliquid.xyz").replace(/\/+$/, ""),
+    oneClickUrl: (env.ONECLICK_URL ?? "https://1click.chaindefuser.com").replace(/\/+$/, ""),
+    guardOwner: env.GUARD_OWNER ?? "",
+    guardProject: env.GUARD_PROJECT ?? "",
+    policyContract: env.POLICY_CONTRACT ?? "outlayer.near",
+    appFeeAccount: env.APP_FEE_ACCOUNT ?? "",
     secrets: readSecrets(env.SECRETS_FILE),
   };
 }

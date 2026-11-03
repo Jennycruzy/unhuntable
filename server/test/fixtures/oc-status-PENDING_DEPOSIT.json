@@ -1,0 +1,8 @@
+{
+  "source": "https://raw.githubusercontent.com/defuse-protocol/one-click-sdk-typescript/main/src/models/GetExecutionStatusResponse.ts",
+  "correlationId": "00000000-0000-4000-8000-000000000041",
+  "quoteResponse": {},
+  "status": "PENDING_DEPOSIT",
+  "updatedAt": "2030-01-01T00:01:00.000Z",
+  "swapDetails": {}
+}

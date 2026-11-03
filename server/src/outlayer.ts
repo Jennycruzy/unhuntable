@@ -160,6 +160,13 @@ const SignReply = z
   .object({ signature: z.string().regex(/^0x[0-9a-fA-F]{130}$/), chain: z.string(), wallet_id: z.string() })
   .transform((r) => ({ signature: r.signature, chain: r.chain, walletId: r.wallet_id }));
 
+// The fields store_wallet_policy takes (outlayer contract/src/wallet.rs).
+const SignedPolicyReply = z
+  .object({ wallet_pubkey: z.string().optional(), encrypted_data: z.string().min(1), wallet_signature: z.string().min(1) })
+  .passthrough()
+  .transform((r) => ({ walletPubkey: r.wallet_pubkey, encryptedData: r.encrypted_data, walletSignature: r.wallet_signature }));
+
+export type SignedPolicy = z.output<typeof SignedPolicyReply>;
 export type WalletAddress = z.output<typeof AddressReply>;
 export type WalletBalance = z.output<typeof BalanceReply>;
 export type Quote = z.output<typeof QuoteReply>;
@@ -192,6 +199,8 @@ export interface CrossChainBody {
 export interface WalletClientOptions {
   baseUrl: string;
   walletKeys: Record<string, string>;
+  /** Keys the server made for wallets (keystore.ts). Read when walletKeys has none. */
+  keystore?: { get(walletId: string): string | undefined };
   fetch?: typeof fetch;
   uuid?: () => string;
   log?: Logger;
@@ -206,9 +215,23 @@ export class OutLayerWallet {
     this.uuid = opts.uuid ?? randomUUID;
   }
 
-  private async call<S extends z.ZodTypeAny>(walletId: string, method: "GET" | "POST", path: string, schema: S, body?: unknown): Promise<z.output<S>> {
-    const key = this.opts.walletKeys[walletId];
+  private keyFor(walletId: string): string {
+    const key = this.opts.walletKeys[walletId] ?? this.opts.keystore?.get(walletId);
     if (!key) throw new OutLayerWalletError("unknown_wallet", "No API key is configured for this wallet.", 0);
+    return key;
+  }
+
+  private call<S extends z.ZodTypeAny>(walletId: string, method: "GET" | "POST", path: string, schema: S, body?: unknown): Promise<z.output<S>> {
+    let key: string;
+    try {
+      key = this.keyFor(walletId);
+    } catch (e) {
+      return Promise.reject(e);
+    }
+    return this.send(key, walletId, method, path, schema, body);
+  }
+
+  private async send<S extends z.ZodTypeAny>(key: string, walletId: string, method: "GET" | "POST", path: string, schema: S, body?: unknown): Promise<z.output<S>> {
     const headers: Record<string, string> = { Authorization: `Bearer ${key}`, Accept: "application/json" };
     if (method === "POST") {
       headers["Content-Type"] = "application/json";
@@ -249,6 +272,11 @@ export class OutLayerWallet {
     return this.call(walletId, "GET", `/wallet/v1/address?chain=${encodeURIComponent(chain)}`, AddressReply);
   }
 
+  /** The address answer for a key that is not tied to a wallet id yet. Proves the key works. */
+  addressWithKey(apiKey: string, chain: string): Promise<WalletAddress> {
+    return this.send(apiKey, "(new key)", "GET", `/wallet/v1/address?chain=${encodeURIComponent(chain)}`, AddressReply);
+  }
+
   /** Confidential balances in token units (USDC has 6 decimals). */
   balance(walletId: string): Promise<WalletBalance> {
     return this.call(walletId, "GET", "/wallet/v1/confidential/balance", BalanceReply);
@@ -283,12 +311,25 @@ export class OutLayerWallet {
     return this.call(walletId, "GET", "/wallet/v1/policy", PolicyReply);
   }
 
+  /** Encrypt a policy for this wallet. The answer is passed on to signPolicy unchanged. */
+  encryptPolicy(walletId: string, policy: unknown): Promise<Record<string, unknown>> {
+    return this.call(walletId, "POST", "/wallet/v1/encrypt-policy", z.record(z.unknown()), policy);
+  }
+
+  /** Sign an encrypted policy for store_wallet_policy sent by `caller`. */
+  signPolicy(walletId: string, encrypted: Record<string, unknown>, caller: string): Promise<SignedPolicy> {
+    return this.call(walletId, "POST", "/wallet/v1/sign-policy", SignedPolicyReply, { ...encrypted, caller });
+  }
+
   signTypedData(walletId: string, chain: string, typedData: unknown): Promise<TypedDataSignature> {
     return this.call(walletId, "POST", "/wallet/v1/evm/sign-typed-data", SignReply, { chain, typed_data: typedData });
   }
 }
 
-export function walletClient(config: Config, opts: { fetch?: typeof fetch; log?: Logger } = {}): OutLayerWallet {
+export function walletClient(
+  config: Config,
+  opts: { fetch?: typeof fetch; log?: Logger; keystore?: { get(walletId: string): string | undefined } } = {},
+): OutLayerWallet {
   return new OutLayerWallet({ baseUrl: config.outlayerUrl, walletKeys: config.secrets.walletKeys, ...opts });
 }
 

@@ -13,11 +13,21 @@ import {
   signIn,
   type ViewAccessKey,
 } from "./auth.js";
-import { loadConfig, type Config } from "./config.js";
+import { ConfigError, loadConfig, type Config } from "./config.js";
 import { openDb, type Db } from "./db.js";
 import { JobRunner } from "./jobs.js";
 import { createLogger } from "./log.js";
 import { ApiError, sendError } from "./refusals.js";
+import { randomBytes } from "node:crypto";
+import type { Ctx } from "./ctx.js";
+import { GuardAdapter } from "./guard.js";
+import { Hyperliquid } from "./hl.js";
+import { KeyStore } from "./keystore.js";
+import { NearRpc } from "./near.js";
+import { OneClick } from "./oneclick.js";
+import { walletClient } from "./outlayer.js";
+import { registerMoneyJobs, registerMoneyRoutes } from "./routes.js";
+import { HEARTBEAT_MS, MIDS_POLL_MS, heartbeat, watchMids } from "./watch.js";
 
 export interface ServerDeps {
   config: Config;
@@ -25,6 +35,8 @@ export interface ServerDeps {
   viewAccessKey?: ViewAccessKey;
   now?: () => number;
   log?: Logger;
+  /** The money flows; their routes are served when this is given. */
+  money?: Ctx;
 }
 
 const SECURITY_HEADERS: Record<string, string> = {
@@ -97,7 +109,39 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     return { counts: Object.fromEntries(rows.map((r) => [r.kind, r.n])) };
   });
 
+  if (deps.money) registerMoneyRoutes(app, deps.money);
+
   return app;
+}
+
+/** Everything the money flows need, from the config. */
+export function moneyContext(config: Config, db: Db, jobs: JobRunner, log: Logger): Ctx {
+  if (!config.secrets.keystoreKey) throw new ConfigError("keystoreKey is missing from the secrets file");
+  if (!config.walletKeysFile) throw new ConfigError("WALLET_KEYS_FILE must name the wallet key file");
+  const keystore = new KeyStore({ path: config.walletKeysFile, key: config.secrets.keystoreKey });
+  return {
+    db,
+    network: config.network,
+    now: Date.now,
+    wallet: walletClient(config, { log, keystore }),
+    keystore,
+    near: new NearRpc(config.nearRpcUrl),
+    hl: new Hyperliquid(config.hyperliquidUrl),
+    oneClick: new OneClick(config.oneClickUrl, config.secrets.auroraKey),
+    guard: new GuardAdapter({
+      db,
+      network: config.network,
+      owner: config.guardOwner,
+      project: config.guardProject,
+      paymentKey: config.secrets.paymentKey,
+      baseUrl: config.outlayerUrl,
+    }),
+    jobs,
+    policyContract: config.policyContract,
+    appFeeAccount: config.appFeeAccount,
+    random: (n) => randomBytes(n),
+    log,
+  };
 }
 
 /** Start the server: load config, open the store, start the job runner, listen. */
@@ -106,10 +150,26 @@ export async function main(): Promise<void> {
   const config = loadConfig();
   const db = openDb(config.dbPath, { network: config.network });
   const jobs = new JobRunner(db, { network: config.network, log });
+  const money = moneyContext(config, db, jobs, log);
+  registerMoneyJobs(jobs, money);
   jobs.start();
-  const app = buildServer({ config, db, log });
+  const app = buildServer({ config, db, log, money });
+  let watching = false;
+  const watch = (fn: () => Promise<unknown>) => () => {
+    if (watching) return;
+    watching = true;
+    fn()
+      .catch((e) => log.warn({ error: e instanceof Error ? e.message : String(e) }, "watch failed"))
+      .finally(() => (watching = false));
+  };
+  const mids = setInterval(watch(() => watchMids(money)), MIDS_POLL_MS);
+  const beat = setInterval(watch(() => heartbeat(money)), HEARTBEAT_MS / 12);
+  mids.unref();
+  beat.unref();
   await app.listen({ port: config.port, host: config.host });
   const stop = async () => {
+    clearInterval(mids);
+    clearInterval(beat);
     jobs.stop();
     await app.close();
     db.close();

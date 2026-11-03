@@ -1,0 +1,6 @@
+{
+  "source": "https://raw.githubusercontent.com/hyperliquid-dex/hyperliquid-python-sdk/master/tests/cassettes/info_test/test_get_all_mids.yaml",
+  "BTC": "60000.5",
+  "ETH": "2500.5",
+  "SOL": "150.25"
+}

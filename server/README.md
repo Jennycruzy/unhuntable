@@ -1,7 +1,8 @@
 # unhuntable server
 
-The backend base: an HTTP API, a SQLite store, a job runner, NEAR sign-in and a
-client for the OutLayer wallet API. Node 20+, TypeScript, ESM.
+The backend: an HTTP API, a SQLite store, a job runner, NEAR sign-in, a client
+for the OutLayer wallet API, and the money flows (deposits, pieces, positions,
+going home, refills). Node 20+, TypeScript, ESM.
 
 It never holds stop levels (they live only inside the guard) and never logs
 secrets.
@@ -19,7 +20,9 @@ cd server && npm ci && npm run build
 ```
 
 ```bash
-SECRETS_FILE=/path/to/secrets.json DB_PATH=/var/lib/unhuntable/db.sqlite node dist/index.js
+SECRETS_FILE=/path/to/secrets.json WALLET_KEYS_FILE=/path/to/wallet-keys.json \
+  DB_PATH=/var/lib/unhuntable/db.sqlite GUARD_OWNER=guard.near GUARD_PROJECT=guard \
+  APP_FEE_ACCOUNT=fees.near node dist/index.js
 ```
 
 Settings come from the environment:
@@ -36,16 +39,27 @@ Settings come from the environment:
 | `CORS_ORIGINS` | none | Comma-separated origins allowed to call the API |
 | `GIT_SHA` | `dev` | Shown by `/api/health` |
 | `SECRETS_FILE` | required | Path of the secrets file |
+| `WALLET_KEYS_FILE` | required | Path of the wallet key file the server writes (mode 600) |
+| `HYPERLIQUID_URL` | `https://api.hyperliquid.xyz` | Hyperliquid API |
+| `ONECLICK_URL` | `https://1click.chaindefuser.com` | Aurora Swap API (1Click) |
+| `GUARD_OWNER` | none | NEAR account that owns the guard project on OutLayer |
+| `GUARD_PROJECT` | none | Name of the guard project |
+| `POLICY_CONTRACT` | `outlayer.near` | Contract that stores wallet policies |
+| `APP_FEE_ACCOUNT` | none | Account in INTENTS that receives our fee on Aurora deposits |
 
 Secrets are read only from `SECRETS_FILE`, never from the environment or
 anywhere else:
 
 ```json
-{ "paymentKey": "...", "walletKeys": { "<wallet id>": "<wallet API key>" } }
+{ "paymentKey": "...", "walletKeys": { "<wallet id>": "<wallet API key>" },
+  "keystoreKey": "<32 bytes as 64 hex characters>", "auroraKey": "..." }
 ```
 
-The server refuses to start if group or others can read that file. Run
-`chmod 600` on it.
+`keystoreKey` encrypts the wallet key file. `auroraKey` is the Aurora Swap API
+key; without it the aurora deposit route answers `route_unavailable`.
+
+The server refuses to start if group or others can read the secrets file or the
+wallet key file. Run `chmod 600` on both.
 
 ## What is in it
 
@@ -69,15 +83,150 @@ The server refuses to start if group or others can read that file. Run
   the wallet's API key as `Authorization: Bearer` and nothing else, and each
   POST sends a fresh `X-Idempotency-Key`. Error replies become
   `OutLayerWalletError` with OutLayer's code; `policy_denied` also carries our
-  `policy_denied` refusal. Guard calls go through `GuardClient` from the client
-  library, paid with the configured payment key.
+  `policy_denied` refusal. It reads wallet keys from the secrets file and from
+  the wallet key store.
+- `keystore.ts` makes wallet API keys (`wk_` and 64 random hex characters) and
+  keeps them in `WALLET_KEYS_FILE`, each encrypted with AES-256-GCM under
+  `keystoreKey`. Only a key's hash leaves the store. Keys never appear in logs,
+  errors or API answers.
+- `guard.ts` is the one way the server calls the guard. Every op except
+  `box_pub` goes as one sealed box. Each call writes a `guard_calls` row; ticks
+  write `ticks` rows and orders write `piece_orders` rows. A box's contents are
+  never logged or stored.
+- `hl.ts` reads Hyperliquid (mids, meta, perp and spot balances) and posts
+  actions that a piece's own key signed through OutLayer.
+- `near.ts` reads NEAR RPC: access keys and view calls such as
+  `get_wallet_policy`.
+- `oneclick.ts` asks Aurora Swap (1Click) for quotes and status.
+- `policy.ts` builds wallet policies and the batch the user signs, and reads
+  policies back.
+- `wallets.ts`, `deposits.ts`, `positions.ts`, `home.ts` and `watch.ts` are the
+  money flows below; `routes.ts` puts them on the HTTP API and registers their
+  jobs.
+
+## Money flows
+
+Every wallet a user has with us is an OutLayer deterministic wallet registered
+by the user's browser with their pieces key. The private balance is the wallet
+labelled `balance`; each piece is a wallet labelled `piece:<n>`, and its EVM
+address is its own Hyperliquid account. For each wallet the server makes an API
+key, keeps it encrypted, and gives the browser only its hash to add as a
+delegate key.
+
+### Money in
+
+- **near**: OutLayer gives a cross-chain confidential deposit address for the
+  private balance. The smallest deposit is 2 USDC. OutLayer's routing fee (about
+  0.32 USDC) is shown as `feeUsd`. The deposit is done when the private balance
+  grows.
+- **aurora**: Aurora Swap (1Click) quotes any token it carries into USDC in the
+  private balance account in INTENTS, with `confidentiality` "advanced". Refunds
+  go to `refundTo`. Our fee is 6 bps; the route's own fee is in `feeUsd`. The
+  token is the 1Click asset id.
+
+A job checks each deposit every 15 s until it is done, refunded or expired. A
+quote that runs out before anything arrives ends as `expired`
+(`quote_expired`). Below the route's minimum, the quote is refused with
+`deposit_below_min` and the minimum.
+
+### Pieces: made, funded and locked
+
+1. `/api/plan` shows the plan: pieces, sizes, funding per piece, fees, and the
+   world as trackers see it (Account 1..N).
+2. `/api/positions` draws the real VRF bytes from the guard and stores them with
+   their proof. Locked pieces with no open position are used first; the rest
+   are new wallets the browser must make (`needWallets`).
+3. Funding: at each piece's VRF offset, the server withdraws the plan's
+   `fundingUsd` from the private balance to that piece's own address (chain
+   hypercore). A piece is never funded from another piece. It arrives in under 3
+   minutes; the flat fee is about 0.32 USDC.
+4. When it lands, the piece's own key approves the guard's agent for that shard
+   on Hyperliquid, and the guard registers the piece's account.
+5. The user signs one batch: one `store_wallet_policy` call per new piece on
+   `outlayer.near`, plus the private balance update. A piece may send only to
+   its own Hyperliquid account and to its owner, and cannot sign Hyperliquid
+   actions (`evm_sign` off). The private balance may send only to the owner's
+   pieces and the owner's own addresses. Each row costs about 0.0108 NEAR of
+   storage; the call attaches 0.1 NEAR and the rest comes back.
+6. `/api/policy/confirm` reads every policy back: on chain the owner must be the
+   user, and at OutLayer `evm_sign` must be off. Only then are pieces `locked`.
+   A piece that is not locked is never opened (`policy_not_set`).
+
+If the private balance is already locked and new pieces are not on its list,
+`/api/positions/:id/continue` first asks for a one-call batch that adds them,
+before any funding.
+
+### Open and close
+
+At each piece's VRF slot the guard sets leverage and opens the piece's size.
+Each fill is stored. A guard refusal becomes `stale_price`, `prices_disagree`,
+`too_few_sources`, `over_cap` or `venue_rejected`, and the open is tried again.
+If the guard does not answer after retries, the position keeps its state and
+the API shows `"guard": "unreachable"`. Closing asks the guard to close each
+piece, at VRF-staggered times inside 0-90 s, or at once with `now`.
+
+Guard calls cost about $0.001 each.
+
+### Watching and refills
+
+Every open piece is ticked through the guard once per coin every 120 s, and at
+once when the public mid (read every 5 s) leaves a piece's band. The server
+knows only the band the guard gives back, never a stop.
+
+When the guard cuts or closes a piece, the user gets a plain alert. With
+`auto_refill` on and today's total under `refill_cap_usd_per_day`, a refill goes
+from the private balance to that same piece: the smallest ladder amount that
+covers the piece's planned reserve. One refill at a time per piece.
+
+### Going home
+
+`/api/home` builds an unlock batch (the same piece policies with `evm_sign` on)
+and shows the fee: about 1.20 USDC per piece, because each deposit address is a
+new Hyperliquid account (1 USDC) plus about 0.20 routing. After the unlock is
+read back, for each piece: perp to spot, a fresh deposit address on the private
+balance (chain hypercore, exact amount), send spot total minus 1 USDC, and wait
+until the private balance grows. Pieces under 3 USDC stay where they are. Then
+the user signs the relock batch; it is asked for even when a step failed. Every
+step is listed by `/api/home/:id`.
+
+### What needs the user's wallet
+
+- Registering each wallet and adding our key's hash (browser, pieces key).
+- One policy batch per new set of pieces (and the private balance update).
+- Going home: one unlock batch and one relock batch.
 
 ## HTTP API
+
+All JSON. Amounts are decimal strings in USDC, times are unix milliseconds.
+Every route except health, session and logout needs the `sid` cookie.
 
 - `GET /api/health` → `{ "ok": true, "version": "<git sha or dev>" }`
 - `POST /api/session` signs in (below) and sets the session cookie.
 - `POST /api/logout` ends the session.
 - `GET /api/evidence` → `{ "counts": { "<kind>": n } }` from the evidence table.
+- `GET /api/me` → the account, whether the pieces key is on it, and its wallets.
+- `POST /api/pieces-key` `{ publicKey }` stores the pieces key's public key once
+  NEAR shows it on the account.
+- `POST /api/wallets/key` `{ label }` → `{ requestId, keyHash }`.
+- `POST /api/wallets/confirm` `{ requestId, label, seed }` proves our key works
+  and saves the wallet → `{ ok, label, address }`.
+- `GET /api/balance` → the private balance and each piece's perp and spot USD.
+- `POST /api/deposit/quote` `{ route, chain, token, amount, refundTo }` → a
+  deposit address and quote.
+- `GET /api/deposit/:id` → `waiting`, `seen`, `done`, `refunded` or `expired`.
+- `POST /api/plan` → a preview plan with fees and the world trackers see.
+- `POST /api/positions` → `{ positionId, state, needWallets, policyBatch }`.
+- `POST /api/positions/:id/continue` → the same, once wallets exist.
+- `POST /api/policy/confirm` `{ positionId | homeId, txHashes }` reads the
+  policies back → `{ ok, locked, unlocked }`.
+- `GET /api/positions` → every position with its pieces and alerts.
+- `GET /api/guard/box-pub` → `{ boxPub }`.
+- `POST /api/positions/:id/stop` `{ boxes: [{ shard, box }] }` forwards each
+  box sealed in the browser to the guard, unchanged, with the shard outside.
+- `POST /api/positions/:id/close` `{ now? }` → `{ ok, state }`.
+- `POST /api/home` `{ labels? }` → `{ homeId, feeUsd, unlockBatch }`.
+- `GET /api/home/:id` → state, steps, relock batch and USDC arrived.
+- `GET /api/alerts` → the newest alerts.
 - Anything else is 404 with a plain sentence.
 
 Every answer has `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` and
@@ -114,7 +263,8 @@ npm run typecheck
 npm test
 ```
 
-The tests use no network. HTTP goes through fakes, NEAR's key check is
-injected, the job runner gets a fake clock, and the OutLayer replies are JSON
-files in `test/fixtures/` with made-up values in the shapes seen on mainnet.
-Keys are throwaway bytes.
+The tests use no network. Every outside service gets an injected fetch, the job
+runner gets a fake clock, and the replies of OutLayer, NEAR RPC, Hyperliquid,
+Aurora and the guard are JSON files in `test/fixtures/` with made-up values.
+Each newer fixture names the page it came from in its `source` field. Keys are
+throwaway bytes, accounts are alice.near and bob.near.

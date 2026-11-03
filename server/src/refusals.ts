@@ -38,6 +38,16 @@ export const API_ERRORS = {
   key_not_on_account: "That key is not a full-access key of this NEAR account.",
   near_unreachable: "We couldn't reach NEAR to check your key. Try again in a moment.",
   internal: "Something went wrong on our side. Try again.",
+  pieces_key_missing: "That key is not on your NEAR account yet. Add the pieces key in your wallet, then try again.",
+  unknown_request: "We have no wallet key request with that id. Ask for a new key and try again.",
+  wallet_key_refused: "OutLayer did not accept our key for this wallet. Add the key to the wallet again, then confirm.",
+  balance_missing: "Make your private balance wallet first, then try again.",
+  wallet_missing: "Make this piece wallet first, then try again.",
+  policy_owner_wrong: "That policy was stored by another NEAR account. Store it again from your own account.",
+  piece_in_use: "That piece still holds an open position. Close it first, then send it home.",
+  shard_not_yours: "That piece is not part of this position. Seal the box for one of its own pieces.",
+  wrong_state: "This can't be done in the position's current state. Reload and try again.",
+  route_unavailable: "This deposit route is not available right now. Try the other route.",
 } as const;
 
 export type RefusalCode = keyof typeof REFUSALS;
@@ -77,6 +87,16 @@ export const HTTP_STATUS: Record<ErrorCode, number> = {
   key_not_on_account: 401,
   near_unreachable: 503,
   internal: 500,
+  pieces_key_missing: 409,
+  unknown_request: 404,
+  wallet_key_refused: 409,
+  balance_missing: 409,
+  wallet_missing: 409,
+  policy_owner_wrong: 409,
+  piece_in_use: 409,
+  shard_not_yours: 403,
+  wrong_state: 409,
+  route_unavailable: 503,
 };
 
 /** Names a sentence needs filled in, such as ["reason"]. */
