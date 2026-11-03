@@ -15,4 +15,4 @@ __pycache__/
 
 # internal working notes stay out of the repo
 HANDOFF*.md
-SPEC*
+[S]PEC*

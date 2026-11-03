@@ -3,6 +3,8 @@ name: ci
 on:
   push:
   pull_request:
+    # edited: check the title and body again after they change
+    types: [opened, synchronize, reopened, edited]
 
 jobs:
   hygiene:
@@ -21,6 +23,16 @@ jobs:
             RANGE="${{ github.event.before }}..${{ github.sha }}"
           fi
           scripts/check-repo.sh "$RANGE"
+      - name: Hygiene check self-test
+        run: scripts/test-check-repo.sh
+      - name: Pull request title and body
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          printf '%s\n\n%s\n' "$PR_TITLE" "$PR_BODY" > "$RUNNER_TEMP/pull-request.md"
+          scripts/check-repo.sh --text "$RUNNER_TEMP/pull-request.md"
 
   guard:
     runs-on: ubuntu-latest
