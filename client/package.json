@@ -21,6 +21,18 @@
     "./vrf": {
       "types": "./dist/vrf.d.ts",
       "default": "./dist/vrf.js"
+    },
+    "./keys": {
+      "types": "./dist/keys.d.ts",
+      "default": "./dist/keys.js"
+    },
+    "./hyperliquid": {
+      "types": "./dist/hyperliquid.d.ts",
+      "default": "./dist/hyperliquid.js"
+    },
+    "./exit": {
+      "types": "./dist/exit.d.ts",
+      "default": "./dist/exit.js"
     }
   },
   "files": [
@@ -36,9 +48,17 @@
   },
   "license": "ISC",
   "devDependencies": {
+    "@metamask/eth-sig-util": "^8.2.0",
     "@types/node": "^20.19.43",
     "fast-check": "^3.23.2",
+    "near-seed-phrase": "^0.2.1",
     "typescript": "^5.9.3",
     "vitest": "^3.2.7"
+  },
+  "dependencies": {
+    "@noble/curves": "^1.9.7",
+    "@noble/hashes": "^1.8.0",
+    "@scure/base": "^1.2.6",
+    "@scure/bip39": "^1.6.0"
   }
 }

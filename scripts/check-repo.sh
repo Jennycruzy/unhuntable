@@ -66,7 +66,8 @@ fi
 
 cd "$(git rev-parse --show-toplevel)"
 
-files=$(git ls-files | grep -v -E '(^|/)(Cargo\.lock|package-lock\.json)$|^scripts/check-repo\.sh$')
+# exit/exit.js is the generated exit page bundle; its sources are checked, and CI rebuilds it and fails if it differs.
+files=$(git ls-files | grep -v -E '(^|/)(Cargo\.lock|package-lock\.json)$|^scripts/check-repo\.sh$|^exit/exit\.js$')
 
 check_files() {
   local name=$1 pattern=$2 flags=$3

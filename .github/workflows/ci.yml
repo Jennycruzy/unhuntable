@@ -115,3 +115,26 @@ jobs:
         run: cargo near --version || cargo install cargo-near --locked --no-default-features
       - name: Unit and sandbox tests
         run: cargo test
+
+  exit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            client/package-lock.json
+            exit/package-lock.json
+      - name: Install the client library
+        working-directory: client
+        run: npm ci
+      - name: Install the build tools
+        working-directory: exit
+        run: npm ci
+      - name: Rebuild the exit page and check the committed bundle matches
+        working-directory: exit
+        run: |
+          npm run build
+          git diff --exit-code -- exit.js

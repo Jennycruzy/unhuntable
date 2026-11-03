@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' file:; style-src 'unsafe-inline'; connect-src https://api.outlayer.ai https://api.hyperliquid.xyz https://rpc.mainnet.near.org; form-action 'none'; base-uri 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Exit without us</title>
+<style>
+  :root { --bg: #fbfbf8; --fg: #1b1b18; --muted: #66665e; --line: #d9d9d0; --accent: #1d5c3f; --err: #9b2a1a; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #161614; --fg: #ecece6; --muted: #a3a39a; --line: #36362f; --accent: #7fc8a2; --err: #ff9a85; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 1.6rem; margin: 0 0 8px; }
+  p.lead { color: var(--muted); margin: 0 0 24px; }
+  label { display: block; font-weight: 600; margin: 16px 0 4px; }
+  .hint { color: var(--muted); font-size: 0.9rem; margin: 2px 0 0; }
+  input, textarea, select, button { font: inherit; color: inherit; background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; width: 100%; }
+  textarea { min-height: 72px; resize: vertical; }
+  .row { display: grid; grid-template-columns: 140px 1fr; gap: 8px; }
+  button { margin-top: 20px; background: var(--accent); color: var(--bg); border: none; font-weight: 600; cursor: pointer; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  #log { margin-top: 28px; border-top: 1px solid var(--line); padding-top: 12px; }
+  #log p { margin: 6px 0; }
+  #log p.ask { font-weight: 600; }
+  #log p.error { color: var(--err); font-weight: 600; }
+  #log p.done { color: var(--accent); font-weight: 600; }
+  #answer-form { display: flex; gap: 8px; }
+  #answer-form button { margin-top: 0; width: auto; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Exit without us</h1>
+  <p class="lead">Bring your money home with only your 12 words, even if our servers are gone. This page talks only to OutLayer, Hyperliquid and NEAR. Your words never leave this page.</p>
+
+  <form id="start-form" autocomplete="off">
+    <label for="words">Your 12 words</label>
+    <textarea id="words" required spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
+
+    <label for="account">Your NEAR account</label>
+    <input id="account" required spellcheck="false" autocapitalize="off">
+    <p class="hint">For example alice.near.</p>
+
+    <label for="to">Send the money to</label>
+    <div class="row">
+      <select id="chain" aria-label="Chain">
+        <option value="near">NEAR</option>
+        <option value="base">Base</option>
+        <option value="arbitrum">Arbitrum</option>
+      </select>
+      <input id="to" required aria-label="Address on that chain" spellcheck="false" autocapitalize="off">
+    </div>
+    <p class="hint">It goes out from your private balance as USDC.</p>
+
+    <label for="server-key">Our server key hash (optional)</label>
+    <input id="server-key" spellcheck="false" autocapitalize="off">
+    <p class="hint">If you paste it, the page offers to remove our server's access to your wallets at the end.</p>
+
+    <button id="start" type="submit">Start</button>
+  </form>
+
+  <div id="log" aria-live="polite"></div>
+  <div id="answer" hidden>
+    <form id="answer-form"><input id="answer-text" aria-label="Your answer"><button type="submit">Answer</button></form>
+  </div>
+</main>
+<script src="exit.js"></script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "name": "unhuntable-exit",
+  "private": true,
+  "description": "Get your money home with only your 12 words, without unhuntable's servers",
+  "type": "module",
+  "scripts": {
+    "build": "esbuild page.ts --bundle --minify --format=iife --platform=browser --target=es2020 --legal-comments=none --charset=utf8 --outfile=exit.js",
+    "cli": "tsx cli.ts"
+  },
+  "license": "ISC",
+  "devDependencies": {
+    "esbuild": "0.25.10",
+    "tsx": "4.20.6"
+  }
+}
