@@ -18,6 +18,8 @@ Tracks: **Privacy & Private AI** · **Unstoppable DeFi** · **AI Security & Defe
 
 **The problem.** Hyperliquid is the biggest onchain perps exchange, and it is fully transparent. A public account page shows a position, its liquidation price and its resting stop and take-profit orders to anyone. Stop hunting is not a theory there: big positions are tracked by bots and public dashboards, and the price is pushed to the levels everyone can see.
 
+The same problem shows up across all public chains. In [NEP discussion #531](https://github.com/near/NEPs/issues/531), Illia Polosukhin notes that users end up spreading their activity over many separate accounts to keep it apart, and that the answer lives in the application layer. Unhuntable is that answer for perps: the separate accounts are made and funded for you, from your one NEAR account.
+
 **The answer.** Three things a trader on Hyperliquid cannot get today, together:
 
 1. **Pieces nobody can tie together.** A position is split into 2 to 12 accounts. Each is funded separately from a confidential balance on NEAR Intents and arrives through the same shared payer that funds thousands of other Hyperliquid accounts a day. Sizes are randomised and entries are spread over minutes, with the timing drawn from a VRF anyone can check.
