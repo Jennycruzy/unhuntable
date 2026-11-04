@@ -8,10 +8,10 @@ export interface ChainChoice {
 
 /** route "near": from a NEAR wallet. route "aurora": from an EVM or Solana wallet such as MetaMask or Phantom. */
 export const ROUTES: { id: Route; name: string; chains: ChainChoice[] }[] = [
-  { id: "near", name: "From a NEAR wallet", chains: [{ id: "near", name: "NEAR", tokens: ["USDC", "USDT", "NEAR"] }] },
+  { id: "near", name: "NEAR wallet", chains: [{ id: "near", name: "NEAR", tokens: ["USDC", "USDT", "NEAR"] }] },
   {
     id: "aurora",
-    name: "From MetaMask or Phantom",
+    name: "MetaMask or Phantom",
     chains: [
       { id: "eth", name: "Ethereum", tokens: ["USDC", "USDT", "ETH"] },
       { id: "base", name: "Base", tokens: ["USDC", "ETH"] },

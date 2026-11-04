@@ -131,7 +131,6 @@ function Trade({ me }: { me: Me }) {
           Your pieces key is not on this device. <Link href="/setup/">Restore it from your 12 words</Link> before you trade.
         </Notice>
       )}
-      {balance && <p className="muted">Private balance: {usd(balance.privateUsdc)}</p>}
       {error && (
         <Notice kind="error" testId="trade-error">
           {error}
@@ -145,45 +144,62 @@ function Trade({ me }: { me: Me }) {
             void review();
           }}
         >
-          <label>Market</label>
           <Choice name="Market" value={coin} onChange={setCoin} options={[{ v: "BTC", label: "BTC" }, { v: "ETH", label: "ETH" }, { v: "SOL", label: "SOL" }]} />
+          <div className="labelrow">
+            <label htmlFor="size">Size</label>
+            {balance && <output className="muted">{usd(balance.privateUsdc)} available</output>}
+          </div>
+          <div className="unit big">
+            <input id="size" inputMode="decimal" autoComplete="off" required value={size} onChange={(e) => setSize(e.target.value)} />
+            <span>USD</span>
+          </div>
           <label>Side</label>
           <Choice name="Side" value={side} onChange={setSide} options={[{ v: "long", label: "Long" }, { v: "short", label: "Short" }]} />
-          <label htmlFor="size">Size in USD</label>
-          <input id="size" inputMode="decimal" required value={size} onChange={(e) => setSize(e.target.value)} />
-          <label htmlFor="lev">Leverage: {leverage}x</label>
+          <div className="labelrow">
+            <label htmlFor="lev">Leverage</label>
+            <output htmlFor="lev">{leverage}x</output>
+          </div>
           <input id="lev" type="range" min={1} max={10} step={1} value={leverage} onChange={(e) => setLeverage(Number(e.target.value))} />
-          <label>Hiding level</label>
+          <label>Pieces</label>
           <Choice
-            name="Hiding level"
+            name="Pieces"
             value={hiding}
             onChange={setHiding}
             options={[
-              { v: "normal", label: "Normal (1 piece)" },
-              { v: "whale", label: "Whale (several pieces)" },
+              { v: "normal", label: "One" },
+              { v: "whale", label: "Several" },
             ]}
           />
-          <h2>Invisible stop (optional)</h2>
-          <p className="muted small">A stop that doesn&apos;t exist until it fires: no order sits on the exchange for anyone to see.</p>
-          <label htmlFor="stop">Stop price</label>
-          <input id="stop" inputMode="decimal" value={stop} onChange={(e) => setStop(e.target.value)} />
-          <label htmlFor="tp">Take-profit price</label>
-          <input id="tp" inputMode="decimal" value={tp} onChange={(e) => setTp(e.target.value)} />
-          <label htmlFor="jitter">Tolerance in basis points (1 bp = 0.01%)</label>
-          <input id="jitter" inputMode="numeric" value={jitter} onChange={(e) => setJitter(e.target.value)} />
-          <p className="muted small">The guard moves your stop by a random amount up to this far, so nobody can guess the exact level. 0 to 100.</p>
+          <details className="more" open={stop !== "" || tp !== ""}>
+            <summary>Invisible stop</summary>
+            <div className="two">
+              <div>
+                <label htmlFor="stop">Stop price</label>
+                <input id="stop" inputMode="decimal" autoComplete="off" value={stop} onChange={(e) => setStop(e.target.value)} />
+              </div>
+              <div>
+                <label htmlFor="tp">Take-profit</label>
+                <input id="tp" inputMode="decimal" autoComplete="off" value={tp} onChange={(e) => setTp(e.target.value)} />
+              </div>
+            </div>
+            <label htmlFor="jitter">Tolerance (bp)</label>
+            <input id="jitter" inputMode="numeric" autoComplete="off" value={jitter} onChange={(e) => setJitter(e.target.value)} />
+          </details>
           <button type="submit">Review</button>
         </form>
       )}
 
-      {stage.kind === "working" && <Notice testId="trade-working">{stage.text}</Notice>}
+      {stage.kind === "working" && (
+        <Notice testId="trade-working" live>
+          {stage.text}
+        </Notice>
+      )}
 
       {stage.kind === "review" && <Review stage={stage} onBack={() => setStage({ kind: "form" })} onConfirm={() => confirm(stage.req)} />}
 
       {stage.kind === "policy" && stage.answer.policyBatch && (
         <>
           <h2>Approve your new pieces</h2>
-          <p>Your wallet will ask once, for all of these. Each sets what a piece&apos;s account may do, so it can only trade and send money back to you.</p>
           <ul className="plain" data-testid="policy-summary">
             {stage.answer.policyBatch.summary.map((s, i) => (
               <li key={i}>{s}</li>
@@ -198,7 +214,7 @@ function Trade({ me }: { me: Me }) {
       {stage.kind === "opened" && (
         <>
           <Notice kind="ok" testId="trade-opened">
-            Your position is on its way. You can follow it on Positions.
+            Your position is on its way.
           </Notice>
           {stage.levels && stage.sealed && <Notice testId="stop-sealed">{STOP_COPY}</Notice>}
           {stage.levels && !stage.sealed && <Notice kind="warn">Your stop will be sealed as soon as the position is open. Keep Positions open on this device.</Notice>}
@@ -219,28 +235,33 @@ function Review({ stage, onBack, onConfirm }: { stage: { req: TradeRequest; plan
       <h2>
         {r.count} {r.count === 1 ? "piece" : "pieces"}
       </h2>
-      <p className="muted small">Each piece is a separate small account on Hyperliquid with its own part of your position.</p>
-      {r.pieces.map((p) => (
-        <div className="card" key={p.n} data-testid="review-piece">
-          <Facts
-            rows={[
-              [`Piece ${p.n}`, `${p.size} ${coin}`],
-              ["Size in USD", `$${p.notional}`],
-              ["Funded with", `$${p.funding}`],
-            ]}
-          />
+      <div className="card table">
+        <div className="trow head">
+          <span>Piece</span>
+          <span>Size</span>
+          <span>USD</span>
+          <span>Funded</span>
         </div>
-      ))}
+        {r.pieces.map((p) => (
+          <div className="trow" key={p.n} data-testid="review-piece">
+            <span>{p.n}</span>
+            <span>
+              {p.size} {coin}
+            </span>
+            <span>${p.notional}</span>
+            <span>${p.funding}</span>
+          </div>
+        ))}
+      </div>
       <div className="card">
         <Facts
           rows={[
             ["Fees", <span key="f" data-testid="fees">${r.feesUsd}</span>],
-            ["Exit fee, when you send home", <span key="x" data-testid="exit-fee">${r.exitFeeUsd}</span>],
+            ["Exit fee", <span key="x" data-testid="exit-fee">${r.exitFeeUsd}</span>],
           ]}
         />
       </div>
       <h2>As the world sees it</h2>
-      <p className="muted small">Separate small accounts, with nothing linking them to each other or to you.</p>
       <div className="world" data-testid="world">
         {stage.plan.world.map((w) => (
           <div className="acct" key={w.name}>
@@ -251,12 +272,14 @@ function Review({ stage, onBack, onConfirm }: { stage: { req: TradeRequest; plan
           </div>
         ))}
       </div>
-      <button type="button" onClick={onConfirm}>
-        Confirm
-      </button>
-      <button type="button" className="secondary" onClick={onBack}>
-        Change
-      </button>
+      <div className="row-buttons">
+        <button type="button" className="secondary" onClick={onBack}>
+          Change
+        </button>
+        <button type="button" onClick={onConfirm}>
+          Confirm
+        </button>
+      </div>
     </div>
   );
 }

@@ -3,14 +3,15 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { localRelock } from "../lib/home";
-import { SessionProvider } from "../lib/session";
+import { SessionProvider, useSession } from "../lib/session";
+import { IconDeposit, IconHome, IconPositions, IconStart, IconTrade, Mark } from "./icons";
 
 const LINKS = [
-  { href: "/", name: "Start" },
-  { href: "/deposit/", name: "Deposit" },
-  { href: "/trade/", name: "Trade" },
-  { href: "/positions/", name: "Positions" },
-  { href: "/home/", name: "Send home" },
+  { href: "/", name: "Start", icon: IconStart },
+  { href: "/deposit/", name: "Deposit", icon: IconDeposit },
+  { href: "/trade/", name: "Trade", icon: IconTrade },
+  { href: "/positions/", name: "Positions", icon: IconPositions },
+  { href: "/home/", name: "Send home", icon: IconHome },
 ];
 
 function RelockBanner() {
@@ -34,23 +35,37 @@ function RelockBanner() {
   );
 }
 
-export function Shell({ children }: { children: ReactNode }) {
+/** The start page is the cover for visitors; everything else is the app. */
+function Frame({ children }: { children: ReactNode }) {
+  const { me } = useSession();
   const path = usePathname() || "/";
   const norm = path.endsWith("/") ? path : path + "/";
+  const cover = norm === "/" && me.status !== "ok";
+  if (cover) return <div className="shell">{children}</div>;
+  return (
+    <div className="shell app">
+      <RelockBanner />
+      {children}
+      <nav className="nav" aria-label="Main">
+        <Link href="/" className="brand mark">
+          <Mark />
+          Unhuntable
+        </Link>
+        {LINKS.map((l) => (
+          <Link key={l.href} href={l.href} aria-current={norm === l.href ? "page" : undefined}>
+            <l.icon />
+            {l.name}
+          </Link>
+        ))}
+      </nav>
+    </div>
+  );
+}
+
+export function Shell({ children }: { children: ReactNode }) {
   return (
     <SessionProvider>
-      <div className="shell">
-        <RelockBanner />
-        {children}
-        <nav className="nav" aria-label="Main">
-          <span className="brand">Unhuntable</span>
-          {LINKS.map((l) => (
-            <Link key={l.href} href={l.href} aria-current={norm === l.href ? "page" : undefined}>
-              {l.name}
-            </Link>
-          ))}
-        </nav>
-      </div>
+      <Frame>{children}</Frame>
     </SessionProvider>
   );
 }

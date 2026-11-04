@@ -1,0 +1,27 @@
+# Unhuntable
+
+> Trade on Hyperliquid without being seen. A position is split across separate accounts ("pieces") funded privately through NEAR Intents; stops are sealed in the browser and held by a guard in an OutLayer enclave until they fire; the guard trades with agent keys that cannot withdraw; a 12-word key and an open exit tool bring money home without our servers.
+
+## Pages
+- [/](/): start; overview when signed in
+- [/signin/](/signin/): sign in with a NEAR wallet (signed message, NEP-413)
+- [/setup/](/setup/): make or restore the 12-word pieces key
+- [/deposit/](/deposit/): quote and address for a deposit into the private balance
+- [/trade/](/trade/): plan and open a position in pieces, with an optional sealed stop
+- [/positions/](/positions/): open positions, guard status, move or close
+- [/home/](/home/): send money home (two wallet approvals)
+- [/exit/index.html](/exit/index.html): leave without us; works with our servers off
+
+## API (same origin, JSON, cookie session after POST /api/session)
+- GET /api/health
+- POST /api/session, POST /api/logout
+- GET /api/me, GET /api/balance, GET /api/alerts
+- POST /api/pieces-key, POST /api/wallets/key, POST /api/wallets/confirm
+- POST /api/deposit/quote, GET /api/deposit/{id}
+- POST /api/plan, POST /api/positions, GET /api/positions
+- POST /api/positions/{id}/continue, POST /api/positions/{id}/stop, POST /api/positions/{id}/close
+- POST /api/policy/confirm, GET /api/guard/box-pub
+- POST /api/home, GET /api/home/{id}
+- GET /api/evidence
+
+Refusals come back as {"error": code, "message": sentence}.

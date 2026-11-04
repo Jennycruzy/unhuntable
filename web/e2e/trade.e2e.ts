@@ -7,8 +7,9 @@ test("review shows the plan, confirm sends the policy batch in one approval and 
   await restoreKey(page);
   await page.goto("/trade/");
   await page.getByRole("radio", { name: "ETH" }).check();
-  await page.getByLabel("Size in USD").fill("300");
-  await page.getByRole("radio", { name: "Whale (several pieces)" }).check();
+  await page.getByLabel("Size", { exact: true }).fill("300");
+  await page.getByRole("radio", { name: "Several" }).check();
+  await page.getByText("Invisible stop", { exact: true }).click();
   await page.getByLabel("Stop price").fill(STOP);
   await shot(page, "trade", info.project.name);
   await page.getByRole("button", { name: "Review" }).click();
@@ -56,7 +57,7 @@ test("a refusal from the plan is shown word for word", async ({ page, apiRequest
   void apiRequests;
   await signedIn("prices_disagree");
   await page.goto("/trade/");
-  await page.getByLabel("Size in USD").fill("300");
+  await page.getByLabel("Size", { exact: true }).fill("300");
   await page.getByRole("button", { name: "Review" }).click();
   await expect(page.getByTestId("trade-error")).toHaveText("Price sources disagree right now, so we held off. Your stop is still set.");
 });

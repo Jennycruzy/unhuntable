@@ -13,9 +13,9 @@ export function Screen({ title, children }: { title: string; children: ReactNode
   );
 }
 
-export function Notice({ kind = "info", children, testId }: { kind?: "info" | "error" | "ok" | "warn"; children: ReactNode; testId?: string }) {
+export function Notice({ kind = "info", children, testId, live }: { kind?: "info" | "error" | "ok" | "warn"; children: ReactNode; testId?: string; live?: boolean }) {
   return (
-    <div className={`notice ${kind}`} role={kind === "error" ? "alert" : "status"} data-testid={testId}>
+    <div className={`notice ${kind}${live ? " live" : ""}`} role={kind === "error" ? "alert" : "status"} data-testid={testId}>
       {children}
     </div>
   );

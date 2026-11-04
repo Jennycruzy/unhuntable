@@ -70,9 +70,8 @@ export default function DepositPage() {
             void getQuote();
           }}
         >
-          <p>Money you deposit lands in your private balance: an account only your pieces key and our guard can use.</p>
           <fieldset>
-            <legend className="muted small">Where it comes from</legend>
+            <legend>From</legend>
             <div className="choice">
               {ROUTES.map((r) => (
                 <label key={r.id}>
@@ -112,15 +111,18 @@ export default function DepositPage() {
               </select>
             </>
           )}
-          <label htmlFor="token">Coin</label>
-          <select id="token" value={token} onChange={(e) => setToken(e.target.value)}>
-            {chainDef.tokens.map((t) => (
-              <option key={t}>{t}</option>
-            ))}
-          </select>
           <label htmlFor="amount">Amount</label>
-          <input id="amount" inputMode="decimal" required value={amount} onChange={(e) => setAmount(e.target.value)} />
-          <label htmlFor="refund">If it can&apos;t go through, send it back to</label>
+          <div className="amount">
+            <div className="unit big">
+              <input id="amount" inputMode="decimal" autoComplete="off" required value={amount} onChange={(e) => setAmount(e.target.value)} />
+            </div>
+            <select id="token" aria-label="Coin" value={token} onChange={(e) => setToken(e.target.value)}>
+              {chainDef.tokens.map((t) => (
+                <option key={t}>{t}</option>
+              ))}
+            </select>
+          </div>
+          <label htmlFor="refund">Refund to</label>
           <input id="refund" required spellCheck={false} autoCapitalize="off" value={refundTo} onChange={(e) => setRefundTo(e.target.value)} />
           {error && (
             <Notice kind="error" testId="deposit-error">
@@ -141,12 +143,12 @@ export default function DepositPage() {
                 ["You send", `${num(quote.amountIn)} ${token}`],
                 ["You get", <span key="o" data-testid="amount-out">{usd(quote.amountOut)} USDC</span>],
                 ["Fee", usd(quote.feeUsd)],
-                ["Smallest deposit", `${num(quote.minAmount)} ${token}`],
+                ["Minimum", `${num(quote.minAmount)} ${token}`],
               ]}
             />
           </div>
           <p className="muted small" data-testid="fee-line">
-            The fee includes our {bpsPercent(quote.ourFeeBps)}. It usually arrives a few minutes after your transfer confirms.
+            The fee includes our {bpsPercent(quote.ourFeeBps)}.
           </p>
 
           {(view.kind === "waiting" || view.kind === "seen") && (
@@ -172,7 +174,7 @@ export default function DepositPage() {
                 {copied ? "Copied" : "Copy address"}
               </button>
               <Qr text={quote.depositAddress} label="Deposit address as a QR code" />
-              <Notice testId="deposit-status">
+              <Notice testId="deposit-status" live>
                 {view.kind === "seen" ? "We see your transfer. It is on its way to your private balance." : `Waiting for your transfer. This quote ends in ${countdown(view.msLeft)}.`}
               </Notice>
             </>

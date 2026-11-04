@@ -26,7 +26,7 @@ function Words({ words, onNext }: { words: string; onNext: () => void }) {
           </li>
         ))}
       </ol>
-      <p className="muted small">Keep them on paper, somewhere safe. Anyone with these words can move your money. We never see them and can&apos;t show them again.</p>
+      <p className="words-note">Anyone with these words can move your money. We can&apos;t show them again.</p>
       <button type="button" onClick={onNext}>
         I wrote them down
       </button>
@@ -47,7 +47,6 @@ function Check({ words, onOk, onBack }: { words: string; onOk: () => void; onBac
         else setWrong(true);
       }}
     >
-      <p>Type these words from your paper, so we know you have them.</p>
       {positions.map((p, i) => (
         <div key={p}>
           <label htmlFor={`w${i}`}>Word {p + 1}</label>
@@ -141,16 +140,12 @@ function SetupFlow({ me }: { me: Me }) {
 
   return (
     <>
-      <p className="muted">
-        Your pieces key is a key made from 12 words. It signs for the small accounts your trades are split into (your pieces) and for your private balance, the account
-        your money waits in between trades.
-      </p>
       {error && <Notice kind="error">{error}</Notice>}
       {info && <Notice kind="ok">{info}</Notice>}
 
       {step === "intro" && me.piecesKey === "on_account" && (
         <>
-          <p>Your account already has a pieces key. Bring it to this device with your 12 words.</p>
+          <p>Your account already has a pieces key.</p>
           <button type="button" onClick={() => setStep("restore")}>
             Restore from 12 words
           </button>
@@ -218,7 +213,6 @@ function SetupFlow({ me }: { me: Me }) {
       {step === "key" && key && (
         <>
           <h2>Add the pieces key to your account</h2>
-          <p>Your wallet will open and ask you to sign this:</p>
           <ul className="plain" data-testid="addkey-words">
             {addKeyWords(me.accountId, key).map((l) => (
               <li key={l}>{l}</li>
@@ -233,7 +227,6 @@ function SetupFlow({ me }: { me: Me }) {
       {step === "balance" && key && (
         <>
           <h2>Make your private balance</h2>
-          <p>This makes the account your money waits in. Your browser signs for it with the pieces key; our server only gets a key that can act for it.</p>
           <button type="button" disabled={busy} onClick={balance}>
             {busy ? "Making it…" : "Make my private balance"}
           </button>

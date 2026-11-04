@@ -85,7 +85,7 @@ function GoHome(_: { me: Me }) {
 
       {!start && !homeId && (
         <>
-          <p>Send home closes your pieces, brings their money back to your private balance, and locks them again. Your wallet asks you twice: once to unlock, once to lock again.</p>
+          <p>Closes your pieces and brings the money back to your private balance. Your wallet asks twice: unlock, then lock again.</p>
           <Notice testId="exit-fee">{EXIT_FEE}</Notice>
           <button type="button" disabled={busy} onClick={begin}>
             Send home
@@ -144,8 +144,8 @@ function GoHome(_: { me: Me }) {
         </>
       )}
 
-      <p className="small">
-        <a href="/exit/index.html">Leave without us</a>: bring your money home with only your 12 words, even if our servers are gone.
+      <p className="foot">
+        <a href="/exit/index.html">Leave without us</a>
       </p>
     </>
   );

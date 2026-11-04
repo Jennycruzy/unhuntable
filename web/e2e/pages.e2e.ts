@@ -37,12 +37,23 @@ test("every page loads scripts only from our own origin, under a strict CSP", as
 
 test("a bottom nav on phones, a side nav on desktop", async ({ page, apiRequests }, info) => {
   void apiRequests;
-  await page.goto("/");
+  await page.goto("/trade/");
   const box = await page.locator("nav.nav").boundingBox();
   expect(box).not.toBeNull();
-  if (info.project.name === "phone") expect(box!.y + box!.height).toBeGreaterThan(700);
+  const phone = info.project.name === "phone";
+  if (phone) expect(box!.y + box!.height).toBeGreaterThan(700);
   else expect(box!.height).toBeGreaterThan(700);
-  for (const link of await page.locator("nav.nav a").all()) expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  // touch targets on phones; pointer targets on desktop
+  for (const link of await page.locator("nav.nav a:visible").all()) expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(phone ? 44 : 32);
+});
+
+test("visitors get the cover, with one way in and no app nav", async ({ page, apiRequests }) => {
+  void apiRequests;
+  await page.goto("/");
+  await expect(page.locator("h1")).toHaveText("Trade big. Leave nothing to hunt.");
+  await expect(page.locator("nav.nav")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Start" }).first()).toHaveAttribute("href", "/signin/");
+  await expect(page.getByRole("img", { name: /A public position/ })).toBeVisible();
 });
 
 test("every choice tile is one tap target, clear of the fixed nav", async ({ page, apiRequests, signedIn }) => {

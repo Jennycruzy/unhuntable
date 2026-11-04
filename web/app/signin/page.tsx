@@ -36,20 +36,19 @@ export default function SignInPage() {
 
   return (
     <Screen title="Sign in">
-      <p>Pick your NEAR wallet. It will ask you to sign a short message that proves the account is yours. Signing it costs nothing and moves no money.</p>
-      {state.kind === "busy" && <Notice>Waiting for {state.wallet}…</Notice>}
+      {state.kind === "busy" && <Notice live>Waiting for {state.wallet}…</Notice>}
       {(state.kind === "refused" || state.kind === "network" || state.kind === "error") && (
         <Notice kind="error" testId="signin-error">
           {state.message}
         </Notice>
       )}
       {wallets.map((w) => (
-        <button key={w.id} type="button" disabled={state.kind === "busy"} onClick={() => go(w.id, w.name)}>
+        <button key={w.id} type="button" className="secondary" disabled={state.kind === "busy"} onClick={() => go(w.id, w.name)}>
           Sign in with {w.name}
         </button>
       ))}
-      <p className="small">
-        <Link href="/deposit/">No NEAR wallet? You can deposit from MetaMask or Phantom first</Link>
+      <p className="foot">
+        Signing is free and moves no money. <Link href="/deposit/">No NEAR wallet?</Link>
       </p>
     </Screen>
   );

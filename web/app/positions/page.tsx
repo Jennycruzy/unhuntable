@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useState } from "react";
-import { Facts, Notice, Screen, SignedIn } from "../../components/ui";
+import { Notice, Screen, SignedIn } from "../../components/ui";
 import { sentence } from "../../lib/api";
 import { num, pct, time, usd } from "../../lib/format";
 import { pieceAddress } from "../../lib/pieces";
@@ -62,13 +62,18 @@ function PositionCard({ p, account, record, onRecord }: { p: Position; account: 
 
   return (
     <div className="card" data-testid="position">
-      <h2>
-        {p.coin} {p.side === "long" ? "Long" : "Short"} {usd(p.notionalUsd)} at {p.leverage}x
-      </h2>
-      <p>
-        <span className="badge">{STATE_WORDS[p.state] ?? p.state}</span> <span className="muted small">{p.hiding === "whale" ? "Whale" : "Normal"} hiding</span>
-      </p>
-      {p.fillSavingsUsd !== undefined && <p className="small muted">Saved on fills by splitting: {usd(p.fillSavingsUsd)}</p>}
+      <div className="poshead">
+        <div>
+          <h2>
+            {p.coin} {p.side === "long" ? "Long" : "Short"} {usd(p.notionalUsd)}
+          </h2>
+          <p className="muted small">
+            {p.leverage}x · {p.pieces.length} {p.pieces.length === 1 ? "piece" : "pieces"}
+            {p.fillSavingsUsd !== undefined && <> · saved {usd(p.fillSavingsUsd)} on fills</>}
+          </p>
+        </div>
+        <span className={`badge${p.state === "open" ? " ok" : p.state === "failed" ? " bad" : ""}`}>{STATE_WORDS[p.state] ?? p.state}</span>
+      </div>
       {unreachable && live && (
         <>
           <Notice kind="error" testId="guard-unreachable">
@@ -83,27 +88,28 @@ function PositionCard({ p, account, record, onRecord }: { p: Position; account: 
         const mine = levels[x.shard];
         const addr = record.addresses[x.label];
         return (
-          <div key={x.shard} className="card" data-testid="piece">
-            <Facts
-              rows={[
-                ["Piece", x.label],
-                ["Size", `${num(x.size)} ${p.coin}`],
-                ["Entry", x.entryPx === null ? "–" : usd(x.entryPx)],
-                ["Liquidation", x.liqDistance === null ? "–" : `${pct(x.liqDistance)} away`],
-                ["Guard", <span key="g" className={`badge ${x.guard === "ok" ? "ok" : "bad"}`}>{x.guard === "ok" ? "Watching" : "Not answering"}</span>],
-                ["Invisible stop", x.hasStop ? (mine?.stop !== undefined ? `Set at ${num(mine.stop)}` : "Set") : "None"],
-                ["Take-profit", x.hasTp ? (mine?.tp !== undefined ? `Set at ${num(mine.tp)}` : "Set") : "None"],
-              ]}
-            />
-            {addr && (
-              <a href={hyperliquidPage(addr)} target="_blank" rel="noopener noreferrer" className="small">
-                Check it yourself: no stop is listed for this account on Hyperliquid
-              </a>
-            )}
+          <div key={x.shard} className="pc" data-testid="piece">
+            <div className="pc-top">
+              <strong>
+                {num(x.size)} {p.coin}
+              </strong>
+              <span className="muted">{x.entryPx === null ? "–" : usd(x.entryPx)}</span>
+              <span className={`badge ${x.guard === "ok" ? "ok" : "bad"}`}>{x.guard === "ok" ? "Watching" : "Not answering"}</span>
+            </div>
+            <div className="pc-sub">
+              <span>Liquidation {x.liqDistance === null ? "–" : `${pct(x.liqDistance)} away`}</span>
+              <span>Stop {x.hasStop ? (mine?.stop !== undefined ? num(mine.stop) : "set") : "none"}</span>
+              <span>Take-profit {x.hasTp ? (mine?.tp !== undefined ? num(mine.tp) : "set") : "none"}</span>
+              {addr && (
+                <a href={hyperliquidPage(addr)} target="_blank" rel="noopener noreferrer">
+                  Check on Hyperliquid
+                </a>
+              )}
+            </div>
           </div>
         );
       })}
-      {hiddenLevels(p, levels) && <p className="small muted">Levels are kept only in the browser that set them.</p>}
+      {hiddenLevels(p, levels) && <p className="small muted">Levels show only in the browser that set them.</p>}
       {p.alerts.length > 0 && (
         <>
           <h2>Alerts</h2>
@@ -120,15 +126,19 @@ function PositionCard({ p, account, record, onRecord }: { p: Position; account: 
       {live && p.state === "open" && (
         <>
           <label htmlFor={`stop-${p.id}`}>Move stop to</label>
-          <input id={`stop-${p.id}`} inputMode="decimal" value={stop} onChange={(e) => setStop(e.target.value)} />
-          <button type="button" className="secondary" disabled={busy || !stop} onClick={() => move("stop", stop)}>
-            Move stop
-          </button>
+          <div className="inline">
+            <input id={`stop-${p.id}`} inputMode="decimal" autoComplete="off" value={stop} onChange={(e) => setStop(e.target.value)} />
+            <button type="button" className="secondary" disabled={busy || !stop} onClick={() => move("stop", stop)}>
+              Move stop
+            </button>
+          </div>
           <label htmlFor={`tp-${p.id}`}>Move take-profit to</label>
-          <input id={`tp-${p.id}`} inputMode="decimal" value={tp} onChange={(e) => setTp(e.target.value)} />
-          <button type="button" className="secondary" disabled={busy || !tp} onClick={() => move("tp", tp)}>
-            Move take-profit
-          </button>
+          <div className="inline">
+            <input id={`tp-${p.id}`} inputMode="decimal" autoComplete="off" value={tp} onChange={(e) => setTp(e.target.value)} />
+            <button type="button" className="secondary" disabled={busy || !tp} onClick={() => move("tp", tp)}>
+              Move take-profit
+            </button>
+          </div>
         </>
       )}
       {live && (

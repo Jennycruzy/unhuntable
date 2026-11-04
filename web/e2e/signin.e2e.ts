@@ -24,8 +24,8 @@ test("a refusal from the API is shown word for word", async ({ page, apiRequests
 test("signing in goes to the start screen", async ({ page, apiRequests }) => {
   void apiRequests;
   await page.goto("/signin/");
-  await expect(page.getByRole("link", { name: "No NEAR wallet? You can deposit from MetaMask or Phantom first" })).toHaveAttribute("href", "/deposit/");
+  await expect(page.getByRole("link", { name: "No NEAR wallet?" })).toHaveAttribute("href", "/deposit/");
   await page.getByRole("button", { name: "Sign in with Test wallet" }).click();
-  await expect(page.getByText("Signed in as alice.near")).toBeVisible();
+  await expect(page.getByTestId("account")).toHaveText("alice.near");
   await expect(page.getByTestId("private-balance")).toHaveText("$250.50");
 });
