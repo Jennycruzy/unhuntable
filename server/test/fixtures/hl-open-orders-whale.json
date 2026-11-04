@@ -1,0 +1,38 @@
+[
+ {
+  "coin": "HYPE",
+  "side": "A",
+  "limitPx": "86.19",
+  "sz": "11.6",
+  "oid": 594645723757,
+  "timestamp": 1793808813266,
+  "triggerCondition": "N/A",
+  "isTrigger": false,
+  "triggerPx": "0.0",
+  "children": [],
+  "isPositionTpsl": false,
+  "reduceOnly": false,
+  "orderType": "Limit",
+  "origSz": "11.6",
+  "tif": "Gtc",
+  "cloid": "0x00000000000000000000001238390111"
+ },
+ {
+  "coin": "PURR",
+  "side": "A",
+  "limitPx": "0.11854",
+  "sz": "4123.0",
+  "oid": 594645584961,
+  "timestamp": 1793808808344,
+  "triggerCondition": "N/A",
+  "isTrigger": false,
+  "triggerPx": "0.0",
+  "children": [],
+  "isPositionTpsl": false,
+  "reduceOnly": false,
+  "orderType": "Limit",
+  "origSz": "4123.0",
+  "tif": "Gtc",
+  "cloid": "0x00000000000000000000001236390129"
+ }
+]

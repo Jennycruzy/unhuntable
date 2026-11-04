@@ -83,10 +83,7 @@ export async function sealLevels(api: Api, account: string, positionId: string, 
 
 export const STOP_COPY = "Your stop is not on the exchange. It lives sealed inside the guard and fires when at least 3 of 7 price sources agree.";
 
-/** Hyperliquid's public page for an account, where anyone can see its open orders. */
-export function hyperliquidPage(address: string): string {
-  return `https://app.hyperliquid.xyz/explorer/address/${address}`;
-}
+export { hyperliquidPage } from "./links";
 
 /** Keep levels chosen at confirm until the position is open. */
 export async function keepUntilOpen(account: string, positionId: string, levels: Levels): Promise<void> {

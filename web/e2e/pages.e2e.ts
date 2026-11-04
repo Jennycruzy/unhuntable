@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright";
 import { ORIGIN, expect, shot, test } from "./fixtures";
 
 const PAGES = ["/", "/signin/", "/setup/", "/deposit/", "/trade/", "/positions/", "/home/"];
@@ -47,13 +48,56 @@ test("a bottom nav on phones, a side nav on desktop", async ({ page, apiRequests
   for (const link of await page.locator("nav.nav a:visible").all()) expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(phone ? 44 : 32);
 });
 
-test("visitors get the cover, with one way in and no app nav", async ({ page, apiRequests }) => {
-  void apiRequests;
+test("visitors get the cover, with one way in, no app nav and no call that fails", async ({ page, apiRequests }) => {
+  const failed: string[] = [];
+  page.on("response", (r) => {
+    if (r.status() >= 400) failed.push(`${r.status()} ${r.url()}`);
+  });
   await page.goto("/");
   await expect(page.locator("h1")).toHaveText("Trade big. Leave nothing to hunt.");
   await expect(page.locator("nav.nav")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Start" }).first()).toHaveAttribute("href", "/signin/");
-  await expect(page.getByRole("img", { name: /A public position/ })).toBeVisible();
+  // the film carries the largest live position the server read, with a link to check it
+  await expect(page.getByRole("img", { name: /A public position: Short \$213M ETH on Hyperliquid, liquidation at 3,893/ })).toBeVisible();
+  await expect(page.getByTestId("whale-link")).toHaveText("0x5b5d…c060");
+  await expect(page.getByTestId("whale-link")).toHaveAttribute("href", "https://app.hyperliquid.xyz/explorer/address/0x5b5d51203a0f9079f8aeb098a6523a13f298c060");
+  await expect(page.getByTestId("whale-note")).toContainText("2 min ago");
+  // a visitor never asks who is signed in
+  expect(apiRequests.map((r) => new URL(r.url).pathname)).not.toContain("/api/me");
+  expect(failed).toEqual([]);
+});
+
+test("without a live read the film shows levels and no numbers", async ({ page, apiRequests, context }) => {
+  void apiRequests;
+  await context.addCookies([{ name: "scenario", value: "no_whale", url: "http://127.0.0.1:4173" }]);
+  await page.goto("/");
+  const film = page.locator(".film");
+  await expect(film.getByText("Liquidation", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("whale-note")).toHaveCount(0);
+  expect(await film.textContent()).not.toMatch(/\$\d/);
+});
+
+test("no page has a serious accessibility problem, in dark or light", async ({ page, apiRequests, signedIn }) => {
+  void apiRequests;
+  const serious = async (where: string) =>
+    (await new AxeBuilder({ page }).analyze()).violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => `${where} ${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`);
+  const found: string[] = [];
+  for (const colorScheme of ["dark", "light"] as const) {
+    await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
+    await page.goto("/");
+    await expect(page.locator("h1")).toBeVisible();
+    found.push(...(await serious(`${colorScheme} /`)));
+  }
+  await signedIn();
+  for (const colorScheme of ["dark", "light"] as const) {
+    await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
+    for (const path of PAGES) {
+      await page.goto(path);
+      await expect(page.locator("h1")).toBeVisible();
+      found.push(...(await serious(`${colorScheme} ${path}`)));
+    }
+  }
+  expect(found).toEqual([]);
 });
 
 test("every choice tile is one tap target, clear of the fixed nav", async ({ page, apiRequests, signedIn }) => {

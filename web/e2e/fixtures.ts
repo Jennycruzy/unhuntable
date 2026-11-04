@@ -72,6 +72,7 @@ export const test = base.extend<Fixtures>({
       await context.addInitScript(() => {
         try {
           localStorage.setItem("near-wallet-selector:selectedWalletId", JSON.stringify("test-wallet"));
+          localStorage.setItem("unhuntable:signed-in", "1");
         } catch {
           // storage blocked; the test then fails at the wallet step
         }

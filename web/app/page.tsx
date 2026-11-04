@@ -1,12 +1,13 @@
 "use client";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Mark } from "../components/icons";
 import { Notice } from "../components/ui";
 import { sentence } from "../lib/api";
 import { usd } from "../lib/format";
 import { api, useInterval, useSession } from "../lib/session";
-import type { Balance } from "../lib/types";
+import { hyperliquidPage } from "../lib/links";
+import type { Balance, Whale } from "../lib/types";
 
 /* ------------------------------------------------------------------ signed in */
 
@@ -62,36 +63,66 @@ function Overview({ accountId, needsSetup }: { accountId: string; needsSetup: bo
 
 /* ------------------------------------------------------------------ cover */
 
-/** One market, drawn twice: the wick that liquidates a public position finds nothing to hit in pieces. */
-const PRICE =
-  "M10 120 L38 112 L64 126 L92 104 L120 116 L148 92 L176 108 L204 98 L232 118 L260 102 L288 124 L316 110 L344 130 L372 116 L400 138 L424 128 L446 134 L458 202 L470 150 L492 140 L510 132";
+/** One market, drawn twice: the wick that liquidates a public position finds nothing to hit in pieces.
+    The numbers are the largest position on Hyperliquid right now, read by our server from Hyperliquid's own API. */
+const PRICE = [
+  [10, 120], [38, 112], [64, 126], [92, 104], [120, 116], [148, 92], [176, 108], [204, 98], [232, 118], [260, 102], [288, 124],
+  [316, 110], [344, 130], [372, 116], [400, 138], [424, 128], [446, 134], [458, 202], [470, 150], [492, 140], [510, 132],
+];
+const H = 250;
 
-function Chart({ kind }: { kind: "seen" | "hidden" }) {
+function px(v: number): string {
+  return v.toLocaleString("en-US", { maximumFractionDigits: v >= 1000 ? 0 : v >= 10 ? 2 : 4 });
+}
+
+function money(v: number): string {
+  if (v >= 1e9) return `$${(v / 1e9).toFixed(1)}B`;
+  if (v >= 1e6) return `$${Math.round(v / 1e6)}M`;
+  if (v >= 1e3) return `$${Math.round(v / 1e3)}K`;
+  return `$${Math.round(v)}`;
+}
+
+function Chart({ kind, whale }: { kind: "seen" | "hidden"; whale: Whale | null }) {
+  // a short is hunted upward: the same drawing, mirrored, with the words kept upright
+  const up = whale?.side === "short";
+  const y = (v: number) => (up ? H - v : v);
+  const path = "M" + PRICE.map(([x, v]) => `${x} ${y(v)}`).join(" L");
+  const side = whale ? (whale.side === "long" ? "Long" : "Short") : "Long";
+  const pill = whale ? `${side} ${money(whale.sizeUsd)} ${whale.coin}` : side;
+  const pillW = 26 + pill.length * 8.6;
+  const label =
+    kind === "seen"
+      ? `A public position${whale ? `: ${pill} on Hyperliquid, liquidation at ${px(whale.liqPx)}` : ""}. Its levels are visible to everyone, and a wick to them liquidates it.`
+      : "The same size in pieces: no levels to see, and the same wick hits nothing.";
   return (
-    <svg viewBox="0 0 520 250" className={kind} role="img" aria-label={kind === "seen" ? "A public position: its liquidation price and stop are visible, and a wick down to them liquidates it" : "The same position in pieces: no levels to see, and the same wick hits nothing"}>
+    <svg viewBox={`0 0 520 ${H}`} className={kind} role="img" aria-label={label}>
       <g className="grid">
-        {[50, 100, 150, 200].map((y) => (
-          <line key={y} x1="0" x2="520" y1={y} y2={y} />
+        {[50, 100, 150, 200].map((g) => (
+          <line key={g} x1="0" x2="520" y1={g} y2={g} />
         ))}
       </g>
       {kind === "seen" ? (
         <>
-          <line className="lvl stop" x1="0" x2="520" y1="176" y2="176" />
-          <text className="tag stop" x="436" y="170" textAnchor="end">
-            Stop 62,180
-          </text>
-          <line className="lvl liq" x1="0" x2="520" y1="198" y2="198" />
-          <text className="tag liq" x="436" y="216" textAnchor="end">
-            Liquidation 61,240
+          {(!whale || whale.stopPx !== null) && (
+            <>
+              <line className="lvl stop" x1="0" x2="520" y1={y(176)} y2={y(176)} />
+              <text className="tag stop" x="436" y={up ? y(176) + 16 : y(176) - 6} textAnchor="end">
+                {whale?.stopPx ? `Stop ${px(whale.stopPx)}` : "Stop"}
+              </text>
+            </>
+          )}
+          <line className="lvl liq" x1="0" x2="520" y1={y(198)} y2={y(198)} />
+          <text className="tag liq" x="436" y={up ? y(198) + 20 : y(198) + 18} textAnchor="end">
+            {whale ? `Liquidation ${px(whale.liqPx)}` : "Liquidation"}
           </text>
           <g className="pos">
-            <rect x="14" y="26" width="112" height="30" rx="15" />
-            <text x="70" y="46" textAnchor="middle" className="tag">
-              Long $2.4M
+            <rect x="14" y={up ? H - 56 : 26} width={pillW} height="30" rx="15" />
+            <text x={14 + pillW / 2} y={up ? H - 36 : 46} textAnchor="middle" className="pilltext">
+              {pill}
             </text>
           </g>
-          <circle className="boom" cx="458" cy="200" r="10" />
-          <text className="verdict" x="436" y="240" textAnchor="end">
+          <circle className="boom" cx="458" cy={y(200)} r="10" />
+          <text className="verdict" x="436" y={up ? 22 : 240} textAnchor="end">
             Liquidated
           </text>
         </>
@@ -103,24 +134,40 @@ function Chart({ kind }: { kind: "seen" | "hidden" }) {
             [262, 52],
             [338, 186],
             [410, 70],
-          ].map(([x, y]) => (
-            <rect key={x} className="piece" x={x - 4} y={y - 4} width="8" height="8" rx="2" />
+          ].map(([x, v]) => (
+            <rect key={x} className="piece" x={x - 4} y={y(v) - 4} width="8" height="8" rx="2" />
           ))}
-          <text className="tag dim" x="14" y="34">
+          <text className="tag dim" x="14" y={up ? H - 22 : 34}>
             5 accounts · no stops on the book
           </text>
-          <circle className="sonar" cx="458" cy="200" r="22" />
-          <text className="verdict" x="436" y="240" textAnchor="end">
+          <circle className="sonar" cx="458" cy={y(200)} r="22" />
+          <text className="verdict" x="436" y={up ? 22 : 240} textAnchor="end">
             Nothing to hit
           </text>
         </>
       )}
-      <path className="px" d={PRICE} pathLength={1000} />
+      <path className="px" d={path} pathLength={1000} />
     </svg>
   );
 }
 
+function ago(ms: number): string {
+  const m = Math.max(0, Math.round((Date.now() - ms) / 60_000));
+  return m < 1 ? "just now" : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`;
+}
+
+function short(address: string): string {
+  return `${address.slice(0, 6)}…${address.slice(-4)}`;
+}
+
 function Cover() {
+  const [whale, setWhale] = useState<Whale | null>(null);
+  useEffect(() => {
+    api
+      .whale()
+      .then((r) => setWhale(r.whale))
+      .catch(() => setWhale(null));
+  }, []);
   return (
     <div className="cover">
       <header className="cover-top">
@@ -156,19 +203,30 @@ function Cover() {
           <div className="film">
             <figure>
               <figcaption>
-                <b>On Hyperliquid today</b>
-                <span>Public</span>
+                <b>On Hyperliquid {whale ? "right now" : "today"}</b>
+                {whale ? (
+                  <a href={hyperliquidPage(whale.address)} target="_blank" rel="noopener noreferrer" data-testid="whale-link">
+                    {short(whale.address)}
+                  </a>
+                ) : (
+                  <span>Public</span>
+                )}
               </figcaption>
-              <Chart kind="seen" />
+              <Chart kind="seen" whale={whale} />
             </figure>
             <figure>
               <figcaption>
                 <b>With Unhuntable</b>
                 <span>Same size</span>
               </figcaption>
-              <Chart kind="hidden" />
+              <Chart kind="hidden" whale={whale} />
             </figure>
           </div>
+          {whale && (
+            <p className="film-note" data-testid="whale-note">
+              Largest position on Hyperliquid, read from its public API {ago(whale.asOfMs)}.
+            </p>
+          )}
         </section>
 
         <section className="section" id="how">

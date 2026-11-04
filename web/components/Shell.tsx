@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import { localRelock } from "../lib/home";
+import { localRelock } from "../lib/relock";
 import { SessionProvider, useSession } from "../lib/session";
 import { IconDeposit, IconHome, IconPositions, IconStart, IconTrade, Mark } from "./icons";
 

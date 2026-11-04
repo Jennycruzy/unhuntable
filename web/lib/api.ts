@@ -2,6 +2,7 @@
 // Every error answer is {"error": code, "message": plain sentence}; ApiError carries both.
 import { API_URL } from "./config";
 import type {
+  Whale,
   Balance,
   DepositState,
   HomeStart,
@@ -88,6 +89,10 @@ export class Api {
   }
   balance() {
     return this.call<Balance>("GET", "/api/balance");
+  }
+  /** The largest public position on Hyperliquid the server last read; null until it has one. */
+  whale() {
+    return this.call<{ whale: Whale | null }>("GET", "/api/whale");
   }
   quote(q: QuoteRequest) {
     return this.call<Quote>("POST", "/api/deposit/quote", q);

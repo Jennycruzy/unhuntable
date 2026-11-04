@@ -4,17 +4,35 @@ import { Shell } from "../components/Shell";
 import "@fontsource-variable/inter";
 import "./globals.css";
 
+const DESCRIPTION = "Trade on Hyperliquid in pieces nobody can link, with stops that stay sealed until they fire.";
+
 export const metadata: Metadata = {
+  metadataBase: new URL("https://tryunhuntable.site"),
   title: "Unhuntable",
-  description: "Trade on Hyperliquid in pieces, with invisible stops, and send your money home when you want.",
+  description: DESCRIPTION,
   referrer: "no-referrer",
+  openGraph: { title: "Unhuntable", description: DESCRIPTION, url: "/", siteName: "Unhuntable", type: "website", images: [{ url: "/og.png", width: 1200, height: 630, alt: "Trade big. Leave nothing to hunt." }] },
+  twitter: { card: "summary_large_image", title: "Unhuntable", description: DESCRIPTION, images: ["/og.png"] },
 };
 
-export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#0e1012" };
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: [
+    { media: "(prefers-color-scheme: dark)", color: "#08090a" },
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+  ],
+};
+
+/* Runs before first paint: a browser with a session hides the cover while its overview loads. Hashed into the CSP at build. */
+const SESSION_FLAG = `try{if(localStorage.getItem("unhuntable:signed-in"))document.documentElement.dataset.session="1"}catch(e){}`;
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: SESSION_FLAG }} />
+      </head>
       <body>
         <Shell>{children}</Shell>
       </body>

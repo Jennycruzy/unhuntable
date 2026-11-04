@@ -28,6 +28,7 @@ import { OneClick } from "./oneclick.js";
 import { walletClient } from "./outlayer.js";
 import { registerMoneyJobs, registerMoneyRoutes } from "./routes.js";
 import { HEARTBEAT_MS, MIDS_POLL_MS, heartbeat, watchMids } from "./watch.js";
+import { WHALE_EVERY_MS, WhaleWatch } from "./whale.js";
 
 export interface ServerDeps {
   config: Config;
@@ -37,6 +38,8 @@ export interface ServerDeps {
   log?: Logger;
   /** The money flows; their routes are served when this is given. */
   money?: Ctx;
+  /** The largest public position on Hyperliquid, for the start page. */
+  whale?: WhaleWatch;
 }
 
 const SECURITY_HEADERS: Record<string, string> = {
@@ -109,6 +112,9 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     return { counts: Object.fromEntries(rows.map((r) => [r.kind, r.n])) };
   });
 
+  // Public data only, and never an error: the page draws its film without numbers until one is read.
+  app.get("/api/whale", async () => ({ whale: deps.whale?.latest ?? null }));
+
   if (deps.money) registerMoneyRoutes(app, deps.money);
 
   return app;
@@ -153,7 +159,8 @@ export async function main(): Promise<void> {
   const money = moneyContext(config, db, jobs, log);
   registerMoneyJobs(jobs, money);
   jobs.start();
-  const app = buildServer({ config, db, log, money });
+  const whale = new WhaleWatch(money.hl);
+  const app = buildServer({ config, db, log, money, whale });
   let watching = false;
   const watch = (fn: () => Promise<unknown>) => () => {
     if (watching) return;
@@ -164,12 +171,25 @@ export async function main(): Promise<void> {
   };
   const mids = setInterval(watch(() => watchMids(money)), MIDS_POLL_MS);
   const beat = setInterval(watch(() => heartbeat(money)), HEARTBEAT_MS / 12);
+  let reading = false;
+  const readWhale = () => {
+    if (reading) return;
+    reading = true;
+    whale
+      .refresh()
+      .catch((e) => log.warn({ error: e instanceof Error ? e.message : String(e) }, "whale read failed"))
+      .finally(() => (reading = false));
+  };
+  const whales = setInterval(readWhale, WHALE_EVERY_MS);
+  readWhale();
   mids.unref();
   beat.unref();
+  whales.unref();
   await app.listen({ port: config.port, host: config.host });
   const stop = async () => {
     clearInterval(mids);
     clearInterval(beat);
+    clearInterval(whales);
     jobs.stop();
     await app.close();
     db.close();

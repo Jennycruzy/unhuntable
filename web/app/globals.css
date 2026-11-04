@@ -44,7 +44,7 @@
     --line-2: rgba(10, 12, 16, 0.14);
     --fg: #0c0d0f;
     --fg-2: #4b5059;
-    --fg-3: #767b84;
+    --fg-3: #63676f;
     --accent: #0d8a5f;
     --accent-ink: #ffffff;
     --danger: #d23b2b;
@@ -94,13 +94,13 @@ main.screen { max-width: 600px; margin: 0 auto; padding: 32px 20px calc(var(--ta
 nav.nav {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
   height: var(--tab-h); padding-bottom: env(safe-area-inset-bottom);
-  display: flex; background: color-mix(in srgb, var(--bg) 82%, transparent);
+  display: flex; background: color-mix(in srgb, var(--bg) 94%, transparent);
   backdrop-filter: saturate(1.6) blur(18px); -webkit-backdrop-filter: saturate(1.6) blur(18px);
   border-top: 1px solid var(--line);
 }
 nav.nav a {
   flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
-  min-height: 44px; color: var(--fg-3); text-decoration: none; font-size: 0.6875rem; font-weight: 500; letter-spacing: 0;
+  min-height: 44px; color: var(--fg-2); text-decoration: none; font-size: 0.6875rem; font-weight: 500; letter-spacing: 0;
   transition: color 0.15s;
 }
 nav.nav a svg { width: 20px; height: 20px; }
@@ -444,3 +444,11 @@ ul.plain li:last-child { border-bottom: none; }
   .film .tag { font-size: 17px; }
   .film .verdict { font-size: 19px; }
 }
+
+/* A browser with a session never shows the cover while it finds out who is signed in. */
+html[data-session] .cover { visibility: hidden; }
+
+.film .pilltext { font: 590 12px var(--font); fill: var(--bg); }
+.film figcaption a { color: var(--fg-2); font-family: var(--mono); font-size: 0.75rem; text-decoration-color: var(--line-2); }
+.film-note { margin: 12px 2px 0; font-size: 0.75rem; color: var(--fg-3); text-align: right; animation: rise 0.6s 0.4s var(--ease) both; }
+@media (max-width: 640px) { .film .pilltext { font-size: 15px; } .film-note { text-align: left; } }

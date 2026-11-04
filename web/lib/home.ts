@@ -3,42 +3,10 @@
 import type { Api } from "./api";
 import { approveBatch } from "./trade";
 import type { HomeStart, HomeState, PolicyConfirmed } from "./types";
+import { localRelock, type RelockStore } from "./relock";
 import type { AppWallet } from "./wallet";
 
-const RELOCK = "unhuntable.relock";
-
-/** Where the "Lock your pieces again" banner is remembered until the relock is confirmed. */
-export interface RelockStore {
-  get(): string | undefined;
-  set(homeId: string): void;
-  clear(): void;
-}
-
-export const localRelock: RelockStore = {
-  get() {
-    try {
-      return localStorage.getItem(RELOCK) ?? undefined;
-    } catch {
-      return undefined;
-    }
-  },
-  set(id) {
-    try {
-      localStorage.setItem(RELOCK, id);
-      window.dispatchEvent(new Event("unhuntable-relock"));
-    } catch {
-      // the banner then lasts only for this page
-    }
-  },
-  clear() {
-    try {
-      localStorage.removeItem(RELOCK);
-      window.dispatchEvent(new Event("unhuntable-relock"));
-    } catch {
-      // nothing to clear
-    }
-  },
-};
+export { localRelock, type RelockStore };
 
 export class HomeFlow {
   constructor(

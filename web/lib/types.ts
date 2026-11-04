@@ -27,6 +27,19 @@ export interface WalletConfirmed {
   address: string;
 }
 
+/** GET /api/whale: a public Hyperliquid position, read from Hyperliquid's own API. */
+export interface Whale {
+  address: string;
+  coin: string;
+  side: "long" | "short";
+  sizeUsd: number;
+  entryPx: number;
+  liqPx: number;
+  markPx: number;
+  stopPx: number | null;
+  asOfMs: number;
+}
+
 export interface Balance {
   privateUsdc: string;
   pieces: { label: string; shard: string; perpUsd: string; spotUsd: string }[];

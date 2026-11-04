@@ -98,6 +98,14 @@ function api(method, path, body, c) {
     if (scenario === "signin_refused") return fail(401, "key_not_on_account", "That key is not a full-access key of this NEAR account.");
     return { ...ok({ ok: true, accountId: body.accountId, expiresMs: Date.now() + 3600_000 }), cookie: `sid=t${Math.random().toString(36).slice(2)}; Path=/; SameSite=Strict` };
   }
+  // public, like the real server: the largest position it last read on Hyperliquid
+  if (method === "GET" && path === "/api/whale")
+    return ok({
+      whale:
+        scenario === "no_whale"
+          ? null
+          : { address: "0x5b5d51203a0f9079f8aeb098a6523a13f298c060", coin: "ETH", side: "short", sizeUsd: 213452000, entryPx: 2322.71, liqPx: 3893.16, markPx: 3401.2, stopPx: null, asOfMs: Date.now() - 120_000 },
+    });
   if (!signedIn) return fail(401, "not_signed_in", "Sign in first.");
   const home = homes.get(c.sid) ?? { state: "unlock_wait", steps: [] };
   homes.set(c.sid, home);

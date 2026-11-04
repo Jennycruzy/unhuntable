@@ -7,41 +7,46 @@
 <meta name="referrer" content="no-referrer">
 <title>Exit without us</title>
 <style>
-  :root { --bg: #fbfbf8; --fg: #1b1b18; --muted: #66665e; --line: #d9d9d0; --accent: #1d5c3f; --err: #9b2a1a; }
-  @media (prefers-color-scheme: dark) { :root { --bg: #161614; --fg: #ecece6; --muted: #a3a39a; --line: #36362f; --accent: #7fc8a2; --err: #ff9a85; } }
+  /* Same palette as the app, inline, so this page works saved to a file with our servers gone. */
+  :root { --bg: #08090a; --bg-1: #0f1012; --line: rgba(255,255,255,0.12); --fg: #f4f5f6; --fg-2: #b7bcc5; --fg-3: #80858f; --accent: #79e2bd; --err: #ff6d5e; --btn: #f4f5f6; --btn-ink: #08090a; color-scheme: dark; }
+  @media (prefers-color-scheme: light) { :root { --bg: #ffffff; --bg-1: #f7f7f8; --line: rgba(10,12,16,0.14); --fg: #0c0d0f; --fg-2: #4b5059; --fg-3: #63676f; --accent: #0d8a5f; --err: #d23b2b; --btn: #0c0d0f; --btn-ink: #ffffff; color-scheme: light; } }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  main { max-width: 640px; margin: 0 auto; padding: 32px 16px 64px; }
-  h1 { font-size: 1.6rem; margin: 0 0 8px; }
-  p.lead { color: var(--muted); margin: 0 0 24px; }
-  label { display: block; font-weight: 600; margin: 16px 0 4px; }
-  .hint { color: var(--muted); font-size: 0.9rem; margin: 2px 0 0; }
-  input, textarea, select, button { font: inherit; color: inherit; background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; width: 100%; }
-  textarea { min-height: 72px; resize: vertical; }
-  .row { display: grid; grid-template-columns: 140px 1fr; gap: 8px; }
-  button { margin-top: 20px; background: var(--accent); color: var(--bg); border: none; font-weight: 600; cursor: pointer; }
-  button:disabled { opacity: 0.5; cursor: default; }
-  #log { margin-top: 28px; border-top: 1px solid var(--line); padding-top: 12px; }
-  #log p { margin: 6px 0; }
-  #log p.ask { font-weight: 600; }
-  #log p.error { color: var(--err); font-weight: 600; }
-  #log p.done { color: var(--accent); font-weight: 600; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif; letter-spacing: -0.006em; -webkit-font-smoothing: antialiased; }
+  main { max-width: 560px; margin: 0 auto; padding: 48px 20px 72px; }
+  h1 { font-size: 1.75rem; line-height: 1.15; font-weight: 600; letter-spacing: -0.025em; margin: 0 0 10px; }
+  p.lead { color: var(--fg-2); margin: 0 0 28px; }
+  label { display: block; margin: 20px 0 8px; font-size: 0.8125rem; font-weight: 500; color: var(--fg-2); }
+  .hint { color: var(--fg-3); font-size: 0.8125rem; margin: 6px 0 0; }
+  input, textarea, select { font: inherit; font-size: 16px; color: inherit; background: var(--bg-1); border: 1px solid var(--line); border-radius: 10px; padding: 0 14px; min-height: 48px; width: 100%; }
+  input:focus, textarea:focus, select:focus { outline: none; border-color: var(--fg-3); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  textarea { min-height: 96px; padding: 12px 14px; resize: vertical; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  .row { display: grid; grid-template-columns: 128px 1fr; gap: 8px; }
+  button { font: inherit; font-weight: 560; width: 100%; min-height: 48px; margin-top: 24px; border: none; border-radius: 10px; background: var(--btn); color: var(--btn-ink); cursor: pointer; }
+  button:disabled { opacity: 0.4; cursor: default; }
+  #log { margin-top: 32px; border-top: 1px solid var(--line); padding-top: 14px; font-size: 0.875rem; }
+  #log:empty { display: none; }
+  #log p { margin: 8px 0; color: var(--fg-2); }
+  #log p.ask { color: var(--fg); font-weight: 560; }
+  #log p.error { color: var(--err); font-weight: 560; }
+  #log p.done { color: var(--accent); font-weight: 560; }
   #answer-form { display: flex; gap: 8px; }
-  #answer-form button { margin-top: 0; width: auto; }
+  #answer-form button { margin-top: 0; width: auto; padding: 0 18px; }
 </style>
 </head>
 <body>
 <main>
   <h1>Exit without us</h1>
-  <p class="lead">Bring your money home with only your 12 words, even if our servers are gone. This page talks only to OutLayer, Hyperliquid and NEAR. Your words never leave this page.</p>
+  <p class="lead">Your 12 words bring your money home, even with our servers gone. This page talks only to OutLayer, Hyperliquid and NEAR, and your words never leave it.</p>
 
   <form id="start-form" autocomplete="off">
     <label for="words">Your 12 words</label>
     <textarea id="words" required spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
 
     <label for="account">Your NEAR account</label>
-    <input id="account" required spellcheck="false" autocapitalize="off">
-    <p class="hint">For example alice.near.</p>
+    <input id="account" required spellcheck="false" autocapitalize="off" aria-describedby="account-hint">
+    <p class="hint" id="account-hint">For example alice.near.</p>
+    
 
     <label for="to">Send the money to</label>
     <div class="row">

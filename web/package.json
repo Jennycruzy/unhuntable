@@ -25,6 +25,7 @@
     "unhuntable-client": "file:../client"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
     "@playwright/test": "1.63.0",
     "@types/node": "^20.19.43",
     "@types/react": "^19.3.0",

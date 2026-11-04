@@ -13,7 +13,7 @@
 - [/exit/index.html](/exit/index.html): leave without us; works with our servers off
 
 ## API (same origin, JSON, cookie session after POST /api/session)
-- GET /api/health
+- GET /api/health, GET /api/whale (largest public Hyperliquid position, from its public API; no sign-in)
 - POST /api/session, POST /api/logout
 - GET /api/me, GET /api/balance, GET /api/alerts
 - POST /api/pieces-key, POST /api/wallets/key, POST /api/wallets/confirm
