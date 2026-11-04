@@ -77,11 +77,11 @@ function Chart({ kind }: { kind: "seen" | "hidden" }) {
       {kind === "seen" ? (
         <>
           <line className="lvl stop" x1="0" x2="520" y1="176" y2="176" />
-          <text className="tag stop" x="512" y="170" textAnchor="end">
+          <text className="tag stop" x="436" y="170" textAnchor="end">
             Stop 62,180
           </text>
           <line className="lvl liq" x1="0" x2="520" y1="198" y2="198" />
-          <text className="tag liq" x="512" y="214" textAnchor="end">
+          <text className="tag liq" x="436" y="216" textAnchor="end">
             Liquidation 61,240
           </text>
           <g className="pos">
@@ -91,7 +91,7 @@ function Chart({ kind }: { kind: "seen" | "hidden" }) {
             </text>
           </g>
           <circle className="boom" cx="458" cy="200" r="10" />
-          <text className="verdict" x="440" y="236" textAnchor="end">
+          <text className="verdict" x="436" y="240" textAnchor="end">
             Liquidated
           </text>
         </>
@@ -110,7 +110,7 @@ function Chart({ kind }: { kind: "seen" | "hidden" }) {
             5 accounts · no stops on the book
           </text>
           <circle className="sonar" cx="458" cy="200" r="22" />
-          <text className="verdict" x="440" y="236" textAnchor="end">
+          <text className="verdict" x="436" y="240" textAnchor="end">
             Nothing to hit
           </text>
         </>

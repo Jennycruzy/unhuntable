@@ -19,6 +19,7 @@
   --primary-ink: #08090a;
   --focus: #79e2bd;
   --seg-on: #2a2c31;
+  --film-shadow: 0 30px 80px -40px rgba(0, 0, 0, 0.7);
 
   --font: "Inter Variable", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -52,6 +53,7 @@
     --primary-ink: #ffffff;
     --focus: #0d8a5f;
     --seg-on: #ffffff;
+    --film-shadow: 0 18px 40px -28px rgba(10, 12, 16, 0.22);
     color-scheme: light;
   }
 }
@@ -324,7 +326,7 @@ ul.plain li:last-child { border-bottom: none; }
 .film {
   position: relative; display: grid; gap: 1px; margin-top: clamp(36px, 4.5vw, 52px);
   border: 1px solid var(--line); border-radius: 18px; overflow: hidden; background: var(--line);
-  box-shadow: 0 40px 120px -40px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--film-shadow);
   animation: rise 0.9s 0.2s var(--ease) both;
 }
 @media (min-width: 820px) { .film { grid-template-columns: 1fr 1fr; } }
