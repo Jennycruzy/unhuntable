@@ -6,7 +6,7 @@ import { WhaleWatch, largest, nearestStop, topAccounts } from "../src/whale.js";
 import { fixture, memoryDb, testConfig } from "./helpers.js";
 
 // Stored real replies: the head of Hyperliquid's public leaderboard (pretty-printed as served),
-// and the public state and open orders of the largest account on it, read 4 Nov.
+// and the public state and open orders of the largest account on it.
 const LEADERBOARD = readFileSync(new URL("./fixtures/leaderboard-head.txt", import.meta.url), "utf8");
 const STATE = fixture("hl-state-whale") as any;
 const ORDERS = fixture("hl-open-orders-whale") as any[];
