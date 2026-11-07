@@ -116,6 +116,31 @@ jobs:
       - name: Unit and sandbox tests
         run: cargo test
 
+  signer:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: signer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: signer
+          cache-bin: true
+      - name: Install cargo-near
+        run: cargo near --version || cargo install cargo-near --locked --no-default-features
+      - name: Unit tests
+        run: cargo test
+      - name: Build and keep the contract small
+        run: |
+          cargo near build non-reproducible-wasm --no-abi
+          size=$(stat -c %s target/near/unhuntable_signer.wasm)
+          echo "unhuntable_signer.wasm: $size bytes"
+          test "$size" -le 100000
+
   exit:
     runs-on: ubuntu-latest
     steps:

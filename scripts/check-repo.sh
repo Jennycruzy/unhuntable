@@ -25,6 +25,9 @@ TEST_WORDS='mocks?|stubs?'
 TEST_PATHS='(^|/)tests?/|\.test\.ts$'
 # Labels in file paths: _v0, -v2, G1, A4 style tokens and dates.
 PATH_LABELS='(^|[^A-Za-z0-9])(v[0-9]+|[GA][0-9]+)([^A-Za-z0-9]|$)|[0-9]{4}-[0-9]{2}-[0-9]{2}'
+# Field names of outside APIs that look like labels; removed from a line before the label check.
+# payload_v2: the request field of NEAR's MPC signer (v1.signer sign).
+EXTERNAL_NAMES='payload_v2'
 # Wider attribution set for pull request text.
 TEXT_ATTRIB='(co-authored-by|generated (with|by)|claude\.ai/code|noreply@anthropic\.com)'
 
@@ -77,7 +80,11 @@ check_files() {
     echo "FAIL: $name in files:"; echo "$hits"; fail=1
   fi
 }
-check_files "internal label" "$LABELS" ""
+label_hits=$(echo "$files" | xargs -r grep -n -I -E "$LABELS" 2>/dev/null | while IFS= read -r l; do
+  body=${l#*:}; body=${body#*:}
+  if printf '%s\n' "$body" | sed -E "s/$EXTERNAL_NAMES//g" | grep -q -E "$LABELS"; then printf '%s\n' "$l"; fi
+done)
+report "internal label in files:" "$label_hits"
 check_files "AI attribution" "$ATTRIB" "-i"
 check_files "key material" "$SECRETS" ""
 

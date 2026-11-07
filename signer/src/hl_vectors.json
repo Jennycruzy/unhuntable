@@ -1,0 +1,115 @@
+{
+ "mainnet": {
+  "hl_chain": "Mainnet",
+  "cases": [
+   {
+    "name": "approve_agent",
+    "action": {
+     "ApproveAgent": {
+      "agent_address": "0x1111111111111111111111111111111111111111",
+      "agent_name": "",
+      "nonce": 1762500000000
+     }
+    },
+    "hash": "75dc0268ebb5e3ca6c77865e287011d406f83c98b640ce4bf72073bc7d775d86"
+   },
+   {
+    "name": "approve_agent_named",
+    "action": {
+     "ApproveAgent": {
+      "agent_address": "0x1111111111111111111111111111111111111111",
+      "agent_name": "guard valid_until 1762600000000",
+      "nonce": 1762500000001
+     }
+    },
+    "hash": "fa61c8fe5df1ff5ad90eee1633104c7a5278f7850437d593dd8470cf58709723"
+   },
+   {
+    "name": "usd_class_transfer",
+    "action": {
+     "UsdClassTransfer": {
+      "amount": "2.5",
+      "to_perp": false,
+      "nonce": 1762500000002
+     }
+    },
+    "hash": "8253b4d78244bc68778189e15e75662617f7eed3666157fe3ed342e303276cd2"
+   },
+   {
+    "name": "usd_class_transfer_to_perp",
+    "action": {
+     "UsdClassTransfer": {
+      "amount": "10",
+      "to_perp": true,
+      "nonce": 1762500000003
+     }
+    },
+    "hash": "7690a85a8456db56da36001cdafc2a185971617fe4278131bfb9f4bb74052c42"
+   },
+   {
+    "name": "send_asset",
+    "action": {
+     "SendAsset": {
+      "destination": "0x1111111111111111111111111111111111111111",
+      "source_dex": "",
+      "destination_dex": "xyz",
+      "token": "USDC:0x6d1e7cde53ba9467b783cb7c530ce054",
+      "amount": "11",
+      "nonce": 1762500000004
+     }
+    },
+    "hash": "4030cbc4779873d8712007436b6907e169641ab07ae3d2de13c2f5cb2761301b"
+   },
+   {
+    "name": "withdraw",
+    "action": {
+     "Withdraw": {
+      "destination": "0x2222222222222222222222222222222222222222",
+      "amount": "3.25",
+      "time": 1762500000005
+     }
+    },
+    "hash": "6081c153da876f786e9332a530ee8f19fcb258dfaeaff77331a554d64d748e3e"
+   },
+   {
+    "name": "spot_send",
+    "action": {
+     "SpotSend": {
+      "destination": "0x2222222222222222222222222222222222222222",
+      "token": "USDC:0x6d1e7cde53ba9467b783cb7c530ce054",
+      "amount": "1.0386",
+      "time": 1762500000006
+     }
+    },
+    "hash": "3d7cff1ef88d5d553fcd80bb75b4d644bbda3516a94e2290db78fdbfd1559025"
+   },
+   {
+    "name": "usd_send",
+    "action": {
+     "UsdSend": {
+      "destination": "0x2222222222222222222222222222222222222222",
+      "amount": "4",
+      "time": 1762500000007
+     }
+    },
+    "hash": "4f77b28aa123449325ed00c47e5ed078fe85f73590d122b49216ddd7f486dca6"
+   }
+  ]
+ },
+ "testnet": {
+  "hl_chain": "Testnet",
+  "cases": [
+   {
+    "name": "approve_agent_testnet",
+    "action": {
+     "ApproveAgent": {
+      "agent_address": "0x1111111111111111111111111111111111111111",
+      "agent_name": "",
+      "nonce": 1762500000000
+     }
+    },
+    "hash": "c69a01eeaa63a2ec308df8346ed0c0773b0579bb82f20cca28b811c67a5601d0"
+   }
+  ]
+ }
+}
