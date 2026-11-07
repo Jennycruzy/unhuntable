@@ -24,7 +24,7 @@ import { addAlert, balanceWallet, userRow, usd, walletById, walletByLabel, type 
 import { newId } from "./db.js";
 import { HyperliquidError } from "./hl.js";
 import { OutLayerWalletError } from "./outlayer.js";
-import { buildBatch, lockSentence, piecePolicy, readBack, unlockSentence, type BatchItem, type PolicyBatch } from "./policy.js";
+import { buildBatch, lockSentence, piecePolicy, readBack, unlockSentence, walletAccount, type BatchItem, type PolicyBatch } from "./policy.js";
 import { busyPieceIds, EXIT_FEE_PER_PIECE } from "./positions.js";
 import { ApiError, sentence } from "./refusals.js";
 import { Label, privateUnits } from "./wallets.js";
@@ -83,7 +83,7 @@ function items(ctx: Ctx, h: HomeRow, evmSign: boolean): BatchItem[] {
     const name = `Account ${i + 1}`;
     return {
       wallet: w,
-      policy: piecePolicy({ evmAddress: w.hl_address, owner: u.near_account, keyHash: w.key_hash, evmSign }),
+      policy: piecePolicy({ evmAddress: w.hl_address, owner: u.near_account, walletAccount: walletAccount(w.wallet_pubkey), keyHash: w.key_hash, evmSign }),
       sentence: evmSign ? unlockSentence(name) : lockSentence(name, u.near_account),
     };
   });

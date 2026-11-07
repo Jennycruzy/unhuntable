@@ -7,6 +7,7 @@ import type { Ctx, WalletRow } from "./ctx.js";
 import { ApiError } from "./refusals.js";
 import { OutLayerWalletError } from "./outlayer.js";
 import { NearRpcError } from "./near.js";
+import { base58, hex } from "@scure/base";
 
 export const TRANSACTION_TYPES = ["transfer", "call", "intents_withdraw", "intents_swap", "cross_chain_withdraw", "confidential"] as const;
 /** Gas and deposit for one store_wallet_policy call: storage is about 0.0108 NEAR; the rest comes back. */
@@ -33,14 +34,33 @@ function policy(list: string[], keyHash: string, evmSign: boolean): Policy {
   };
 }
 
-/** A piece: its own EVM address and the owner's NEAR account. evmSign is true only while going home. */
-export function piecePolicy(p: { evmAddress: string; owner: string; keyHash: string; evmSign?: boolean }): Policy {
-  return policy([p.evmAddress.toLowerCase(), p.owner], p.keyHash, p.evmSign ?? false);
+/**
+ * The wallet's own NEAR account (implicit: 64 hex characters of its ed25519 key).
+ * A private swap pays out to this account, so a whitelist without it refuses every swap.
+ * OutLayer reports the key as "ed25519:<64 hex>"; NEAR tools write "ed25519:<base58>". Both work.
+ */
+export function walletAccount(walletPubkey: string | null): string {
+  if (!walletPubkey?.startsWith("ed25519:")) throw new ApiError("wallet_missing");
+  const body = walletPubkey.slice("ed25519:".length);
+  if (/^[0-9a-f]{64}$/.test(body)) return body;
+  let bytes: Uint8Array;
+  try {
+    bytes = base58.decode(body);
+  } catch {
+    throw new ApiError("wallet_missing");
+  }
+  if (bytes.length !== 32) throw new ApiError("wallet_missing");
+  return hex.encode(bytes);
 }
 
-/** The private balance: every piece's EVM address plus the owner's exit addresses. */
-export function balancePolicy(p: { pieceAddresses: string[]; exitAddresses: string[]; keyHash: string }): Policy {
-  const list = [...new Set([...p.pieceAddresses.map((a) => a.toLowerCase()), ...p.exitAddresses])];
+/** A piece: its own EVM address, the owner's NEAR account and its own NEAR account. evmSign is true only while going home. */
+export function piecePolicy(p: { evmAddress: string; owner: string; walletAccount: string; keyHash: string; evmSign?: boolean }): Policy {
+  return policy([...new Set([p.evmAddress.toLowerCase(), p.owner, p.walletAccount])], p.keyHash, p.evmSign ?? false);
+}
+
+/** The private balance: every piece's EVM address, the owner's exit addresses and its own NEAR account. */
+export function balancePolicy(p: { pieceAddresses: string[]; exitAddresses: string[]; walletAccount: string; keyHash: string }): Policy {
+  const list = [...new Set([...p.pieceAddresses.map((a) => a.toLowerCase()), ...p.exitAddresses, p.walletAccount])];
   return policy(list, p.keyHash, false);
 }
 

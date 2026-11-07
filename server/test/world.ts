@@ -85,7 +85,7 @@ export class World {
       id,
       near: hex.repeat(32),
       evm: "0x" + hex.repeat(20),
-      pubkey: `ed25519:${hex}`,
+      pubkey: `ed25519:${hex.repeat(32)}`,
     };
     this.wallets.set(id, w);
     return w;

@@ -32,7 +32,7 @@ import { newId, newShardId } from "./db.js";
 import { GuardRefusal, GuardUnreachable } from "./guard.js";
 import { approveAgent } from "./hl.js";
 import { OutLayerWalletError } from "./outlayer.js";
-import { balancePolicy, balanceSentence, buildBatch, lockSentence, piecePolicy, readBack, type BatchItem, type PolicyBatch } from "./policy.js";
+import { balancePolicy, balanceSentence, buildBatch, lockSentence, piecePolicy, readBack, walletAccount, type BatchItem, type PolicyBatch } from "./policy.js";
 import { ApiError, sentence, type RefusalCode } from "./refusals.js";
 
 export const EXIT_FEE_PER_PIECE = 1.2;
@@ -228,7 +228,7 @@ export function balanceItem(ctx: Ctx, userId: string): BatchItem {
       hl_address: string;
     }[]
   ).map((r) => r.hl_address);
-  const policy = balancePolicy({ pieceAddresses: addrs, exitAddresses: ownerExitAddresses(ctx, userId, u.near_account), keyHash: bal.key_hash ?? "" });
+  const policy = balancePolicy({ pieceAddresses: addrs, exitAddresses: ownerExitAddresses(ctx, userId, u.near_account), walletAccount: walletAccount(bal.wallet_pubkey), keyHash: bal.key_hash ?? "" });
   return { wallet: bal, policy, sentence: balanceSentence(addrs.length, u.near_account) };
 }
 
@@ -252,7 +252,7 @@ function lockItems(ctx: Ctx, userId: string, positionId: string): BatchItem[] {
     if (!w.hl_address || !w.key_hash) throw new ApiError("wallet_missing");
     items.push({
       wallet: w,
-      policy: piecePolicy({ evmAddress: w.hl_address, owner: u.near_account, keyHash: w.key_hash }),
+      policy: piecePolicy({ evmAddress: w.hl_address, owner: u.near_account, walletAccount: walletAccount(w.wallet_pubkey), keyHash: w.key_hash }),
       sentence: lockSentence(`Account ${pp.idx + 1}`, u.near_account),
     });
   }
