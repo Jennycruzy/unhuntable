@@ -103,7 +103,7 @@ describe("plan and confirm", () => {
     const s = setup();
     s.h.world.vrfHex = "c3".repeat(32);
     const r = (await post(s, "/api/positions", ETH)).json();
-    expect(r).toEqual({ positionId: r.positionId, state: "planned", needWallets: ["piece:0"], policyBatch: null });
+    expect(r).toEqual({ positionId: r.positionId, state: "planned", needWallets: ["piece:0"], needChainSig: [], policyBatch: null });
     const row = s.h.db.prepare("SELECT vrf_hex, vrf_proof, vrf_alpha, plan_json FROM positions").get() as any;
     expect(row.vrf_hex).toBe("c3".repeat(32));
     expect(row.vrf_proof).toBe("cd".repeat(40));
@@ -120,7 +120,7 @@ describe("open: planned -> funding -> policy_wait -> opening -> open", () => {
   it("one piece", async () => {
     const s = setup();
     const { id, cont, batch, wallets } = await openPosition(s, ETH);
-    expect(cont).toEqual({ positionId: id, state: "funding", needWallets: [], policyBatch: null });
+    expect(cont).toEqual({ positionId: id, state: "funding", needWallets: [], needChainSig: [], policyBatch: null });
     // one lock for the piece, one for the private balance
     expect(batch.transactions).toHaveLength(2);
     expect(batch.summary[0]).toBe("Lock piece Account 1: it can only send to its own Hyperliquid account and to alice.near. Our server cannot sign for it.");

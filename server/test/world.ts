@@ -180,8 +180,15 @@ export class World {
     throw new Error(`unexpected OutLayer path ${p}`);
   }
 
+  /** Answers NEAR view calls first when set (the chain-signature tests' fake contract). */
+  nearHook?: (params: any) => unknown | undefined;
+  /** Who signed a posted /exchange action, when it was not an OutLayer wallet. */
+  exchangeSigner?: (body: any) => string | undefined;
+
   private near(body: any, json: (b: unknown, s?: number) => Response): Response {
     const params = body.params;
+    const hooked = this.nearHook?.(params);
+    if (hooked !== undefined) return json(hooked);
     if (params.request_type === "view_access_key") {
       return json(reply(this.accessKeys.has(`${params.account_id} ${params.public_key}`) ? "near-view-access-key" : "near-view-access-key-missing"));
     }
@@ -194,14 +201,15 @@ export class World {
   private hl(call: Call, json: (b: unknown, s?: number) => Response): Response {
     if (call.path === "/exchange") {
       const a = call.body.action;
+      const signer = this.exchangeSigner?.(call.body) ?? this.lastSigner;
       if (a.type === "usdClassTransfer") {
-        const addr = this.lastSigner ?? "";
+        const addr = signer ?? "";
         const p = this.perpOf(addr);
         this.setPerp(addr, 0, 0, p.assetPositions);
         this.spot.set(addr, String(Number(this.spot.get(addr) ?? "0") + Number(a.amount)));
       }
       if (a.type === "spotSend") {
-        const addr = this.lastSigner ?? "";
+        const addr = signer ?? "";
         this.spot.set(addr, "0");
         if (this.arriveOnSend) this.privateUnits += BigInt(Math.floor(Number(a.amount) * 1e6));
       }

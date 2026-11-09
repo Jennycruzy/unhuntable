@@ -24,6 +24,8 @@ export const REFUSALS = {
   exit_fee: "Leaving Hyperliquid costs about $1.20 per piece (Hyperliquid's new-account fee plus routing).",
   judge_session_spent: "This judge session is used up. The next one opens at {time}.",
   sealed_call_required: "Send this call as a sealed box.",
+  chainsig_refused: "NEAR's signer contract refused this step: {reason}. Nothing moved.",
+  chainsig_sign_again: "This piece's approval is too old for Hyperliquid. Open the app and continue the position to sign it again.",
 } as const;
 
 /** Errors of the API itself: sign-in, bad requests, unknown routes. */
@@ -77,6 +79,8 @@ export const HTTP_STATUS: Record<ErrorCode, number> = {
   exit_fee: 409,
   judge_session_spent: 429,
   sealed_call_required: 400,
+  chainsig_refused: 409,
+  chainsig_sign_again: 409,
   bad_request: 400,
   not_found: 404,
   not_signed_in: 401,

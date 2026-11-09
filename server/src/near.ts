@@ -47,6 +47,14 @@ export class NearRpc {
     return r?.permission ?? null;
   }
 
+  /** A view call with raw (borsh) args; the answer bytes. Null when the call failed on chain. */
+  async viewRaw(contract: string, method: string, args: Uint8Array): Promise<Uint8Array | null> {
+    const r = await this.query({ request_type: "call_function", account_id: contract, method_name: method, args_base64: Buffer.from(args).toString("base64") });
+    if (!r) return null;
+    if (!Array.isArray(r.result)) throw new NearRpcError("NEAR RPC view answer has no result bytes.");
+    return Uint8Array.from(r.result as number[]);
+  }
+
   /** A view call; the answer bytes parsed as JSON. Null when the call failed on chain. */
   async view(contract: string, method: string, args: unknown): Promise<unknown> {
     const r = await this.query({

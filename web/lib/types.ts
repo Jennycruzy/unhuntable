@@ -113,6 +113,8 @@ export interface PositionAnswer {
   positionId: string;
   state: PositionState;
   needWallets: string[];
+  /** Pieces controlled by NEAR Chain Signatures whose key this browser must register and sign for. */
+  needChainSig: string[];
   policyBatch: PolicyBatch | null;
 }
 
@@ -131,6 +133,8 @@ export interface PositionPiece {
   hasStop: boolean;
   hasTp: boolean;
   guard: "ok" | "unreachable";
+  /** True when NEAR Chain Signatures control this piece's Hyperliquid account. */
+  nearControlled?: boolean;
 }
 
 export interface Alert {
@@ -148,6 +152,8 @@ export interface Position {
   state: PositionState;
   createdMs: number;
   pieces: PositionPiece[];
+  /** NEAR-controlled pieces whose key must sign again in this browser. */
+  needChainSig?: string[];
   fillSavingsUsd?: string | number;
   alerts: Alert[];
 }
@@ -158,10 +164,20 @@ export interface SealedBox {
   ct: string;
 }
 
+export interface HomeChainSigPlan {
+  label: string;
+  account: string;
+  counter: number;
+  toSpot: string;
+  send: string | null;
+}
+
 export interface HomeStart {
   homeId: string;
   feeUsd: string;
-  unlockBatch: PolicyBatch;
+  /** Null when every piece is controlled by NEAR Chain Signatures (nothing to unlock). */
+  unlockBatch: PolicyBatch | null;
+  chainSig: HomeChainSigPlan[];
 }
 
 export type HomeStateName = "unlock_wait" | "moving" | "relock_wait" | "done" | "failed";
@@ -171,5 +187,6 @@ export interface HomeState {
   state: HomeStateName;
   steps: { label: string; step: string; status: string; ms: number }[];
   relockBatch: PolicyBatch | null;
+  needChainSig?: boolean;
   arrivedUsdc?: string;
 }

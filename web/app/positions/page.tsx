@@ -5,6 +5,10 @@ import { Notice, Screen, SignedIn } from "../../components/ui";
 import { sentence } from "../../lib/api";
 import { num, pct, time, usd } from "../../lib/format";
 import { pieceAddress } from "../../lib/pieces";
+import { derivedAccount, pieceNumber } from "../../lib/chainsig";
+import { chainSigPieceKey } from "unhuntable-client/chainsig";
+import { finishPieces } from "../../lib/trade";
+import { currentWallet } from "../../lib/wallet";
 import { api, useInterval } from "../../lib/session";
 import { GUARD_UNREACHABLE, STOP_COPY, hyperliquidPage, sealLevels, sealOpened } from "../../lib/stops";
 import type { Me, Position } from "../../lib/types";
@@ -94,6 +98,11 @@ function PositionCard({ p, account, record, onRecord }: { p: Position; account: 
                 {num(x.size)} {p.coin}
               </strong>
               <span className="muted">{x.entryPx === null ? "–" : usd(x.entryPx)}</span>
+              {x.nearControlled && (
+                <span className="badge" data-testid="near-controlled" title="This Hyperliquid account has no private key: NEAR's MPC network signs for it, only when your pieces key approves.">
+                  NEAR-controlled
+                </span>
+              )}
               <span className={`badge ${x.guard === "ok" ? "ok" : "bad"}`}>{x.guard === "ok" ? "Watching" : "Not answering"}</span>
             </div>
             <div className="pc-sub">
@@ -183,8 +192,11 @@ function Positions({ me }: { me: Me }) {
         const rec = await loadRecord(me.accountId);
         for (const label of new Set(r.positions.flatMap((p) => p.pieces.map((x) => x.label)))) {
           if (rec.addresses[label]) continue;
+          const near = r.positions.some((p) => p.pieces.some((x) => x.label === label && x.nearControlled));
           try {
-            const a = await pieceAddress({ api, key, account: me.accountId }, label);
+            const a = near
+              ? await derivedAccount((...f) => fetch(...f), chainSigPieceKey(key, pieceNumber(label)).publicKey)
+              : await pieceAddress({ api, key, account: me.accountId }, label);
             await updateRecord(me.accountId, (x) => void (x.addresses[label] = a));
           } catch {
             // the "Check it yourself" link shows once the address is known
@@ -209,6 +221,29 @@ function Positions({ me }: { me: Me }) {
           </Link>
         </>
       )}
+      {positions
+        ?.filter((p) => (p.needChainSig ?? []).length > 0)
+        .map((p) => (
+          <Notice key={`sign-${p.id}`} kind="error" testId="sign-again">
+            {p.coin}: a NEAR-controlled piece needs your pieces key to sign again.{" "}
+            <button
+              type="button"
+              className="secondary"
+              disabled={!key}
+              onClick={async () => {
+                try {
+                  const w = await currentWallet();
+                  if (!w || !key) throw new Error("Sign in with your wallet again first.");
+                  await finishPieces({ api, wallet: w, key, account: me.accountId }, await api.continuePosition(p.id));
+                } catch (e) {
+                  setError(sentence(e));
+                }
+              }}
+            >
+              Sign again
+            </button>
+          </Notice>
+        ))}
       {positions?.map((p) => <PositionCard key={p.id} p={p} account={me.accountId} record={record} onRecord={reloadRecord} />)}
     </>
   );

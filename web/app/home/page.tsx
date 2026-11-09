@@ -7,6 +7,8 @@ import { HomeFlow, localRelock, stepWords } from "../../lib/home";
 import { api, useInterval } from "../../lib/session";
 import type { HomeStart, HomeState, Me } from "../../lib/types";
 import { currentWallet } from "../../lib/wallet";
+import { usePiecesKey } from "../../lib/usekey";
+import { signHomeAll } from "../../lib/chainsig";
 
 /** The exit fee, said before anything starts (server/src/refusals.ts exit_fee). */
 const EXIT_FEE = "Leaving Hyperliquid costs about $1.20 per piece (Hyperliquid's new-account fee plus routing).";
@@ -25,7 +27,8 @@ async function flow(): Promise<HomeFlow> {
   return new HomeFlow(api, wallet);
 }
 
-function GoHome(_: { me: Me }) {
+function GoHome({ me }: { me: Me }) {
+  const { state: keyState } = usePiecesKey(me.accountId);
   const [start, setStart] = useState<HomeStart | undefined>();
   const [homeId, setHomeId] = useState<string | undefined>();
   const [state, setState] = useState<HomeState | undefined>();
@@ -60,10 +63,16 @@ function GoHome(_: { me: Me }) {
   }
 
   const begin = () => act(async () => setStart(await api.home()));
+  const nearToSign = start ? (start.chainSig ?? []).filter((p) => p.send !== null).length : 0;
   const unlock = () =>
     act(async () => {
       if (!start) return;
-      await (await flow()).approveUnlock(start);
+      if (nearToSign > 0) {
+        if (keyState.status !== "ok") throw new Error("Your pieces key is not on this device. Restore it from your 12 words first.");
+        // signed here with the piece keys; no wallet pop-up
+        await signHomeAll({ api, key: keyState.key, account: me.accountId }, start);
+      }
+      if (start.unlockBatch) await (await flow()).approveUnlock(start);
       setHomeId(start.homeId);
       setStart(undefined);
     });
@@ -85,7 +94,10 @@ function GoHome(_: { me: Me }) {
 
       {!start && !homeId && (
         <>
-          <p>Closes your pieces and brings the money back to your private balance. Your wallet asks twice: unlock, then lock again.</p>
+          <p>
+            Brings the money on your pieces back to your private balance. NEAR-controlled pieces are signed for right here with your pieces key. Other pieces
+            need your wallet twice: unlock, then lock again.
+          </p>
           <Notice testId="exit-fee">{EXIT_FEE}</Notice>
           <button type="button" disabled={busy} onClick={begin}>
             Send home
@@ -98,14 +110,32 @@ function GoHome(_: { me: Me }) {
           <div className="card">
             <Facts rows={[["Exit fee", <span key="f" data-testid="home-fee">{usd(start.feeUsd)}</span>]]} />
           </div>
-          <h2>First approval: unlock</h2>
-          <ul className="plain" data-testid="unlock-summary">
-            {start.unlockBatch.summary.map((s, i) => (
-              <li key={i}>{s}</li>
-            ))}
-          </ul>
+          {(start.chainSig ?? []).length > 0 && (
+            <>
+              <h2>NEAR-controlled pieces</h2>
+              <ul className="plain" data-testid="chainsig-summary">
+                {(start.chainSig ?? []).map((p) => (
+                  <li key={p.label}>
+                    {p.send === null
+                      ? `${p.label}: too little to move, or still holding a position; it stays.`
+                      : `${p.label}: ${usd(p.send)} to your private balance. Your pieces key signs; NEAR's MPC network signs it for Hyperliquid.`}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {start.unlockBatch && (
+            <>
+              <h2>First approval: unlock</h2>
+              <ul className="plain" data-testid="unlock-summary">
+                {start.unlockBatch.summary.map((s, i) => (
+                  <li key={i}>{s}</li>
+                ))}
+              </ul>
+            </>
+          )}
           <button type="button" disabled={busy} onClick={unlock}>
-            {busy ? "Waiting for your wallet…" : "Approve in my wallet"}
+            {busy ? "Signing…" : start.unlockBatch ? "Approve in my wallet" : "Sign and send home"}
           </button>
         </>
       )}

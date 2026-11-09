@@ -4,7 +4,7 @@
 
 > Every Hyperliquid account is public: its size, its entry, the exact price that liquidates it, and every stop-loss resting on the book. NEAR's own near.com already makes perps confidential, so nobody can tie a position back to you. But hunters do not need your name. They push the price to the level they can read on the book, take the liquidation, and the market watches.
 
-**Unhuntable removes the level itself.** Your position is split across separate Hyperliquid accounts ("pieces") that nobody can tie together, so there is no big position to find. Your stop-loss is sealed inside an attested enclave and is not on the book until the moment it fires. A guard watches every piece and cuts size before liquidation, and Hyperliquid itself refuses it when it tries to move money. A piece's Hyperliquid account can be controlled by **NEAR Chain Signatures**, under a contract that signs only what that piece's own key approved: no private key for the account exists anywhere, and our server cannot sign a thing.
+**Unhuntable removes the level itself.** Your position is split across separate Hyperliquid accounts ("pieces") that nobody can tie together, so there is no big position to find. Your stop-loss is sealed inside an attested enclave and is not on the book until the moment it fires. A guard watches every piece and cuts size before liquidation, and Hyperliquid itself refuses it when it tries to move money. Every new piece's Hyperliquid account is controlled by **NEAR Chain Signatures**, under a contract that signs only what that piece's own key approved: no private key for the account exists anywhere, and our server cannot sign a thing.
 
 Tracks: **Privacy & Private AI** · **Unstoppable DeFi** · **AI Security & Defense**
 
@@ -40,6 +40,13 @@ The contract builds each Hyperliquid action's EIP-712 hash itself from typed fie
 - Live: [`unhuntable.near`](https://nearblocks.io/address/unhuntable.near) runs on `v1.signer` with Hyperliquid mainnet.
 - Approve the guard's agent for a piece through Chain Signatures: [NEAR tx `86qJbTWk…`](https://nearblocks.io/txns/86qJbTWkiXwXsKfCCWqK63yLanzvkbxikMj1R4HfufVd), signed by NEAR in 6.5 seconds for 0.0086 NEAR; Hyperliquid answered `ok`.
 - The hashes match Hyperliquid's Python SDK for all six action types (`signer/src/hl_vectors.json`).
+
+How the app uses it, end to end:
+
+- **Your 12 words make every piece key.** The browser derives piece *n*'s ed25519 key from your pieces key, registers it on `unhuntable.near`, and asks NEAR's MPC network (`v1.signer`) directly, not our server, which Hyperliquid account it controls. It signs only for `unhuntable.near` and only for the account NEAR derived.
+- **The guard's agent is approved through NEAR.** The piece key signs the approval in your browser; when the piece's funding lands, our server relays it to `unhuntable.near`, NEAR's MPC network signs it, and the server checks the signature recovers to the piece's account before posting it to Hyperliquid.
+- **No lock to sign, nothing to unlock.** The contract is the lock: a piece's money can move only on its own key's signature. Going home, your browser asks OutLayer for a deposit address of your own private balance and signs the moves to it; our server only relays them.
+- **Leave without us.** The exit tool finds these pieces from your 12 words alone, closes an open position with a one-time agent key it makes and approves through the contract, and brings the money home. Any NEAR account can pay the gas; it cannot change what it relays.
 
 ### OutLayer: the guard, the wallets and your rules
 
@@ -79,7 +86,7 @@ The same problem shows up across all public chains. In [NEP discussion #531](htt
 2. **Stops that do not exist until they fire.** No stop order rests on Hyperliquid. The level is sealed in your browser into a box only the guard can open, and the guard runs inside an OutLayer enclave. When at least three of seven public price sources agree the level is crossed, the guard sends a reduce-only market order. Nobody can see where it is, including us.
 3. **A guard that defends but cannot steal.** The guard holds one Hyperliquid *agent* key per piece. An agent key can place and cancel orders; Hyperliquid refuses any transfer it signs. The guard cuts size on a ladder as liquidation gets close, and it has no way to move money out.
 
-**The proof.** We ran it on Hyperliquid mainnet with real money (table below), attacked our own pieces with only public data, and found and reported a privacy flaw in OutLayer's public call record that would have exposed sealed stops. Everything else in this repo is tested offline: about 370 tests across the guard, the signer, the client, the server, the records contract and the app, all in CI.
+**The proof.** We ran it on Hyperliquid mainnet with real money (table below), attacked our own pieces with only public data, and found and reported a privacy flaw in OutLayer's public call record that would have exposed sealed stops. Everything else in this repo is tested offline: about 400 tests across the guard, the signer, the client, the server, the records contract and the app, all in CI.
 
 ---
 
@@ -125,7 +132,7 @@ cd guard && cargo test --lib --test guard_tests
 cd client && npm ci && npm test
 ```
 
-→ `137 passed`. The sealed-box tests open a box made by the Rust guard's reference and make one the guard opens (`sealed_call_from_ts_client_opens` on the Rust side). The planner's property tests check hundreds of random positions: sizes add up exactly, every piece is above Hyperliquid's $10 minimum, and no piece needs money from another. The exit tests check that the 12 words and the private key are never sent anywhere.
+→ `160 passed`. The sealed-box tests open a box made by the Rust guard's reference and make one the guard opens (`sealed_call_from_ts_client_opens` on the Rust side). The planner's property tests check hundreds of random positions: sizes add up exactly, every piece is above Hyperliquid's $10 minimum, and no piece needs money from another. The exit tests check that the 12 words and the private key are never sent anywhere. The Chain Signatures tests (`chainsig.test.ts`) match the signer contract's hashes, rebuild the exact message piece C signed on mainnet, and recover NEAR's real MPC signature for it to piece C's Hyperliquid account.
 
 **3. The server and its money flows:**
 
@@ -133,7 +140,7 @@ cd client && npm ci && npm test
 cd client && npm run build && cd ../server && npm ci && npm test
 ```
 
-→ `133 passed`. Sign-in with a NEP-413 signature, encrypted wallet keys, deposits, funding, policy batches and read-back, ticks, refills and going home, with fake clocks and recorded replies.
+→ `142 passed`. Sign-in with a NEP-413 signature, encrypted wallet keys, deposits, funding, policy batches and read-back, ticks, refills and going home, with fake clocks and recorded replies. `chainsig.test.ts` runs a position and a trip home on NEAR-controlled pieces against a fake contract and MPC network that check signatures the way the real ones do; it refuses another key's signature, a wrong counter, a send back to perps and any token but USDC, and its relay transactions match near-api-js byte for byte.
 
 **4. The records contract** (needs `cargo-near`, see `contract/README.md`):
 
@@ -157,7 +164,7 @@ cd signer && cargo test
 cd web && npm ci && npm test && npm run build && npx playwright test
 ```
 
-→ 25 unit tests, then every screen in headless Chromium at 360×780 and 1280×800, with all outside requests blocked. Screenshots land in `web/screenshots/`.
+→ 30 unit tests, then every screen in headless Chromium at 360×780 and 1280×800, with all outside requests blocked. Screenshots land in `web/screenshots/`.
 
 **7. The exit tool is exactly its source:**
 
@@ -185,11 +192,11 @@ python3 attacks/linking_attacks.py 0x<any Hyperliquid address>
 2. **Make your pieces key.** The browser makes 12 words and a key from them, and your wallet adds that key to your NEAR account as a limited key that can only call `outlayer.near`. Every wallet you have with us is an OutLayer deterministic wallet made from your account and this key, so the same 12 words always find them again.
 3. **Deposit** from any chain. NEAR or Aurora Swap (1Click) sends the money into your confidential balance on NEAR Intents.
 4. **Trade.** Pick market, side, size, leverage and hiding level. *Normal* is one piece. *Whale* is 2 to 12 pieces. Review shows each piece, every fee, and the accounts as the world will see them. The plan comes from VRF bytes drawn by the guard, so anyone can check it was not chosen by hand.
-5. **Lock.** Your wallet signs one batch of `store_wallet_policy` calls on `outlayer.near`. A piece may send only to its own Hyperliquid account and back to you, and cannot sign Hyperliquid actions. The server reads every policy back from chain before a piece is used.
-6. **Fund and open.** At each piece's VRF time, the private balance funds that piece directly (never from another piece), the piece approves the guard's agent, and the guard opens the piece's size.
+5. **Lock.** New pieces are NEAR-controlled: your browser makes each piece key from your 12 words, registers it on `unhuntable.near`, checks the piece's account with NEAR's MPC network, and signs the guard's agent approval. The contract is their lock. Your wallet signs one `store_wallet_policy` call on `outlayer.near` for your private balance, so it can send only to your pieces and to you; the server reads it back from chain before use.
+6. **Fund and open.** At each piece's VRF time, the private balance funds that piece directly (never from another piece), NEAR's MPC network signs the agent approval your piece key made, and the guard opens the piece's size.
 7. **Seal stops.** Your stop and take-profit are sealed in the browser, one box per piece, and forwarded unopened to the guard. The server never sees a level.
 8. **Watch and defend.** The guard is ticked per coin every 2 minutes, and at once when the price leaves a piece's wake band. It fires stops and take-profits, and runs the defence ladder.
-9. **Go home.** One wallet approval unlocks the pieces. Each piece closes, moves its USDC back to your private balance through a fresh deposit address, and a second approval locks the pieces again.
+9. **Go home.** Your browser asks OutLayer for a deposit address of your own private balance and signs each piece's moves to it with the piece key; our server relays them through `unhuntable.near` and Hyperliquid gets them signed by NEAR. Pieces made as OutLayer wallets take one wallet approval to unlock and a second to lock again.
 
 ### Architecture
 
@@ -242,6 +249,7 @@ Each rung is saved before the order goes out and fires once, so a cut is not rep
 | The guard (or whoever deploys it) | Move your money out | It only holds Hyperliquid agent keys, and Hyperliquid refuses transfers signed by an agent. Observed on mainnet. | `guard_has_no_transfer_path`; `withdraw_probe` op |
 | Our server | Send a piece's money somewhere else | Each piece's on-chain policy, owned by you, allows sends only to its own Hyperliquid account and to you, with EVM signing off. The server reads each policy back from chain before using a piece. | `server/src/policy.ts`, `server/test/policy.test.ts` |
 | Our server | Get a signature for a Chain Signatures piece | `unhuntable.near` signs only when the piece's own key signed that exact action; the server only relays. | `signs_only_what_the_piece_key_signed`, `other_piece_key_refused` |
+| Our server | Send a NEAR-controlled piece's money somewhere else, or swap in its own contract | Your browser signs only for `unhuntable.near` and only for the account NEAR's MPC network derives, which it asks NEAR itself. Going home, it gets the deposit address from OutLayer itself, with your pieces key. | `web/test/chainsig.test.ts` |
 | A relay | Change an amount or destination, or replay a request | The piece key signs the contract, the counter and the action's hash; any change or repeat fails the check. | `server_cannot_change_the_action`, `replay_refused` |
 | Our server | Learn your stop | Stops are sealed in your browser to the guard's key. The server forwards boxes it cannot open. | `client/src/box-browser.ts`, `stop_level_never_in_output` |
 | Our server | Run one user's call as another's piece | The plain shard id next to a sealed call must equal the one inside the box, or the guard refuses. | `outer_shard_must_match_box` |
@@ -281,12 +289,12 @@ The attacker knows one piece's Hyperliquid address and uses only public data.
 
 ## Leave without us
 
-Your pieces and your private balance are OutLayer deterministic wallets made from your NEAR account and your 12 words. The exit tool (`exit/`) needs only those words, your account and a destination:
+Your private balance is an OutLayer deterministic wallet made from your NEAR account and your 12 words, and every piece key comes from the same words. The exit tool (`exit/`) needs only those words, your account and a destination:
 
 1. Checks the words belong to your account.
-2. Finds every wallet that belongs to you.
-3. Closes any open position with a reduce-only order.
-4. Moves each piece's USDC back to your private balance.
+2. Finds every wallet that belongs to you, and every NEAR-controlled piece: each piece key the words make is looked up on `unhuntable.near`, and its Hyperliquid account is read from NEAR's MPC network.
+3. Closes any open position with a reduce-only order. On a NEAR-controlled piece it first makes a one-time agent key on your computer and approves it through the contract.
+4. Moves each piece's USDC back to your private balance. NEAR-controlled pieces' moves are signed by their piece key and by NEAR; a NEAR account you name pays the gas (about 0.01 NEAR a step) and cannot change them.
 5. Sends the private balance to your address on NEAR, Base or Arbitrum, after you type `yes`.
 6. Offers to remove our server's key from all your wallets.
 
@@ -329,11 +337,11 @@ While building this we found that OutLayer's public attestation records are list
 | Folder | What it is | Tests |
 | --- | --- | --- |
 | `guard/` | The guard: a Rust WASI program for OutLayer. Decisions are pure functions in `src/lib.rs`. | 31 |
-| `client/` | TypeScript: sealed boxes, guard client, position planner, fill savings, pieces key, Hyperliquid signing, exit logic | 137 |
-| `server/` | API, SQLite, jobs, NEAR sign-in, OutLayer wallet client, money flows | 133 |
+| `client/` | TypeScript: sealed boxes, guard client, position planner, fill savings, pieces key, Hyperliquid signing, Chain Signatures pieces, NEAR relay, exit logic | 160 |
+| `server/` | API, SQLite, jobs, NEAR sign-in, OutLayer wallet client, Chain Signatures relay, money flows | 142 |
 | `signer/` | NEAR contract `unhuntable.near`: Hyperliquid accounts controlled by Chain Signatures, signing only what each piece key approved | 12 |
 | `contract/` | NEAR records contract: piece hashes, guard builds, fee ledger, treasury mirror | 18 |
-| `web/` | Phone-first static web app with a strict CSP | 25 unit + Playwright at two screen sizes |
+| `web/` | Phone-first static web app with a strict CSP | 30 unit + Playwright at two screen sizes |
 | `exit/` | Leave-without-us tool: one HTML page or a CLI | in `client/` |
 | `attacks/` | Linking attacks with public data only | |
 | `tools/` | EAS proof check and its reference | |

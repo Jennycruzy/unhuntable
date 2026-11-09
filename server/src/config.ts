@@ -11,6 +11,8 @@ export interface Secrets {
   keystoreKey?: string;
   /** Aurora Swap (1Click) API key. */
   auroraKey?: string;
+  /** "ed25519:<base58>" key of the NEAR account that relays signer-contract calls and pays their gas. */
+  relayKey?: string;
 }
 
 export interface Config {
@@ -35,6 +37,10 @@ export interface Config {
   policyContract: string;
   /** Account in INTENTS that receives our app fee on Aurora deposits. */
   appFeeAccount: string;
+  /** The signer contract for pieces controlled by NEAR Chain Signatures; empty = off. */
+  chainsigContract: string;
+  /** NEAR account that relays signer-contract calls (its key is secrets.relayKey). */
+  relayAccount: string;
   secrets: Secrets;
 }
 
@@ -50,6 +56,7 @@ const SecretsFile = z.object({
   walletKeys: z.record(z.string().min(1), z.string().min(1)),
   keystoreKey: z.string().regex(/^[0-9a-fA-F]{64}$/).optional(),
   auroraKey: z.string().min(1).optional(),
+  relayKey: z.string().regex(/^ed25519:[1-9A-HJ-NP-Za-km-z]{43,90}$/).optional(),
 });
 
 /** Read and check the secrets file. Error messages never include file contents. */
@@ -106,6 +113,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     guardProject: env.GUARD_PROJECT ?? "",
     policyContract: env.POLICY_CONTRACT ?? "outlayer.near",
     appFeeAccount: env.APP_FEE_ACCOUNT ?? "",
+    chainsigContract: env.CHAINSIG_CONTRACT ?? "",
+    relayAccount: env.RELAY_ACCOUNT ?? "",
     secrets: readSecrets(env.SECRETS_FILE),
   };
 }

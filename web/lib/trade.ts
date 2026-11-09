@@ -3,6 +3,7 @@
 // them in one go.
 import type { Api } from "./api";
 import { makeWallet, type WalletDeps } from "./pieces";
+import { setupChainSigPiece } from "./chainsig";
 import type { PolicyBatch, PolicyConfirmed, PositionAnswer, TradeRequest } from "./types";
 import { updateRecord } from "./vault";
 import type { AppWallet } from "./wallet";
@@ -23,8 +24,20 @@ export function checkTrade(t: TradeRequest): string | undefined {
 
 /** POST /api/positions, then make any new piece wallets and continue. Returns the answer with the policy batch, if any. */
 export async function openPosition(d: TradeDeps, t: TradeRequest): Promise<PositionAnswer> {
-  let a = await d.api.openPosition(t);
-  if (a.needWallets.length > 0) {
+  return finishPieces(d, await d.api.openPosition(t));
+}
+
+/** Make any new piece wallets and sign for any NEAR-controlled pieces, then continue. Also used to continue a position later. */
+export async function finishPieces(d: TradeDeps, a: PositionAnswer): Promise<PositionAnswer> {
+  const chainSig = a.needChainSig ?? [];
+  if (a.needWallets.length > 0 || chainSig.length > 0) {
+    for (const label of chainSig) {
+      d.onStep?.(`Setting up a NEAR-controlled piece (${label}): your pieces key signs, NEAR's MPC network will sign for Hyperliquid…`);
+      const address = await setupChainSigPiece(d, label);
+      await updateRecord(d.account, (r) => {
+        r.addresses[label] = address;
+      });
+    }
     for (const label of a.needWallets) {
       d.onStep?.(`Making a new piece wallet (${label})…`);
       const address = await makeWallet(d, label);

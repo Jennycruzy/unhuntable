@@ -46,6 +46,9 @@ $("start-form").addEventListener("submit", async (e) => {
       account: $<HTMLInputElement>("account").value.trim(),
       destination: { chain: $<HTMLSelectElement>("chain").value, to: $<HTMLInputElement>("to").value.trim() },
       serverKeyHashes: $<HTMLInputElement>("server-key").value.trim() ? [$<HTMLInputElement>("server-key").value.trim().toLowerCase()] : [],
+      relay: $<HTMLInputElement>("relay-account").value.trim() && $<HTMLInputElement>("relay-key").value.trim()
+        ? { account: $<HTMLInputElement>("relay-account").value.trim(), key: $<HTMLInputElement>("relay-key").value.trim() }
+        : undefined,
       io,
     });
     line(r.withdrawal ? "Done. Your money is on its way home." : "Done.", "done");
@@ -54,6 +57,7 @@ $("start-form").addEventListener("submit", async (e) => {
   } finally {
     // forget the words as soon as the run ends
     words.value = "";
+    $<HTMLInputElement>("relay-key").value = "";
     start.disabled = false;
   }
 });

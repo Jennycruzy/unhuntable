@@ -6,7 +6,8 @@ import { SESSION_COOKIE, readCookie, sessionUser } from "./auth.js";
 import type { Ctx } from "./ctx.js";
 import { QuoteBody, depositStatus, pollDeposit, quote } from "./deposits.js";
 import { GuardUnreachable } from "./guard.js";
-import { HomeBody, advanceHome, confirmHomePolicies, homeStatus, startHome } from "./home.js";
+import { HomeBody, advanceHome, confirmHomePolicies, homeStatus, startHome, takeHomeChainSig } from "./home.js";
+import { ApproveBody, HomeSigsBody, RegisterBody, approvePiece, registerPiece } from "./chainsig.js";
 import type { JobRunner } from "./jobs.js";
 import {
   CloseBody,
@@ -50,6 +51,8 @@ export function registerMoneyRoutes(app: FastifyInstance, ctx: Ctx): void {
   app.post("/api/wallets/key", async (req) => newKey(ctx, user(req), parse(KeyBody, req.body)));
   app.post("/api/wallets/confirm", async (req) => confirmWallet(ctx, user(req), parse(ConfirmBody, req.body)));
   app.get("/api/balance", async (req) => balances(ctx, user(req)));
+  app.post("/api/chainsig/register", async (req) => registerPiece(ctx, user(req), parse(RegisterBody, req.body)));
+  app.post("/api/chainsig/approve", async (req) => approvePiece(ctx, user(req), parse(ApproveBody, req.body)));
 
   app.post("/api/deposit/quote", async (req) => quote(ctx, user(req), parse(QuoteBody, req.body)));
   app.get("/api/deposit/:id", async (req) => depositStatus(ctx, user(req), id(req)));
@@ -83,6 +86,7 @@ export function registerMoneyRoutes(app: FastifyInstance, ctx: Ctx): void {
 
   app.post("/api/home", async (req) => startHome(ctx, user(req), parse(HomeBody, req.body)));
   app.get("/api/home/:id", async (req) => homeStatus(ctx, user(req), id(req)));
+  app.post("/api/home/:id/chainsig", async (req) => takeHomeChainSig(ctx, user(req), id(req), parse(HomeSigsBody, req.body)));
 
   app.get("/api/alerts", async (req) => {
     const rows = ctx.db.prepare("SELECT text, created_ms FROM alerts WHERE user_id = ? ORDER BY created_ms DESC, rowid DESC LIMIT 100").all(user(req)) as {

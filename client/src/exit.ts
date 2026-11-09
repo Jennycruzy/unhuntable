@@ -4,6 +4,13 @@
 //
 // The words stay on the user's machine: only signatures made with the pieces key are sent.
 // Network calls go only to OutLayer, Hyperliquid and a NEAR RPC.
+//
+// Pieces controlled by NEAR Chain Signatures are found from the same words: each piece key
+// is checked on the signer contract. Their moves are signed here with the piece key and
+// signed for Hyperliquid by NEAR's MPC network through the contract. A position on such a
+// piece is closed with a fresh agent key made here and approved through the contract. A
+// NEAR account named by the user relays those calls and pays their gas; it cannot change
+// them.
 import {
   asset,
   closeOrder,
@@ -17,6 +24,25 @@ import {
   type TypedData,
   type Value,
 } from "./hyperliquid.js";
+import { secp256k1 } from "@noble/curves/secp256k1";
+import {
+  MPC_SIGNER,
+  SIGNER_CONTRACT,
+  SIGN_GAS,
+  addressFromDerivedKey,
+  chainSigExchangeBody,
+  chainSigPieceKey,
+  ethAddress,
+  mpcPath,
+  pieceKeyArgs,
+  readCounter,
+  signArgs,
+  signPieceAction,
+  type ChainSigAction,
+  type MpcAnswer,
+} from "./chainsig.js";
+import { NearRelay, RelayError } from "./neartx.js";
+import { USDC_SPOT_TOKEN, typedDataDigest } from "./hyperliquid.js";
 import {
   DeterministicWalletError,
   OUTLAYER_API,
@@ -24,6 +50,7 @@ import {
   backupKeyFor,
   keyFromMnemonic,
   keyHash,
+  GAP_LIMIT,
   rediscover,
   type PiecesKey,
 } from "./keys.js";
@@ -57,6 +84,10 @@ export interface ExitOptions {
   io: ExitIO;
   /** Hashes of our server's delegate keys; when given, the tool offers to revoke them. */
   serverKeyHashes?: string[];
+  /** A NEAR account (and its ed25519 key) that pays gas for NEAR-controlled pieces' moves. */
+  relay?: { account: string; key: string };
+  /** The signer contract of NEAR-controlled pieces. */
+  chainsigContract?: string;
   fetch?: typeof fetch;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
@@ -300,6 +331,9 @@ export async function runExit(o: ExitOptions): Promise<ExitResult> {
     if (!arrived) throw new ExitStopped("The USDC was sent but has not reached your private balance yet. Run the tool again in a few minutes; it will pick up from there.");
     io.say("It arrived.");
   }
+
+  // ---- NEAR-controlled pieces: found from the same words, moved through the signer contract
+  moved += await nearPieces({ o, key, f, now, sleep, info, post, balance, privateUsdc, result });
   result.movedUsdc = fromUnits(moved, 8);
 
   // ---- 7. private balance → the destination
@@ -384,4 +418,190 @@ async function checkKeyOnAccount(f: typeof fetch, rpc: string, account: string, 
   if (j?.result?.permission === undefined) {
     throw new ExitStopped(`These words do not match a key on ${account}. Check the words and the account name.`);
   }
+}
+
+// ------------------------------------------------------------ NEAR-controlled pieces
+
+interface NearCtx {
+  o: ExitOptions;
+  key: PiecesKey;
+  f: typeof fetch;
+  now: () => number;
+  sleep: (ms: number) => Promise<void>;
+  info: (body: Record<string, unknown>) => Promise<any>;
+  post: (body: unknown) => Promise<any>;
+  balance: OutLayerDeterministic;
+  privateUsdc: () => Promise<bigint>;
+  result: ExitResult;
+}
+
+async function nearView(f: typeof fetch, rpc: string, contract: string, method: string, args: Uint8Array): Promise<Uint8Array | null> {
+  let j: any;
+  try {
+    const res = await f(rpc, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: "exit",
+        method: "query",
+        params: { request_type: "call_function", finality: "final", account_id: contract, method_name: method, args_base64: b64(args) },
+      }),
+    });
+    j = await res.json();
+  } catch {
+    throw new ExitStopped("The NEAR RPC is not answering. Try again later.");
+  }
+  if (j?.error || j?.result?.error) return null;
+  if (!Array.isArray(j?.result?.result)) throw new ExitStopped("The NEAR RPC gave an answer this tool does not understand.");
+  return Uint8Array.from(j.result.result as number[]);
+}
+
+function b64(b: Uint8Array): string {
+  let s = "";
+  for (const x of b) s += String.fromCharCode(x);
+  return btoa(s);
+}
+
+/** Every NEAR-controlled piece of these words: its number, key and Hyperliquid account. */
+export async function findNearPieces(f: typeof fetch, rpc: string, contract: string, key: PiecesKey, gap = GAP_LIMIT) {
+  const found: { label: string; piece: PiecesKey; account: string }[] = [];
+  let missing = 0;
+  for (let n = 0; missing < gap; n++) {
+    const piece = chainSigPieceKey(key, n);
+    const c = await nearView(f, rpc, contract, "counter", pieceKeyArgs(piece.publicKey));
+    if (!c || readCounter(c) === null) {
+      missing += 1;
+      continue;
+    }
+    missing = 0;
+    const args = new TextEncoder().encode(JSON.stringify({ path: mpcPath(piece.publicKey), predecessor: contract, domain_id: 0 }));
+    const d = await nearView(f, rpc, MPC_SIGNER, "derived_public_key", args);
+    if (!d) throw new ExitStopped("NEAR's MPC network did not give a piece's account. Try again later.");
+    found.push({ label: `piece:${n}`, piece, account: addressFromDerivedKey(JSON.parse(new TextDecoder().decode(d)) as string) });
+  }
+  return found;
+}
+
+async function nearPieces(c: NearCtx): Promise<bigint> {
+  const o = c.o;
+  const io = o.io;
+  const rpc = c.o.nearRpc ?? NEAR_RPC;
+  const contract = o.chainsigContract ?? SIGNER_CONTRACT;
+  io.say(`Looking for NEAR-controlled pieces on ${contract}.`);
+  const pieces = await findNearPieces(c.f, rpc, contract, c.key);
+  if (pieces.length === 0) {
+    io.say("No NEAR-controlled pieces.");
+    return 0n;
+  }
+  io.say(`Found ${pieces.length} NEAR-controlled piece${pieces.length === 1 ? "" : "s"}. Their Hyperliquid accounts have no private key: NEAR's MPC network signs for them when the piece key approves.`);
+  let relay: NearRelay | null = null;
+  if (o.relay) {
+    try {
+      relay = new NearRelay(rpc, o.relay.account, o.relay.key, c.f);
+    } catch (e) {
+      throw new ExitStopped(`That relay key cannot be used: ${(e as Error).message}`);
+    }
+  }
+
+  /** The piece key signs; the relay asks the contract; NEAR signs for Hyperliquid; checked, then posted. */
+  const step = async (p: { piece: PiecesKey; account: string }, a: ChainSigAction): Promise<void> => {
+    if (!relay) throw new ExitStopped("no relay");
+    const cnt = await nearView(c.f, rpc, contract, "counter", pieceKeyArgs(p.piece.publicKey));
+    const counter = cnt ? readCounter(cnt) : null;
+    if (counter === null) throw new ExitStopped("The piece key is not on the signer contract any more.");
+    const sig = signPieceAction(p.piece, contract, counter, a);
+    let out;
+    try {
+      out = await relay.call(contract, "sign", signArgs(p.piece.publicKey, a, sig), BigInt(SIGN_GAS), 1n);
+    } catch (e) {
+      if (e instanceof RelayError) throw new ExitStopped(`NEAR did not sign it: ${e.message}`);
+      throw e;
+    }
+    const mpc = JSON.parse(new TextDecoder().decode(out.value)) as MpcAnswer;
+    await c.post(chainSigExchangeBody(a, mpc, p.account));
+  };
+
+  let moved = 0n;
+  for (const p of pieces) {
+    let perp = await c.info({ type: "clearinghouseState", user: p.account });
+    const spot0 = await c.info({ type: "spotClearinghouseState", user: p.account });
+    const spotUsdc0 = String((spot0?.balances ?? []).find((b: any) => b.coin === "USDC")?.total ?? "0");
+    const open = (perp?.assetPositions ?? []).map((x: any) => x.position).filter((x: any) => x && Number(x.szi) !== 0);
+    const total = toUnits(String(perp?.marginSummary?.accountValue ?? "0"), 8) + toUnits(spotUsdc0, 8);
+    if (open.length === 0 && sendableUsdc(fromUnits(total, 8)) < BigInt(MIN_SEND_USDC) * 10n ** 8n) {
+      io.say(`${p.label} (${p.account}) holds too little to move; it stays.`);
+      continue;
+    }
+    if (!relay) {
+      io.say(
+        `${p.label} (${p.account}) holds money. Moving it needs a NEAR account to pay gas, about 0.01 NEAR per step. ` +
+          "Run again and name one (any account works: it can only pass on what your piece key signed). This piece was left as it is.",
+      );
+      continue;
+    }
+
+    if (open.length > 0) {
+      // a fresh agent key, made here, approved through the contract, used once to close
+      const agentKey = secp256k1.utils.randomPrivateKey();
+      const agent = ethAddress(secp256k1.getPublicKey(agentKey, false));
+      io.say(`${p.label}: approving a one-time agent key made on this computer, so it can close the open position.`);
+      await step(p, { kind: "approveAgent", agentAddress: agent, agentName: "", nonce: c.now() });
+      const mids = await c.info({ type: "allMids" });
+      for (const pos of open) {
+        const a = asset(pos.coin);
+        const mid = Number(mids?.[pos.coin]);
+        if (!a) throw new ExitStopped(`${p.label} holds ${pos.coin}, which this tool does not know how to close. Close it on Hyperliquid first.`);
+        if (!(mid > 0)) throw new ExitStopped(`Hyperliquid gave no price for ${pos.coin}, so the position was left open. Try again in a moment.`);
+        const action = closeOrder(a, Number(pos.szi), mid, CLOSE_SLIP);
+        io.say(`Closing the ${pos.coin} position of ${Math.abs(Number(pos.szi))} with a reduce-only order 3% through the price ${mid}.`);
+        const nonce = c.now();
+        const s = secp256k1.sign(typedDataDigest(l1TypedData(action, nonce)), agentKey);
+        const sig = { r: "0x" + s.r.toString(16).padStart(64, "0"), s: "0x" + s.s.toString(16).padStart(64, "0"), v: 27 + s.recovery };
+        await c.post(exchangeBody(action, nonce, sig, true));
+        c.result.closed += 1;
+      }
+      perp = await c.info({ type: "clearinghouseState", user: p.account });
+      if ((perp?.assetPositions ?? []).some((x: any) => Number(x?.position?.szi) !== 0)) {
+        throw new ExitStopped(`A position on ${p.label} did not close fully, maybe because the price moved. Run the tool again.`);
+      }
+    }
+
+    const withdrawable = String(perp?.withdrawable ?? "0");
+    if (toUnits(withdrawable, 8) > 0n) {
+      io.say(`${p.label}: moving ${withdrawable} USDC from perps to spot, signed by NEAR Chain Signatures.`);
+      await step(p, { kind: "usdClassTransfer", amount: fromUnits(toUnits(withdrawable, 8), 8), toPerp: false, nonce: c.now() });
+    }
+    const spot = await c.info({ type: "spotClearinghouseState", user: p.account });
+    const usdc = String((spot?.balances ?? []).find((b: any) => b.coin === "USDC")?.total ?? "0");
+    const send = sendableUsdc(usdc);
+    if (send < BigInt(MIN_SEND_USDC) * 10n ** 8n) {
+      io.say(`${p.label} has ${usdc} USDC on spot; less than ${MIN_SEND_USDC} USDC would arrive, so it stays.`);
+      continue;
+    }
+    const sendStr = fromUnits(send, 8);
+    let deposit: { deposit_address?: string };
+    try {
+      deposit = await c.balance.request("POST", "/wallet/v1/confidential/deposit/cross-chain", { chain: "hypercore", token: "USDC", amount: send.toString() });
+    } catch (e) {
+      throw new ExitStopped(`OutLayer gave no deposit address: ${(e as Error).message}`);
+    }
+    const to = deposit.deposit_address;
+    if (typeof to !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(to)) throw new ExitStopped("OutLayer's deposit address is not an address Hyperliquid can send to.");
+    const before = await c.privateUsdc();
+    io.say(`${p.label}: sending ${sendStr} USDC to your private balance's deposit address, signed by NEAR Chain Signatures (Hyperliquid keeps 1 USDC).`);
+    await step(p, { kind: "spotSend", destination: to.toLowerCase(), token: USDC_SPOT_TOKEN, amount: sendStr, time: c.now() });
+    moved += send;
+    let arrived = false;
+    for (let i = 0; i < (o.pollTries ?? 60); i++) {
+      if ((await c.privateUsdc()) > before) {
+        arrived = true;
+        break;
+      }
+      await c.sleep(o.pollEveryMs ?? 10_000);
+    }
+    if (!arrived) throw new ExitStopped("The USDC was sent but has not reached your private balance yet. Run the tool again in a few minutes; it will pick up from there.");
+    io.say("It arrived.");
+  }
+  return moved;
 }

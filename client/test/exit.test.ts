@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { ExitStopped, USDC_NEAR, fromUnits, runExit, sendableUsdc, toUnits, type ExitIO } from "../src/exit.js";
 import { keyFromMnemonic, keyHash, readAuthHeader, seedFor } from "../src/keys.js";
+import { ed25519 } from "@noble/curves/ed25519";
+import { secp256k1 } from "@noble/curves/secp256k1";
+import { bytesToHex } from "@noble/hashes/utils";
+import { base58 } from "@scure/base";
+import { actionDigest, chainSigMessage, chainSigPieceKey, ethAddress, recoverSigner, type ChainSigAction } from "../src/chainsig.js";
+import { l1TypedData, typedDataDigest } from "../src/hyperliquid.js";
 
 // Test-only phrase, never used for money.
 const WORDS = "legal winner thank year wave sausage worth useful legal winner thank yellow";
@@ -21,6 +27,10 @@ interface World {
   spotTotal?: string;
   keyOnAccount?: boolean;
   lastKeyOnce?: boolean;
+  /** No OutLayer piece wallet exists (only NEAR-controlled pieces). */
+  noOutlayerPiece?: boolean;
+  /** Answers NEAR RPC calls first when set (NEAR-controlled piece tests). */
+  near?: (body: any) => unknown | undefined;
 }
 
 interface Call {
@@ -50,6 +60,12 @@ function world(w: World = {}) {
     const seed = headers.Authorization ? readAuthHeader(headers.Authorization).seed : body?.seed;
 
     if (url === "https://rpc.test") {
+      if (w.near) {
+        const r = w.near(body);
+        if (r !== undefined) return json(r);
+      }
+      // no NEAR-controlled pieces: the signer contract knows none of these keys
+      if (body?.params?.request_type === "call_function") return json({ result: { result: [0], logs: [] } });
       return json(w.keyOnAccount === false ? { error: { name: "HANDLER_ERROR" } } : { result: { permission: "FullAccess", nonce: 1 } });
     }
     if (url.startsWith("https://api.hyperliquid.xyz/info")) {
@@ -78,7 +94,7 @@ function world(w: World = {}) {
       const path = url.slice("https://api.outlayer.ai".length);
       if (path === "/wallet/v1/address?chain=base") {
         if (seed === BALANCE_SEED) return json({ wallet_id: "w-balance", chain: "base", address: "0x" + "22".repeat(20) });
-        if (seed === PIECE_SEED) return json({ wallet_id: "w-piece", chain: "base", address: PIECE_ADDR });
+        if (seed === PIECE_SEED && !w.noOutlayerPiece) return json({ wallet_id: "w-piece", chain: "base", address: PIECE_ADDR });
         return json({ error: "wallet_not_found", message: "Wallet not found" }, 404);
       }
       if (path === "/wallet/v1/evm/sign-typed-data") {
@@ -281,5 +297,136 @@ describe("amounts", () => {
     expect(fromUnits(5n, 8)).toBe("0.00000005");
     expect(sendableUsdc("13.45678901")).toBe(1_245_678_901n);
     expect(() => toUnits("1e5", 8)).toThrow();
+  });
+});
+
+// ------------------------------------------------------------ NEAR-controlled pieces
+
+describe("exit flow, NEAR-controlled pieces", () => {
+  const key = keyFromMnemonic(WORDS);
+  const piece = chainSigPieceKey(key, 0);
+  const MPC = new Uint8Array(32).fill(0x42);
+  const ACCOUNT_HL = ethAddress(secp256k1.getPublicKey(MPC, false));
+  const RELAY_SECRET = "ed25519:99eUso3aSbE9tqGSTXzo3TLfKb9RkMTURrHKQ1K7Zh3StnzFNUx8FKCPPPPpR479qsw5zv2WNBKmgiz7WqgAJfM";
+
+  function decodeAction(b: Uint8Array): { action: ChainSigAction; end: number } {
+    const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+    let o = 1;
+    const str = () => {
+      const n = dv.getUint32(o, true);
+      const v = new TextDecoder().decode(b.subarray(o + 4, o + 4 + n));
+      o += 4 + n;
+      return v;
+    };
+    const u64 = () => {
+      const v = Number(dv.getBigUint64(o, true));
+      o += 8;
+      return v;
+    };
+    if (b[0] === 0) return { action: { kind: "approveAgent", agentAddress: str(), agentName: str(), nonce: u64() }, end: o };
+    if (b[0] === 1) {
+      const amount = str();
+      const toPerp = b[o++] === 1;
+      return { action: { kind: "usdClassTransfer", amount, toPerp, nonce: u64() }, end: o };
+    }
+    if (b[0] === 4) return { action: { kind: "spotSend", destination: str(), token: str(), amount: str(), time: u64() }, end: o };
+    throw new Error(`tag ${b[0]}`);
+  }
+
+  /** The signer contract, v1.signer and the relay's NEAR RPC, faked the way they behave. */
+  function nearFake() {
+    let counter = 2;
+    const signed: ChainSigAction[] = [];
+    const near = (body: any): unknown | undefined => {
+      const p = body?.params;
+      if (body.method === "query" && p.request_type === "view_access_key" && p.account_id === "relay.near") {
+        return { result: { nonce: 7, block_hash: base58.encode(new Uint8Array(32).fill(1)), permission: "FullAccess" } };
+      }
+      if (body.method === "query" && p.request_type === "call_function") {
+        const args = Uint8Array.from(atob(p.args_base64), (c) => c.charCodeAt(0));
+        if (p.account_id === "unhuntable.near" && p.method_name === "counter") {
+          const mine = bytesToHex(args.subarray(5, 37)) === bytesToHex(piece.publicKey);
+          if (!mine) return { result: { result: [0] } };
+          const b = new Uint8Array(9);
+          b[0] = 1;
+          new DataView(b.buffer).setBigUint64(1, BigInt(counter), true);
+          return { result: { result: [...b] } };
+        }
+        if (p.account_id === "v1.signer") {
+          const a = JSON.parse(new TextDecoder().decode(args));
+          expect(a).toEqual({ path: "u1/" + bytesToHex(piece.publicKey), predecessor: "unhuntable.near", domain_id: 0 });
+          const pub = secp256k1.getPublicKey(MPC, false).subarray(1);
+          return { result: { result: [...new TextEncoder().encode(JSON.stringify("secp256k1:" + base58.encode(pub)))] } };
+        }
+      }
+      if (body.method === "send_tx") {
+        const tx = Uint8Array.from(atob(p.signed_tx_base64), (c) => c.charCodeAt(0));
+        const dv = new DataView(tx.buffer);
+        let o = 0;
+        const skipStr = () => (o += 4 + dv.getUint32(o, true));
+        skipStr(); // signer
+        o += 33 + 8; // key, nonce
+        const recvLen = dv.getUint32(o, true);
+        expect(new TextDecoder().decode(tx.subarray(o + 4, o + 4 + recvLen))).toBe("unhuntable.near");
+        skipStr();
+        o += 32 + 4 + 1; // block hash, actions count, FunctionCall tag
+        skipStr(); // method
+        const argsLen = dv.getUint32(o, true);
+        const args = tx.subarray(o + 4, o + 4 + argsLen);
+        const keyBytes = args.subarray(5, 37);
+        const { action, end } = decodeAction(args.subarray(37));
+        const sig = args.subarray(37 + end + 4, 37 + end + 4 + 64);
+        const ok = ed25519.verify(sig, new TextEncoder().encode(chainSigMessage("unhuntable.near", keyBytes, counter, action)), keyBytes);
+        if (!ok) return { result: { status: { Failure: { ActionError: { kind: { FunctionCallError: { ExecutionError: "the piece key did not sign this action" } } } } } } };
+        counter += 1;
+        signed.push(action);
+        const s = secp256k1.sign(actionDigest(action), MPC);
+        const mpc = { big_r: { affine_point: (s.recovery ? "03" : "02") + s.r.toString(16).padStart(64, "0") }, s: { scalar: s.s.toString(16).padStart(64, "0") }, recovery_id: s.recovery };
+        return { result: { status: { SuccessValue: btoa(JSON.stringify(mpc)) } } };
+      }
+      return undefined;
+    };
+    return { near, signed };
+  }
+
+  it("finds the piece from the words, closes with a one-time agent, and brings the money home", async () => {
+    const n = nearFake();
+    const w = world({ noOutlayerPiece: true, near: n.near });
+    const t = io(["yes"]);
+    const r = await runExit({ ...base(w.f, t.io), relay: { account: "relay.near", key: RELAY_SECRET } });
+    expect(steps(w.calls)).toEqual(["approveAgent", "close order", "class transfer", "deposit quote", "spot send", "withdraw dry-run", "withdraw"]);
+    expect(n.signed.map((a) => a.kind)).toEqual(["approveAgent", "usdClassTransfer", "spotSend"]);
+    expect(r).toMatchObject({ wallets: ["balance"], closed: 1, movedUsdc: "24.5" });
+
+    const ex = w.calls.filter((c) => c.url.endsWith("/exchange")).map((c) => c.body);
+    // the approval, the transfer and the send are signed by the piece's NEAR-derived account
+    const digest = (a: any): Uint8Array =>
+      actionDigest(
+        a.type === "approveAgent"
+          ? { kind: "approveAgent", agentAddress: a.agentAddress, agentName: a.agentName, nonce: a.nonce }
+          : a.type === "usdClassTransfer"
+            ? { kind: "usdClassTransfer", amount: a.amount, toPerp: a.toPerp, nonce: a.nonce }
+            : { kind: "spotSend", destination: a.destination, token: a.token, amount: a.amount, time: a.time },
+      );
+    for (const i of [0, 2, 3]) expect(recoverSigner(digest(ex[i].action), ex[i].signature)).toBe(ACCOUNT_HL);
+    // the close order is signed by the agent that was just approved, made on this computer
+    const agent = ex[0].action.agentAddress;
+    expect(recoverSigner(typedDataDigest(l1TypedData(ex[1].action, ex[1].nonce)), ex[1].signature)).toBe(agent);
+    expect(ex[1].action.orders[0]).toMatchObject({ a: 1, b: false, r: true });
+    expect(ex[3].action).toMatchObject({ destination: DEPOSIT_ADDR, amount: "24.5" });
+    // the words and the piece key never left this computer
+    const sent = JSON.stringify(w.calls);
+    expect(sent).not.toContain(bytesToHex(piece.secret));
+    for (const word of WORDS.split(" ")) expect(sent).not.toContain(`"${word}"`);
+  });
+
+  it("without a relay, says what it needs and leaves the piece as it is", async () => {
+    const n = nearFake();
+    const w = world({ noOutlayerPiece: true, near: n.near });
+    const t = io(["yes"]);
+    await runExit(base(w.f, t.io));
+    expect(n.signed).toEqual([]);
+    expect(t.said.join(" ")).toMatch(/needs a NEAR account to pay gas/);
+    expect(steps(w.calls)).toEqual(["withdraw dry-run", "withdraw"]);
   });
 });

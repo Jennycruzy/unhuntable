@@ -37,6 +37,14 @@
     "./box-browser": {
       "types": "./dist/box-browser.d.ts",
       "default": "./dist/box-browser.js"
+    },
+    "./chainsig": {
+      "types": "./dist/chainsig.d.ts",
+      "default": "./dist/chainsig.js"
+    },
+    "./neartx": {
+      "types": "./dist/neartx.d.ts",
+      "default": "./dist/neartx.js"
     }
   },
   "files": [

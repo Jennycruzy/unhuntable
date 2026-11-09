@@ -10,6 +10,7 @@ import type { KeyStore } from "./keystore.js";
 import type { NearRpc } from "./near.js";
 import type { OneClick } from "./oneclick.js";
 import type { OutLayerWallet } from "./outlayer.js";
+import type { NearRelay } from "./relay.js";
 import { ApiError } from "./refusals.js";
 
 export interface Ctx {
@@ -25,6 +26,8 @@ export interface Ctx {
   jobs: JobRunner;
   policyContract: string;
   appFeeAccount: string;
+  /** Pieces controlled by NEAR Chain Signatures. When set, new pieces are made this way. */
+  chainsig?: { contract: string; relay: Pick<NearRelay, "call">; chain: "Mainnet" | "Testnet" };
   random: (n: number) => Uint8Array;
   log?: Logger;
 }
@@ -41,6 +44,10 @@ export interface WalletRow {
   label: string | null;
   seed: string | null;
   kind: "balance" | "piece";
+  /** "outlayer": an OutLayer wallet is the Hyperliquid account. "near": NEAR Chain Signatures control it. */
+  control: "outlayer" | "near";
+  /** Chain-signature pieces: the piece key, 64 hex characters. */
+  piece_key: string | null;
   shard_id: string | null;
   wallet_id: string | null;
   wallet_pubkey: string | null;

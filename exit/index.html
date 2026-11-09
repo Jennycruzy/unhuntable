@@ -63,6 +63,11 @@
     <input id="server-key" spellcheck="false" autocapitalize="off">
     <p class="hint">If you paste it, the page offers to remove our server's access to your wallets at the end.</p>
 
+    <label for="relay-account">A NEAR account to pay gas (only for NEAR-controlled pieces)</label>
+    <input id="relay-account" spellcheck="false" autocapitalize="off" aria-describedby="relay-hint">
+    <input id="relay-key" type="password" spellcheck="false" autocapitalize="off" aria-label="That account's private key (ed25519:...)">
+    <p class="hint" id="relay-hint">NEAR-controlled pieces move through NEAR's signer contract, about 0.01 NEAR per step. Paste its key as ed25519:… Any account works, a fresh one is best: it only passes on what your piece key signed and cannot change it.</p>
+
     <button id="start" type="submit">Start</button>
   </form>
 

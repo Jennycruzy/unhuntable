@@ -127,6 +127,19 @@ export class Api {
   home(labels?: string[]) {
     return this.call<HomeStart>("POST", "/api/home", labels ? { labels } : {});
   }
+  chainSigRegister(label: string, publicKey: string) {
+    return this.call<{ label: string; account: string; contract: string; approve: { counter: number; action: import("unhuntable-client/chainsig").ChainSigAction } | null }>(
+      "POST",
+      "/api/chainsig/register",
+      { label, publicKey },
+    );
+  }
+  chainSigApprove(label: string, signature: string) {
+    return this.call<{ ok: true; label: string }>("POST", "/api/chainsig/approve", { label, signature });
+  }
+  homeChainSig(id: string, pieces: { label: string; signed: { counter: number; action: import("unhuntable-client/chainsig").ChainSigAction; signature: string }[] }[]) {
+    return this.call<{ ok: true; state: string }>("POST", `/api/home/${encodeURIComponent(id)}/chainsig`, { pieces });
+  }
   homeState(id: string) {
     return this.call<HomeState>("GET", `/api/home/${encodeURIComponent(id)}`);
   }

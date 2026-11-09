@@ -31,6 +31,7 @@ import { addAlert, balanceWallet, userRow, usd, walletById, walletByLabel, type 
 import { newId, newShardId } from "./db.js";
 import { GuardRefusal, GuardUnreachable } from "./guard.js";
 import { approveAgent } from "./hl.js";
+import { approveAgentNow, isChainSig, needsBrowser } from "./chainsig.js";
 import { OutLayerWalletError } from "./outlayer.js";
 import { balancePolicy, balanceSentence, buildBatch, lockSentence, piecePolicy, readBack, walletAccount, type BatchItem, type PolicyBatch } from "./policy.js";
 import { ApiError, sentence, type RefusalCode } from "./refusals.js";
@@ -147,7 +148,7 @@ export function freePieces(ctx: Ctx, userId: string): WalletRow[] {
   const rows = ctx.db
     .prepare(
       `SELECT * FROM pieces WHERE user_id = ? AND kind = 'piece' AND policy_state = 'locked'
-       AND wallet_id IS NOT NULL AND hl_address IS NOT NULL AND agent IS NOT NULL ORDER BY created_ms, label`,
+       AND (wallet_id IS NOT NULL OR control = 'near') AND hl_address IS NOT NULL AND agent IS NOT NULL ORDER BY created_ms, label`,
     )
     .all(userId) as WalletRow[];
   return rows.filter((r) => !busy.has(r.id) && !home.has(r.label ?? ""));
@@ -261,20 +262,26 @@ function lockItems(ctx: Ctx, userId: string, positionId: string): BatchItem[] {
   return items;
 }
 
+/** Pieces of a position the browser still has to set up: OutLayer wallets to make, chain-signature keys to register and sign. */
+function browserWork(ctx: Ctx, positionId: string) {
+  const ws = pieceRows(ctx, positionId).map((pp) => walletById(ctx, pp.piece_id));
+  return {
+    needWallets: ws.filter((w) => !isChainSig(w) && !w.wallet_id).map((w) => w.label!),
+    needChainSig: ws.filter((w) => needsBrowser(ctx, w)).map((w) => w.label!),
+  };
+}
+
 async function answer(ctx: Ctx, pos: PositionRow) {
   const u = userRow(ctx, pos.user_id);
-  const needWallets = pieceRows(ctx, pos.id)
-    .map((pp) => walletById(ctx, pp.piece_id))
-    .filter((w) => !w.wallet_id)
-    .map((w) => w.label!);
+  const { needWallets, needChainSig } = browserWork(ctx, pos.id);
   let policyBatch: PolicyBatch | null = null;
-  if (pos.state === "planned" && needWallets.length === 0 && balanceMissesPieces(ctx, pos.user_id, pos.id)) {
+  if (pos.state === "planned" && needWallets.length === 0 && needChainSig.length === 0 && balanceMissesPieces(ctx, pos.user_id, pos.id)) {
     policyBatch = await buildBatch(ctx, u.near_account, [balanceItem(ctx, pos.user_id)]);
   } else if (pos.state === "policy_wait") {
     const items = lockItems(ctx, pos.user_id, pos.id);
     policyBatch = items.length ? await buildBatch(ctx, u.near_account, items) : null;
   }
-  return { positionId: pos.id, state: pos.state, needWallets, policyBatch };
+  return { positionId: pos.id, state: pos.state, needWallets, needChainSig, policyBatch };
 }
 
 // ------------------------------------------------------------ confirm and continue
@@ -308,8 +315,8 @@ export async function createPosition(ctx: Ctx, userId: string, body: PlanBody) {
       else {
         pieceId = newId();
         ctx.db
-          .prepare("INSERT INTO pieces (id, user_id, label, kind, shard_id, policy_state, created_ms, network) VALUES (?, ?, ?, 'piece', ?, 'none', ?, ?)")
-          .run(pieceId, userId, `piece:${n++}`, newShardId(), ctx.now(), ctx.network);
+          .prepare("INSERT INTO pieces (id, user_id, label, kind, shard_id, policy_state, control, created_ms, network) VALUES (?, ?, ?, 'piece', ?, 'none', ?, ?, ?)")
+          .run(pieceId, userId, `piece:${n++}`, newShardId(), ctx.chainsig ? "near" : "outlayer", ctx.now(), ctx.network);
       }
       ctx.db
         .prepare(
@@ -325,7 +332,8 @@ export async function createPosition(ctx: Ctx, userId: string, body: PlanBody) {
 export async function continuePosition(ctx: Ctx, userId: string, id: string) {
   const pos = ownPosition(ctx, userId, id);
   if (pos.state === "planned") {
-    const missing = pieceRows(ctx, id).some((pp) => !walletById(ctx, pp.piece_id).wallet_id);
+    const w = browserWork(ctx, id);
+    const missing = w.needWallets.length > 0 || w.needChainSig.length > 0;
     if (!missing && !balanceMissesPieces(ctx, userId, id)) {
       setState(ctx, id, "funding", { startMs: ctx.now() });
       schedule(ctx, id, ctx.now());
@@ -399,7 +407,19 @@ async function approvePiece(ctx: Ctx, pos: PositionRow, pp: PieceRow): Promise<b
   const piece = walletById(ctx, pp.piece_id);
   const perp = await ctx.hl.perp(piece.hl_address!);
   if (perp.accountValue < pp.funding_usd - FUNDING_SLACK_USD) return false;
-  if (!piece.agent) {
+  if (!piece.agent && isChainSig(piece)) {
+    // NEAR's MPC network signs the approval the piece key signed in the browser.
+    try {
+      await approveAgentNow(ctx, piece);
+    } catch (e) {
+      if (e instanceof ApiError && (e.code === "chainsig_sign_again" || e.code === "chainsig_refused" || e.code === "wrong_state")) {
+        noteError(ctx, pos, e.code === "chainsig_refused" ? "chainsig_refused" : "chainsig_sign_again", `${pos.coin} piece Account ${pp.idx + 1}: ${e.message}`);
+        return false;
+      }
+      throw e;
+    }
+    guardOk(ctx, pos.id);
+  } else if (!piece.agent) {
     const agent = await ctx.guard.agent(piece.shard_id!);
     const a = approveAgent(agent, `unhuntable ${piece.shard_id}`, ctx.now());
     const sig = await ctx.wallet.signTypedData(piece.wallet_id!, "arbitrum", typedDataJson(a.typed));
@@ -582,8 +602,10 @@ export function listPositions(ctx: Ctx, userId: string) {
           hasStop: pp.has_stop === 1,
           hasTp: pp.has_tp === 1,
           guard: p.guard,
+          nearControlled: isChainSig(w),
         };
       }),
+      needChainSig: p.state === "closed" || p.state === "failed" ? [] : browserWork(ctx, p.id).needChainSig,
       alerts: (
         ctx.db.prepare("SELECT text, created_ms FROM alerts WHERE position_id = ? ORDER BY created_ms DESC LIMIT 50").all(p.id) as { text: string; created_ms: number }[]
       ).map((a) => ({ text: a.text, ms: a.created_ms })),

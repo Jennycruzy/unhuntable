@@ -33,6 +33,8 @@ export function testConfig(over: Partial<Config> = {}): Config {
     hyperliquidUrl: "https://hl.test",
     oneClickUrl: "https://oneclick.test",
     guardOwner: "guard.near",
+    chainsigContract: "",
+    relayAccount: "",
     guardProject: "guard",
     policyContract: "outlayer.near",
     appFeeAccount: "fees.near",

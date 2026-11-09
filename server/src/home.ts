@@ -1,5 +1,12 @@
 // Going home: money from pieces back into the private balance. The same steps as the exit
-// tool in the client library (client/src/exit.ts), run by the server:
+// tool in the client library (client/src/exit.ts), run by the server.
+//
+// Chain-signature pieces (NEAR controls their Hyperliquid account) take no unlock: at the
+// start the browser asks OutLayer for a deposit address of the user's private balance and
+// signs perps -> spot and the send to it with the piece key. Moving starts when the browser's
+// signatures and (for OutLayer pieces) the unlock are both in; we relay each signed step.
+//
+// OutLayer pieces:
 //   unlock_wait  the user signs an unlock batch (the same pieces, evm_sign on)
 //   moving       for each piece: perp -> spot, a fresh deposit address on the private
 //                balance (chain hypercore, exact amount), spotSend of spot total - 1 USDC,
@@ -28,6 +35,7 @@ import { buildBatch, lockSentence, piecePolicy, readBack, unlockSentence, wallet
 import { busyPieceIds, EXIT_FEE_PER_PIECE } from "./positions.js";
 import { ApiError, sentence } from "./refusals.js";
 import { Label, privateUnits } from "./wallets.js";
+import { HomeSigsBody, homePlan, homeRequests, isChainSig, runRequest, takeHomeSignatures, type HomePlanRow } from "./chainsig.js";
 
 export const HOME_POLL_MS = 15_000;
 /** Pieces holding less than this are left where they are. */
@@ -49,6 +57,8 @@ interface HomeRow {
   had_failure: number;
   unlock_json: string | null;
   relock_json: string | null;
+  policies_ok: number;
+  sigs_ok: number;
 }
 
 interface StepRow {
@@ -76,9 +86,11 @@ function pieces(ctx: Ctx, h: HomeRow): WalletRow[] {
   return (JSON.parse(h.labels_json) as string[]).map((l) => walletByLabel(ctx, h.user_id, l)!);
 }
 
+/** Policy items for the OutLayer pieces of a home (chain-signature pieces have no policy to change). */
 function items(ctx: Ctx, h: HomeRow, evmSign: boolean): BatchItem[] {
   const u = userRow(ctx, h.user_id);
-  return pieces(ctx, h).map((w, i) => {
+  return pieces(ctx, h).flatMap((w, i) => {
+    if (isChainSig(w)) return [];
     if (!w.hl_address || !w.key_hash) throw new ApiError("wallet_missing");
     const name = `Account ${i + 1}`;
     return {
@@ -88,6 +100,8 @@ function items(ctx: Ctx, h: HomeRow, evmSign: boolean): BatchItem[] {
     };
   });
 }
+
+const homeReady = (w: WalletRow) => (w.wallet_id !== null || (isChainSig(w) && w.piece_key !== null)) && w.hl_address !== null;
 
 function addStep(ctx: Ctx, homeId: string, pieceId: string | null, step: string, status: StepRow["status"], detail: string | null): void {
   ctx.db
@@ -107,14 +121,14 @@ export async function startHome(ctx: Ctx, userId: string, body: z.infer<typeof H
   if (body.labels && body.labels.length > 0) {
     chosen = body.labels.map((l) => {
       const w = walletByLabel(ctx, userId, l);
-      if (!w || w.kind !== "piece" || !w.wallet_id) throw new ApiError("not_found");
+      if (!w || w.kind !== "piece" || !homeReady(w)) throw new ApiError("not_found");
       if (busy.has(w.id)) throw new ApiError("piece_in_use");
       return w;
     });
   } else {
-    chosen = (
-      ctx.db.prepare("SELECT * FROM pieces WHERE user_id = ? AND kind = 'piece' AND wallet_id IS NOT NULL AND hl_address IS NOT NULL ORDER BY created_ms, label").all(userId) as WalletRow[]
-    ).filter((w) => !busy.has(w.id));
+    chosen = (ctx.db.prepare("SELECT * FROM pieces WHERE user_id = ? AND kind = 'piece' ORDER BY created_ms, label").all(userId) as WalletRow[]).filter(
+      (w) => homeReady(w) && !busy.has(w.id),
+    );
   }
   if (chosen.length === 0) throw new ApiError("not_found");
   const id = newId();
@@ -129,13 +143,37 @@ export async function startHome(ctx: Ctx, userId: string, body: z.infer<typeof H
     had_failure: 0,
     unlock_json: null,
     relock_json: null,
+    policies_ok: 0,
+    sigs_ok: 1,
   };
-  const unlockBatch = await buildBatch(ctx, u.near_account, items(ctx, h, true));
+  const unlockItems = items(ctx, h, true);
+  const unlockBatch = unlockItems.length > 0 ? await buildBatch(ctx, u.near_account, unlockItems) : null;
+  const chainSig: HomePlanRow[] = [];
+  for (const w of chosen) if (isChainSig(w)) chainSig.push(await homePlan(ctx, w, HOME_MIN_USDC));
+  const sigsOk = chainSig.some((p) => p.send !== null) ? 0 : 1;
   ctx.db
-    .prepare("INSERT INTO homes (id, user_id, state, labels_json, fee_usd, unlock_json, updated_ms, created_ms, network) VALUES (?, ?, 'unlock_wait', ?, ?, ?, ?, ?, ?)")
-    .run(id, userId, h.labels_json, feeUsd, JSON.stringify(unlockBatch), ctx.now(), ctx.now(), ctx.network);
+    .prepare(
+      "INSERT INTO homes (id, user_id, state, labels_json, fee_usd, unlock_json, policies_ok, sigs_ok, updated_ms, created_ms, network) VALUES (?, ?, 'unlock_wait', ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .run(id, userId, h.labels_json, feeUsd, unlockBatch ? JSON.stringify(unlockBatch) : null, unlockBatch ? 0 : 1, sigsOk, ctx.now(), ctx.now(), ctx.network);
   addAlert(ctx, userId, sentence("exit_fee"));
-  return { homeId: id, feeUsd: usd(feeUsd), unlockBatch };
+  if (!unlockBatch && sigsOk) startMoving(ctx, id);
+  return { homeId: id, feeUsd: usd(feeUsd), unlockBatch, chainSig };
+}
+
+function startMoving(ctx: Ctx, id: string): void {
+  const moved = ctx.db.prepare("UPDATE homes SET state = 'moving', updated_ms = ? WHERE id = ? AND state = 'unlock_wait' AND policies_ok = 1 AND sigs_ok = 1").run(ctx.now(), id);
+  if (moved.changes === 1) schedule(ctx, id, ctx.now());
+}
+
+/** The browser's piece-key signatures for the chain-signature pieces of a home. */
+export async function takeHomeChainSig(ctx: Ctx, userId: string, id: string, body: z.infer<typeof HomeSigsBody>) {
+  const h = homeRow(ctx, userId, id);
+  if (h.state !== "unlock_wait" || h.sigs_ok) throw new ApiError("wrong_state");
+  await takeHomeSignatures(ctx, id, pieces(ctx, h), body);
+  ctx.db.prepare("UPDATE homes SET sigs_ok = 1, updated_ms = ? WHERE id = ?").run(ctx.now(), id);
+  startMoving(ctx, id);
+  return { ok: true as const, state: homeRow(ctx, userId, id).state };
 }
 
 export function homeStatus(ctx: Ctx, userId: string, id: string) {
@@ -146,10 +184,12 @@ export function homeStatus(ctx: Ctx, userId: string, id: string) {
     state: HomeState;
     steps: { label: string | null; step: string; status: string; ms: number; detail?: string }[];
     relockBatch: PolicyBatch | null;
+    needChainSig: boolean;
     arrivedUsdc?: string;
   } = {
     homeId: h.id,
     state: h.state,
+    needChainSig: h.state === "unlock_wait" && !h.sigs_ok,
     steps: steps.map((s) => ({
       label: s.piece_id ? walletById(ctx, s.piece_id).label : null,
       step: s.step,
@@ -170,16 +210,17 @@ export async function confirmHomePolicies(ctx: Ctx, userId: string, id: string) 
   if (h.state !== "unlock_wait" && h.state !== "relock_wait") throw new ApiError("wrong_state");
   const unlocking = h.state === "unlock_wait";
   const its = items(ctx, h, unlocking);
+  if (its.length === 0) throw new ApiError("wrong_state");
   for (const it of its) await readBack(ctx, u.near_account, it.wallet, unlocking);
   const labels = its.map((it) => it.wallet.label!);
   ctx.db.transaction(() => {
     for (const it of its) {
       ctx.db.prepare("UPDATE pieces SET policy_state = ?, policy_json = ? WHERE id = ?").run(unlocking ? "unlocked" : "locked", JSON.stringify(it.policy), it.wallet.id);
     }
-    const next: HomeState = unlocking ? "moving" : h.had_failure ? "failed" : "done";
-    ctx.db.prepare("UPDATE homes SET state = ?, updated_ms = ? WHERE id = ?").run(next, ctx.now(), id);
+    if (unlocking) ctx.db.prepare("UPDATE homes SET policies_ok = 1, updated_ms = ? WHERE id = ?").run(ctx.now(), id);
+    else ctx.db.prepare("UPDATE homes SET state = ?, updated_ms = ? WHERE id = ?").run(h.had_failure ? "failed" : "done", ctx.now(), id);
   })();
-  if (unlocking) schedule(ctx, id, ctx.now());
+  if (unlocking) startMoving(ctx, id);
   else addAlert(ctx, userId, h.had_failure ? "Your pieces are locked again. Some money did not move; see the steps." : "Your money is home and your pieces are locked again.");
   return { ok: true as const, locked: unlocking ? [] : labels, unlocked: unlocking ? labels : [] };
 }
@@ -229,6 +270,8 @@ async function movePiece(ctx: Ctx, h: HomeRow, w: WalletRow, done: StepRow[]): P
     return false;
   }
 
+  if (isChainSig(w)) return moveChainSigPiece(ctx, h, w, bal, last);
+
   if (!last) {
     const perp = await ctx.hl.perp(addr);
     if (perp.positions.length > 0) {
@@ -276,9 +319,52 @@ async function movePiece(ctx: Ctx, h: HomeRow, w: WalletRow, done: StepRow[]): P
   return false;
 }
 
+/** Relay the piece key's signed steps one at a time: perps -> spot, then the send to the deposit address the browser chose. */
+async function moveChainSigPiece(ctx: Ctx, h: HomeRow, w: WalletRow, bal: WalletRow & { wallet_id: string }, last: StepRow | undefined): Promise<boolean> {
+  const reqs = homeRequests(ctx, h.id, w.id);
+  if (reqs.length === 0) {
+    addStep(ctx, h.id, w.id, "skip", "skipped", `Too little USDC on this piece to move: Hyperliquid keeps 1 USDC per send, and under ${HOME_MIN_USDC} USDC stays where it is.`);
+    return true;
+  }
+  if (!last) {
+    const perp = await ctx.hl.perp(w.hl_address!);
+    if (perp.positions.length > 0) {
+      addStep(ctx, h.id, w.id, "check", "failed", "This piece still holds a position. Close it first.");
+      throw new StepFailed("piece_in_use");
+    }
+  }
+  for (const r of reqs) {
+    if (r.state === "done") continue;
+    const a = JSON.parse(r.action_json) as { amount: string };
+    const before = r.purpose === "home_send" ? await privateUnits(ctx, bal.wallet_id) : 0n;
+    try {
+      await runRequest(ctx, w, r);
+    } catch (e) {
+      // A refusal is final; anything else (NEAR or Hyperliquid not answering) is tried again by the job.
+      const final = (e instanceof ApiError && e.code === "chainsig_refused") || e instanceof HyperliquidError || (e instanceof Error && /not the piece's account/.test(e.message));
+      if (final) throw new StepFailed(`This step did not go through: ${(e as Error).message}`);
+      throw e;
+    }
+    if (r.purpose === "home_to_spot") addStep(ctx, h.id, w.id, "to_spot", "done", `${a.amount} USDC moved from perps to spot, signed by NEAR Chain Signatures.`);
+    else {
+      addStep(ctx, h.id, w.id, "send", "done", `${a.amount} USDC sent to your private balance's deposit address, signed by NEAR Chain Signatures; Hyperliquid keeps 1 USDC.`);
+      addStep(ctx, h.id, w.id, "arrive", "waiting", JSON.stringify({ before: before.toString(), sent: a.amount }));
+      return false;
+    }
+  }
+  return false;
+}
+
 async function relock(ctx: Ctx, h: HomeRow, failed: boolean): Promise<void> {
   const u = userRow(ctx, h.user_id);
-  const batch = await buildBatch(ctx, u.near_account, items(ctx, h, false));
+  const relockItems = items(ctx, h, false);
+  if (relockItems.length === 0) {
+    const done = failed || h.had_failure;
+    ctx.db.prepare("UPDATE homes SET state = ?, had_failure = MAX(had_failure, ?), updated_ms = ? WHERE id = ?").run(done ? "failed" : "done", failed ? 1 : 0, ctx.now(), h.id);
+    addAlert(ctx, h.user_id, done ? "Some money did not move; see the steps." : "Your money is home.");
+    return;
+  }
+  const batch = await buildBatch(ctx, u.near_account, relockItems);
   ctx.db
     .prepare("UPDATE homes SET state = 'relock_wait', relock_json = ?, had_failure = MAX(had_failure, ?), updated_ms = ? WHERE id = ?")
     .run(JSON.stringify(batch), failed ? 1 : 0, ctx.now(), h.id);

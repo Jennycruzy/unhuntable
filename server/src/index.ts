@@ -25,6 +25,7 @@ import { Hyperliquid } from "./hl.js";
 import { KeyStore } from "./keystore.js";
 import { NearRpc } from "./near.js";
 import { OneClick } from "./oneclick.js";
+import { NearRelay } from "./relay.js";
 import { walletClient } from "./outlayer.js";
 import { registerMoneyJobs, registerMoneyRoutes } from "./routes.js";
 import { HEARTBEAT_MS, MIDS_POLL_MS, heartbeat, watchMids } from "./watch.js";
@@ -125,6 +126,15 @@ export function moneyContext(config: Config, db: Db, jobs: JobRunner, log: Logge
   if (!config.secrets.keystoreKey) throw new ConfigError("keystoreKey is missing from the secrets file");
   if (!config.walletKeysFile) throw new ConfigError("WALLET_KEYS_FILE must name the wallet key file");
   const keystore = new KeyStore({ path: config.walletKeysFile, key: config.secrets.keystoreKey });
+  let chainsig: Ctx["chainsig"];
+  if (config.chainsigContract) {
+    if (!config.relayAccount || !config.secrets.relayKey) throw new ConfigError("CHAINSIG_CONTRACT needs RELAY_ACCOUNT and relayKey in the secrets file");
+    chainsig = {
+      contract: config.chainsigContract,
+      relay: new NearRelay(config.nearRpcUrl, config.relayAccount, config.secrets.relayKey),
+      chain: config.network === "mainnet" ? "Mainnet" : "Testnet",
+    };
+  }
   return {
     db,
     network: config.network,
@@ -145,6 +155,7 @@ export function moneyContext(config: Config, db: Db, jobs: JobRunner, log: Logge
     jobs,
     policyContract: config.policyContract,
     appFeeAccount: config.appFeeAccount,
+    chainsig,
     random: (n) => randomBytes(n),
     log,
   };

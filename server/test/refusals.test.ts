@@ -22,6 +22,8 @@ const CODES = [
   "exit_fee",
   "judge_session_spent",
   "sealed_call_required",
+  "chainsig_refused",
+  "chainsig_sign_again",
 ];
 
 describe("refusal map complete", () => {
