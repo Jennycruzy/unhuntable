@@ -14,6 +14,7 @@ import {
   MPC_SIGNER,
   SIGN_GAS,
   USDC_SPOT_TOKEN,
+  XYZ_DEX,
   addressFromDerivedKey,
   chainSigExchangeBody,
   checkAction,
@@ -46,11 +47,27 @@ export const APPROVAL_TTL_MS = 24 * 60 * 60_000;
 const ADD_PIECE_GAS = 30_000_000_000_000n;
 
 export const RegisterBody = z.object({ label: Label, publicKey: z.string().regex(/^ed25519:[1-9A-HJ-NP-Za-km-z]{32,44}$/) }).strict();
-export const ApproveBody = z.object({ label: Label, signature: z.string().regex(/^[0-9a-f]{128}$/) }).strict();
+const Sig = z.string().regex(/^[0-9a-f]{128}$/);
+/** signature: the approve-agent action; moveSignature: the move onto trade.xyz. At least one. */
+export const ApproveBody = z
+  .object({ label: Label, signature: Sig.optional(), moveSignature: Sig.optional() })
+  .strict()
+  .refine((b) => b.signature !== undefined || b.moveSignature !== undefined);
 
 const ActionSchema: z.ZodType<ChainSigAction> = z.union([
   z.object({ kind: z.literal("approveAgent"), agentAddress: z.string(), agentName: z.string(), nonce: z.number().int().nonnegative() }).strict(),
   z.object({ kind: z.literal("usdClassTransfer"), amount: z.string(), toPerp: z.boolean(), nonce: z.number().int().nonnegative() }).strict(),
+  z
+    .object({
+      kind: z.literal("sendAsset"),
+      destination: z.string(),
+      sourceDex: z.string(),
+      destinationDex: z.string(),
+      token: z.string(),
+      amount: z.string(),
+      nonce: z.number().int().nonnegative(),
+    })
+    .strict(),
   z.object({ kind: z.literal("spotSend"), destination: z.string(), token: z.string(), amount: z.string(), time: z.number().int().nonnegative() }).strict(),
 ]) as z.ZodType<ChainSigAction>;
 
@@ -61,7 +78,7 @@ export const HomeSigsBody = z
         z
           .object({
             label: Label,
-            signed: z.array(z.object({ counter: z.number().int().nonnegative(), action: ActionSchema, signature: z.string().regex(/^[0-9a-f]{128}$/) }).strict()).min(1).max(2),
+            signed: z.array(z.object({ counter: z.number().int().nonnegative(), action: ActionSchema, signature: Sig }).strict()).min(1).max(3),
           })
           .strict(),
       )
@@ -73,8 +90,9 @@ export const HomeSigsBody = z
 export interface RequestRow {
   id: string;
   piece_id: string;
-  purpose: "approve_agent" | "home_to_spot" | "home_send";
+  purpose: "approve_agent" | "home_to_spot" | "home_send" | "xyz_in" | "home_from_xyz";
   home_id: string | null;
+  position_id: string | null;
   counter: number;
   action_json: string;
   signature: string | null;
@@ -157,13 +175,49 @@ function latest(ctx: Ctx, pieceId: string, purpose: RequestRow["purpose"]): Requ
     | undefined;
 }
 
-/** A piece still needs the browser: no key on file yet, or no live signed approval of the guard's agent. */
-export function needsBrowser(ctx: Ctx, w: WalletRow): boolean {
-  if (!isChainSig(w) || w.agent) return false;
+/** A piece still needs the browser: no key on file yet, no live signed approval of the guard's agent, or no live signed move onto trade.xyz for a stock position. */
+export function needsBrowser(ctx: Ctx, w: WalletRow, positionId?: string): boolean {
+  if (!isChainSig(w)) return false;
+  if (positionId && xyzMoveFor(ctx, w, positionId) && needsMove(ctx, w.id, positionId)) return true;
+  if (w.agent) return false;
   if (!w.piece_key || !w.hl_address) return true;
   const r = latest(ctx, w.id, "approve_agent");
   if (!r || r.state === "unsigned" || r.state === "failed") return true;
   return r.state === "signed" && ctx.now() - r.created_ms > APPROVAL_TTL_MS;
+}
+
+function latestMove(ctx: Ctx, pieceId: string, positionId: string): RequestRow | undefined {
+  return ctx.db
+    .prepare("SELECT * FROM chainsig_requests WHERE piece_id = ? AND position_id = ? AND purpose = 'xyz_in' ORDER BY created_ms DESC, rowid DESC LIMIT 1")
+    .get(pieceId, positionId) as RequestRow | undefined;
+}
+
+export function xyzMoveDone(ctx: Ctx, pieceId: string, positionId: string): boolean {
+  return latestMove(ctx, pieceId, positionId)?.state === "done";
+}
+
+function needsMove(ctx: Ctx, pieceId: string, positionId: string): boolean {
+  const r = latestMove(ctx, pieceId, positionId);
+  if (!r || r.state === "unsigned" || r.state === "failed") return true;
+  return r.state === "signed" && ctx.now() - r.created_ms > APPROVAL_TTL_MS;
+}
+
+/**
+ * The trade.xyz position this piece is being funded for, and the USDC its plan moves onto
+ * trade.xyz; null when the position is not on trade.xyz or is past funding.
+ */
+export function xyzMoveFor(ctx: Ctx, w: WalletRow, positionId?: string): { positionId: string; amount: string } | null {
+  const row = ctx.db
+    .prepare(
+      `SELECT x.id, x.plan_json, pp.idx FROM position_pieces pp JOIN positions x ON x.id = pp.position_id
+       WHERE pp.piece_id = ? AND x.coin LIKE 'xyz:%' AND x.state IN ('planned', 'funding') AND pp.state IN ('planned', 'funding')
+       ${positionId ? "AND x.id = ?" : ""} ORDER BY x.created_ms DESC LIMIT 1`,
+    )
+    .get(...(positionId ? [w.id, positionId] : [w.id])) as { id: string; plan_json: string; idx: number } | undefined;
+  if (!row) return null;
+  const usd = (JSON.parse(row.plan_json) as { xyzMoveUsd?: number[] | null }).xyzMoveUsd?.[row.idx];
+  if (!(typeof usd === "number" && usd > 0)) return null;
+  return { positionId: row.id, amount: String(usd) };
 }
 
 /**
@@ -192,25 +246,59 @@ export async function registerPiece(ctx: Ctx, userId: string, body: z.infer<type
     .prepare("UPDATE pieces SET piece_key = ?, hl_address = ?, hl_master = ?, policy_state = 'locked', policy_json = ? WHERE id = ?")
     .run(hex, account, account, JSON.stringify({ chainSignatures: c.contract }), w.id);
 
-  if (w.agent) return { label: body.label, account, contract: c.contract, approve: null };
-  const agent = (await ctx.guard.agent(w.shard_id!)).toLowerCase();
-  const action: ChainSigAction = { kind: "approveAgent", agentAddress: agent, agentName: "", nonce: ctx.now() };
-  checkAction(action);
-  ctx.db
-    .prepare("INSERT INTO chainsig_requests (id, piece_id, purpose, counter, action_json, state, created_ms, network) VALUES (?, ?, 'approve_agent', ?, ?, 'unsigned', ?, ?)")
-    .run(newId(), w.id, counter, JSON.stringify(action), ctx.now(), ctx.network);
-  return { label: body.label, account, contract: c.contract, approve: { counter, action } };
+  let approve: { counter: number; action: ChainSigAction } | null = null;
+  if (!w.agent) {
+    const agent = (await ctx.guard.agent(w.shard_id!)).toLowerCase();
+    const action: ChainSigAction = { kind: "approveAgent", agentAddress: agent, agentName: "", nonce: ctx.now() };
+    checkAction(action);
+    ctx.db
+      .prepare("INSERT INTO chainsig_requests (id, piece_id, purpose, counter, action_json, state, created_ms, network) VALUES (?, ?, 'approve_agent', ?, ?, 'unsigned', ?, ?)")
+      .run(newId(), w.id, counter, JSON.stringify(action), ctx.now(), ctx.network);
+    approve = { counter, action };
+  }
+
+  // A stock position: the piece also signs moving its funding onto trade.xyz, right after the approval.
+  let move: { counter: number; action: ChainSigAction } | null = null;
+  const x = xyzMoveFor(ctx, w);
+  if (x && (approve || needsMove(ctx, w.id, x.positionId))) {
+    const action: ChainSigAction = { kind: "sendAsset", destination: account, sourceDex: "", destinationDex: XYZ_DEX, token: USDC_SPOT_TOKEN, amount: x.amount, nonce: ctx.now() + 1 };
+    checkAction(action);
+    const at = approve ? counter + 1 : counter;
+    ctx.db.transaction(() => {
+      ctx.db
+        .prepare("UPDATE chainsig_requests SET state = 'failed', error = 'replaced' WHERE piece_id = ? AND position_id = ? AND purpose = 'xyz_in' AND state IN ('unsigned', 'signed')")
+        .run(w.id, x.positionId);
+      ctx.db
+        .prepare("INSERT INTO chainsig_requests (id, piece_id, purpose, position_id, counter, action_json, state, created_ms, network) VALUES (?, ?, 'xyz_in', ?, ?, ?, 'unsigned', ?, ?)")
+        .run(newId(), w.id, x.positionId, at, JSON.stringify(action), ctx.now(), ctx.network);
+    })();
+    move = { counter: at, action };
+  }
+  return { label: body.label, account, contract: c.contract, approve, move };
 }
 
-/** The piece key's signature over the approve-agent action; checked here before it is kept. */
+/** The piece key's signatures over the waiting approve-agent action and move onto trade.xyz; checked here before they are kept. */
 export function approvePiece(ctx: Ctx, userId: string, body: z.infer<typeof ApproveBody>) {
   const c = chainSig(ctx);
   const w = ownChainSigPiece(ctx, userId, body.label);
+  if (!w.piece_key) throw new ApiError("wrong_state");
+  const key = hexToBytes(w.piece_key);
   const r = latest(ctx, w.id, "approve_agent");
-  if (!w.piece_key || !r || r.state !== "unsigned") throw new ApiError("wrong_state");
-  const action = JSON.parse(r.action_json) as ChainSigAction;
-  if (!verifyPieceAction(hexToBytes(w.piece_key), c.contract, r.counter, action, hexToBytes(body.signature), c.chain)) throw new ApiError("bad_signature");
-  ctx.db.prepare("UPDATE chainsig_requests SET signature = ?, state = 'signed' WHERE id = ?").run(body.signature, r.id);
+  const x = xyzMoveFor(ctx, w);
+  const m = x ? latestMove(ctx, w.id, x.positionId) : undefined;
+  const wantApprove = !w.agent && r?.state === "unsigned";
+  const wantMove = m?.state === "unsigned";
+  if (!wantApprove && !wantMove) throw new ApiError("wrong_state");
+  if (wantApprove !== (body.signature !== undefined) || wantMove !== (body.moveSignature !== undefined)) throw new ApiError("bad_request");
+  const check = (row: RequestRow, sig: string) => {
+    if (!verifyPieceAction(key, c.contract, row.counter, JSON.parse(row.action_json) as ChainSigAction, hexToBytes(sig), c.chain)) throw new ApiError("bad_signature");
+  };
+  if (wantApprove) check(r!, body.signature!);
+  if (wantMove) check(m!, body.moveSignature!);
+  ctx.db.transaction(() => {
+    if (wantApprove) ctx.db.prepare("UPDATE chainsig_requests SET signature = ?, state = 'signed' WHERE id = ?").run(body.signature, r!.id);
+    if (wantMove) ctx.db.prepare("UPDATE chainsig_requests SET signature = ?, state = 'signed' WHERE id = ?").run(body.moveSignature, m!.id);
+  })();
   return { ok: true as const, label: body.label };
 }
 
@@ -265,13 +353,27 @@ export async function approveAgentNow(ctx: Ctx, w: WalletRow): Promise<void> {
   ctx.db.prepare("UPDATE pieces SET agent = ? WHERE id = ?").run(agent, w.id);
 }
 
+/** Funded for a stock position: move the funding onto trade.xyz with the move the piece key signed. */
+export async function moveToXyzNow(ctx: Ctx, w: WalletRow, positionId: string): Promise<void> {
+  const r = latestMove(ctx, w.id, positionId);
+  if (r?.state === "done") return;
+  if (!r || r.state === "unsigned" || r.state === "failed") throw new ApiError("chainsig_sign_again");
+  if (r.state === "signed" && ctx.now() - r.created_ms > APPROVAL_TTL_MS) {
+    ctx.db.prepare("UPDATE chainsig_requests SET state = 'failed', error = 'too old' WHERE id = ?").run(r.id);
+    throw new ApiError("chainsig_sign_again");
+  }
+  await runRequest(ctx, w, r);
+}
+
 // ------------------------------------------------------------ going home
 
 export interface HomePlanRow {
   label: string;
   account: string;
   counter: number;
-  /** USDC to move from perps to spot first ("0" when nothing). */
+  /** USDC to move back from trade.xyz to the main perps balance first ("0" when nothing). */
+  fromXyz: string;
+  /** USDC to move from perps to spot ("0" when nothing); includes fromXyz. */
   toSpot: string;
   /** USDC to send from spot to a fresh deposit address of the private balance; null when too little to move. */
   send: string | null;
@@ -283,8 +385,9 @@ export function homeRequests(ctx: Ctx, homeId: string, pieceId: string): Request
 }
 
 /**
- * The piece key's signatures for going home, made in the browser. Only perps → spot and a
- * spot USDC send are taken, at the piece's next counters. The destination is the browser's
+ * The piece key's signatures for going home, made in the browser. Only trade.xyz → main
+ * perps (to the piece itself), perps → spot and a spot USDC send are taken, at the piece's
+ * next counters. The destination is the browser's
  * choice: a deposit address it asked OutLayer for, for the user's own private balance.
  */
 export async function takeHomeSignatures(ctx: Ctx, homeId: string, pieces: WalletRow[], body: z.infer<typeof HomeSigsBody>): Promise<void> {
@@ -297,16 +400,21 @@ export async function takeHomeSignatures(ctx: Ctx, homeId: string, pieces: Walle
     if (homeRequests(ctx, homeId, w.id).length > 0) throw new ApiError("wrong_state");
     const start = await counterOf(ctx, hexToBytes(w.piece_key));
     if (start === null) throw new ApiError("wrong_state");
+    // In order: trade.xyz -> main perps (to the piece itself), perps -> spot, then the USDC send last.
+    let prev = 0;
     p.signed.forEach((s, i) => {
       const a = s.action;
       const last = i === p.signed.length - 1;
-      const ok =
-        s.counter === start + i &&
-        ((a.kind === "usdClassTransfer" && !a.toPerp && !last) || (a.kind === "spotSend" && last && a.token === USDC_SPOT_TOKEN));
-      if (!ok) throw new ApiError("bad_request");
+      let at: number;
+      if (a.kind === "sendAsset" && a.sourceDex === XYZ_DEX && a.destinationDex === "" && a.destination.toLowerCase() === w.hl_address && a.token === USDC_SPOT_TOKEN) at = 1;
+      else if (a.kind === "usdClassTransfer" && !a.toPerp) at = 2;
+      else if (a.kind === "spotSend" && a.token === USDC_SPOT_TOKEN) at = 3;
+      else throw new ApiError("bad_request");
+      if (s.counter !== start + i || at <= prev || (at === 3) !== last) throw new ApiError("bad_request");
+      prev = at;
       checkAction(a);
       if (!verifyPieceAction(hexToBytes(w.piece_key!), c.contract, s.counter, a, hexToBytes(s.signature), c.chain)) throw new ApiError("bad_signature");
-      rows.push({ w, purpose: a.kind === "spotSend" ? "home_send" : "home_to_spot", counter: s.counter, action: a, signature: s.signature });
+      rows.push({ w, purpose: at === 1 ? "home_from_xyz" : at === 2 ? "home_to_spot" : "home_send", counter: s.counter, action: a, signature: s.signature });
     });
   }
   ctx.db.transaction(() => {
@@ -326,13 +434,16 @@ export async function homePlan(ctx: Ctx, w: WalletRow, minUsdc: number): Promise
   const counter = await counterOf(ctx, hexToBytes(w.piece_key));
   if (counter === null) throw new ApiError("wallet_missing");
   const perp = await ctx.hl.perp(w.hl_address);
+  const xyz = await ctx.hl.perp(w.hl_address, XYZ_DEX);
   const spot = await ctx.hl.spotUsdc(w.hl_address);
-  const toSpot = toUnits(perp.withdrawable, 8) > 0n ? perp.withdrawable : "0";
-  const total = toUnits(toSpot, 8) + toUnits(spot, 8);
+  const fromXyz = toUnits(xyz.withdrawable, 8) > 0n ? xyz.withdrawable : "0";
+  const perpUnits = toUnits(perp.withdrawable, 8) + toUnits(fromXyz, 8);
+  const toSpot = perpUnits > 0n ? fromUnits(perpUnits, 8) : "0";
+  const total = perpUnits + toUnits(spot, 8);
   let send: string | null = null;
-  if (perp.positions.length === 0 && total >= BigInt(minUsdc) * 10n ** 8n) {
+  if (perp.positions.length === 0 && xyz.positions.length === 0 && total >= BigInt(minUsdc) * 10n ** 8n) {
     const u = sendableUsdc(fromUnits(total, 8));
     if (u >= 2n * 10n ** 8n) send = fromUnits(u, 8);
   }
-  return { label: w.label!, account: w.hl_address, counter, toSpot, send };
+  return { label: w.label!, account: w.hl_address, counter, fromXyz, toSpot, send };
 }

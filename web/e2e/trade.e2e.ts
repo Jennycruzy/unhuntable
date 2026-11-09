@@ -61,3 +61,22 @@ test("a refusal from the plan is shown word for word", async ({ page, apiRequest
   await page.getByRole("button", { name: "Review" }).click();
   await expect(page.getByTestId("trade-error")).toHaveText("Price sources disagree right now, so we held off. Your stop is still set.");
 });
+
+test("US stocks: pick a trade.xyz market and the plan is asked for it by its trade.xyz name", async ({ page, apiRequests, signedIn }, info) => {
+  await signedIn();
+  await restoreKey(page);
+  await page.goto("/trade/");
+  await page.getByRole("radio", { name: "US stocks" }).check();
+  await page.getByLabel("Stock or index").selectOption("xyz:NVDA");
+  await expect(page.getByTestId("stocks-note")).toHaveText("Trades on trade.xyz. Stops fire only while US prices are live, 4:00 to 20:00 New York time on weekdays.");
+  await page.getByLabel("Size", { exact: true }).fill("40");
+  await shot(page, "trade-stocks", info.project.name);
+  await page.getByRole("button", { name: "Review" }).click();
+  await expect(page.getByTestId("review")).toBeVisible();
+  const plan = apiRequests.find((r) => r.url.endsWith("/api/plan"))!;
+  expect(JSON.parse(plan.body!)).toMatchObject({ coin: "xyz:NVDA", notionalUsd: 40 });
+  // back to crypto shows the coins again
+  await page.getByRole("button", { name: "Change" }).click();
+  await page.getByRole("radio", { name: "Crypto" }).check();
+  await expect(page.getByRole("radio", { name: "BTC" })).toBeChecked();
+});

@@ -7,10 +7,11 @@ import { num, pct, time, usd } from "../../lib/format";
 import { pieceAddress } from "../../lib/pieces";
 import { derivedAccount, pieceNumber } from "../../lib/chainsig";
 import { chainSigPieceKey } from "unhuntable-client/chainsig";
+import { ticker } from "unhuntable-client/hyperliquid";
 import { finishPieces } from "../../lib/trade";
 import { currentWallet } from "../../lib/wallet";
 import { api, useInterval } from "../../lib/session";
-import { GUARD_UNREACHABLE, STOP_COPY, hyperliquidPage, sealLevels, sealOpened } from "../../lib/stops";
+import { GUARD_UNREACHABLE, hyperliquidPage, sealLevels, sealOpened, stopCopy } from "../../lib/stops";
 import type { Me, Position } from "../../lib/types";
 import { usePiecesKey } from "../../lib/usekey";
 import { loadRecord, updateRecord, type DeviceRecord } from "../../lib/vault";
@@ -55,7 +56,7 @@ function PositionCard({ p, account, record, onRecord }: { p: Position; account: 
       const v = Number(value);
       await sealLevels(api, account, p.id, p, which === "stop" ? { stop: v, jitterBps: Object.values(levels)[0]?.jitterBps } : { tp: v });
       which === "stop" ? setStop("") : setTp("");
-      return which === "stop" ? STOP_COPY : "Your take-profit is sealed inside the guard, not on the exchange.";
+      return which === "stop" ? stopCopy(p.coin) : "Your take-profit is sealed inside the guard, not on the exchange.";
     });
 
   const close = (now: boolean) =>
@@ -69,7 +70,7 @@ function PositionCard({ p, account, record, onRecord }: { p: Position; account: 
       <div className="poshead">
         <div>
           <h2>
-            {p.coin} {p.side === "long" ? "Long" : "Short"} {usd(p.notionalUsd)}
+            {ticker(p.coin)} {p.side === "long" ? "Long" : "Short"} {usd(p.notionalUsd)}
           </h2>
           <p className="muted small">
             {p.leverage}x · {p.pieces.length} {p.pieces.length === 1 ? "piece" : "pieces"}
@@ -95,7 +96,7 @@ function PositionCard({ p, account, record, onRecord }: { p: Position; account: 
           <div key={x.shard} className="pc" data-testid="piece">
             <div className="pc-top">
               <strong>
-                {num(x.size)} {p.coin}
+                {num(x.size)} {ticker(p.coin)}
               </strong>
               <span className="muted">{x.entryPx === null ? "–" : usd(x.entryPx)}</span>
               {x.nearControlled && (
@@ -225,7 +226,7 @@ function Positions({ me }: { me: Me }) {
         ?.filter((p) => (p.needChainSig ?? []).length > 0)
         .map((p) => (
           <Notice key={`sign-${p.id}`} kind="error" testId="sign-again">
-            {p.coin}: a NEAR-controlled piece needs your pieces key to sign again.{" "}
+            {ticker(p.coin)}: a NEAR-controlled piece needs your pieces key to sign again.{" "}
             <button
               type="button"
               className="secondary"

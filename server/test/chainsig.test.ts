@@ -27,6 +27,7 @@ import { addUser, addWallet, harness, runFor, type Harness } from "./world.js";
 const WORDS = "legal winner thank year wave sausage worth useful legal winner thank yellow";
 const CONTRACT = "unhuntable.test";
 const ETH = { coin: "ETH", side: "long", notionalUsd: 30, leverage: 3, hiding: "normal" } as const;
+const NVDA = { coin: "xyz:nvda", side: "short", notionalUsd: 40, leverage: 10, hiding: "normal" } as const;
 
 // ------------------------------------------------------------ fake contract + MPC
 
@@ -55,6 +56,9 @@ function decodeAction(b: Uint8Array): { action: ChainSigAction; rest: Uint8Array
       action = { kind: "usdClassTransfer", amount, toPerp, nonce: u64() };
       break;
     }
+    case 2:
+      action = { kind: "sendAsset", destination: s(), sourceDex: s(), destinationDex: s(), token: s(), amount: s(), nonce: u64() };
+      break;
     case 4:
       action = { kind: "spotSend", destination: s(), token: s(), amount: s(), time: u64() };
       break;
@@ -163,7 +167,9 @@ function setup(balanceState: "none" | "locked" = "none"): S {
           ? { kind: "spotSend", destination: a.destination, token: a.token, amount: a.amount, time: a.time }
           : a.type === "approveAgent"
             ? { kind: "approveAgent", agentAddress: a.agentAddress, agentName: a.agentName, nonce: a.nonce }
-            : null;
+            : a.type === "sendAsset"
+              ? { kind: "sendAsset", destination: a.destination, sourceDex: a.sourceDex, destinationDex: a.destinationDex, token: a.token, amount: a.amount, nonce: a.nonce }
+              : null;
     return act ? recoverSigner(actionDigest(act), body.signature) : undefined;
   };
   const alice = addUser(h);
@@ -348,7 +354,7 @@ describe("going home with chain-signature pieces", () => {
     s.h.world.privateUnits = 0n;
     const start = (await post(s, "/api/home", {})).json();
     expect(start.unlockBatch).toBeNull();
-    expect(start.chainSig).toEqual([{ label: "piece:0", account, counter: 1, toSpot: "12.5", send: "11.5" }]);
+    expect(start.chainSig).toEqual([{ label: "piece:0", account, counter: 1, fromXyz: "0", toSpot: "12.5", send: "11.5" }]);
     const status = (await s.app.inject({ method: "GET", url: `/api/home/${start.homeId}`, headers: { cookie: s.cookie } })).json();
     expect(status).toMatchObject({ state: "unlock_wait", needChainSig: true });
 
@@ -403,6 +409,133 @@ describe("going home with chain-signature pieces", () => {
     // nothing to sign, so moving starts at once and the piece is skipped with its reason
     await runFor(s.h, 30_000);
     expect(state(s, "homes", start.homeId)).toBe("done");
+  });
+});
+
+// ------------------------------------------------------------ trade.xyz stocks
+
+describe("a stock position on trade.xyz", () => {
+  it("the piece key also signs moving its funding onto trade.xyz; NEAR signs both; the guard opens isolated", async () => {
+    const s = setup();
+    const created = (await post(s, "/api/positions", NVDA)).json();
+    expect(created.needChainSig).toEqual(["piece:0"]);
+    const id = created.positionId;
+    const plan = JSON.parse((s.h.db.prepare("SELECT plan_json, coin FROM positions WHERE id = ?").get(id) as any).plan_json);
+    expect(plan.coin).toBe("xyz:NVDA");
+    expect(plan.openLeverage).toBe(4);
+
+    const piece = chainSigPieceKey(key, 0);
+    const reg = (await post(s, "/api/chainsig/register", { label: "piece:0", publicKey: piece.publicKeyStr })).json();
+    // the move comes right after the approval, from the main balance to trade.xyz, inside the piece's own account
+    expect(reg.move.counter).toBe(reg.approve.counter + 1);
+    expect(reg.move.action).toMatchObject({ kind: "sendAsset", destination: reg.account, sourceDex: "", destinationDex: "xyz", token: USDC_SPOT_TOKEN, amount: String(plan.xyzMoveUsd[0]) });
+    // both signatures are needed
+    const sigA = bytesToHex(signPieceAction(piece, CONTRACT, reg.approve.counter, reg.approve.action));
+    const sigM = bytesToHex(signPieceAction(piece, CONTRACT, reg.move.counter, reg.move.action));
+    expect((await post(s, "/api/chainsig/approve", { label: "piece:0", signature: sigA })).json().error).toBe("bad_request");
+    expect((await post(s, "/api/chainsig/approve", { label: "piece:0", signature: sigA, moveSignature: sigA })).json().error).toBe("bad_signature");
+    expect((await post(s, "/api/chainsig/approve", { label: "piece:0", signature: sigA, moveSignature: sigM })).statusCode).toBe(200);
+
+    expect((await post(s, `/api/positions/${id}/continue`)).json()).toMatchObject({ state: "funding", needChainSig: [] });
+    await runFor(s.h, 1_300_000);
+    expect(state(s, "positions", id)).toBe("policy_wait");
+    expect((await post(s, "/api/policy/confirm", { positionId: id, txHashes: ["t"] })).statusCode).toBe(200);
+    await runFor(s.h, 1_300_000);
+    expect(state(s, "positions", id)).toBe("open");
+
+    expect(s.chain.calls.map((c) => c.method)).toEqual(["add_piece", "sign", "sign"]);
+    const ex = s.h.world.calls.filter((c) => c.host === "hl.test" && c.path === "/exchange").map((c) => c.body);
+    expect(ex.map((b) => b.action.type)).toEqual(["approveAgent", "sendAsset"]);
+    expect(s.h.world.exchangeSigner!(ex[1])).toBe(reg.account);
+    // the funding is on trade.xyz now; a dollar and change stays on the main balance
+    const xyz = Number(s.h.world.perpOf(reg.account, "xyz").marginSummary.accountValue);
+    expect(xyz).toBe(plan.xyzMoveUsd[0]);
+    expect(Number(s.h.world.perpOf(reg.account).marginSummary.accountValue)).toBeCloseTo(plan.pieces[0].fundingUsd - 0.32 - plan.xyzMoveUsd[0], 6);
+    // the guard was asked for isolated leverage 4 and the open on xyz:NVDA
+    const inner = s.h.world.calls.map((c) => c.inner).filter((x) => x && (x.op === "leverage" || x.op === "open"));
+    expect(inner.map((x) => [x.op, x.coin, x.leverage ?? x.side])).toEqual([
+      ["leverage", "xyz:NVDA", 4],
+      ["open", "xyz:NVDA", "short"],
+    ]);
+  });
+
+  it("a piece already set up signs only the move, at its current counter", async () => {
+    const s = setup("locked");
+    const { piece, account } = nearPiece(s, 0, 0);
+    s.h.db.prepare("UPDATE pieces SET created_ms = 0").run();
+    const created = (await post(s, "/api/positions", NVDA)).json();
+    expect(created.needChainSig).toEqual(["piece:0"]);
+    const reg = (await post(s, "/api/chainsig/register", { label: "piece:0", publicKey: piece.publicKeyStr })).json();
+    expect(reg.approve).toBeNull();
+    expect(reg.move.counter).toBe(1);
+    expect(reg.move.action.destination).toBe(account);
+    const sigM = bytesToHex(signPieceAction(piece, CONTRACT, 1, reg.move.action));
+    expect((await post(s, "/api/chainsig/approve", { label: "piece:0", moveSignature: sigM })).statusCode).toBe(200);
+    const c = (await post(s, `/api/positions/${created.positionId}/continue`)).json();
+    expect(c.needChainSig).toEqual([]);
+    // the private balance's list learns the piece first (the test made the piece by hand)
+    if (c.policyBatch) expect((await post(s, "/api/policy/confirm", { positionId: created.positionId, txHashes: ["t"] })).statusCode).toBe(200);
+    await runFor(s.h, 1_300_000);
+    expect(s.chain.calls.map((c) => c.method)).toEqual(["sign"]);
+    expect(["opening", "open"]).toContain(state(s, "positions", created.positionId));
+  });
+
+  it("a crypto position needs no move", async () => {
+    const s = setup();
+    const created = (await post(s, "/api/positions", ETH)).json();
+    const piece = chainSigPieceKey(key, 0);
+    const reg = (await post(s, "/api/chainsig/register", { label: "piece:0", publicKey: piece.publicKeyStr })).json();
+    expect(reg.move).toBeNull();
+    expect(created.state).toBe("planned");
+  });
+
+  it("is refused when chain-signature pieces are off, and for markets with no outside price", async () => {
+    const s = setup();
+    expect((await post(s, "/api/positions", { ...NVDA, coin: "xyz:JIO" })).statusCode).toBe(400);
+    s.h.ctx.chainsig = undefined;
+    const r = await post(s, "/api/positions", NVDA);
+    expect(r.json().error).toBe("stocks_need_near");
+    expect(s.h.db.prepare("SELECT COUNT(*) AS n FROM positions").get()).toEqual({ n: 0 });
+  });
+});
+
+describe("going home from trade.xyz", () => {
+  it("moves trade.xyz back to the main balance first, then perps to spot, then the send", async () => {
+    const s = setup("locked");
+    const { piece, account } = nearPiece(s, 0, 0.5);
+    s.h.world.setPerp(account, 12, 12, [], "xyz");
+    s.h.world.privateUnits = 0n;
+    const start = (await post(s, "/api/home", {})).json();
+    const plan = start.chainSig[0];
+    expect(plan).toEqual({ label: "piece:0", account, counter: 1, fromXyz: "12", toSpot: "12.5", send: "11.5" });
+    const t = s.h.clock.t;
+    const back: ChainSigAction = { kind: "sendAsset", destination: account, sourceDex: "xyz", destinationDex: "", token: USDC_SPOT_TOKEN, amount: "12", nonce: t - 1 };
+    const rest = signHome({ ...plan, counter: 2 }, piece, t);
+    const signed = [{ counter: 1, action: back, signature: bytesToHex(signPieceAction(piece, CONTRACT, 1, back)) }, ...rest.signed];
+
+    // trade.xyz money may only go back to the piece itself, and only first
+    const away: ChainSigAction = { ...back, destination: "0x" + "77".repeat(20) };
+    const bad = [{ counter: 1, action: away, signature: bytesToHex(signPieceAction(piece, CONTRACT, 1, away)) }, ...rest.signed];
+    expect((await post(s, `/api/home/${start.homeId}/chainsig`, { pieces: [{ label: "piece:0", signed: bad }] })).json().error).toBe("bad_request");
+
+    const r = await post(s, `/api/home/${start.homeId}/chainsig`, { pieces: [{ label: "piece:0", signed }] });
+    expect(r.statusCode, r.body).toBe(200);
+    await runFor(s.h, 120_000);
+    expect(state(s, "homes", start.homeId)).toBe("done");
+    const posted = s.h.world.calls.filter((c) => c.host === "hl.test" && c.path === "/exchange").map((c) => c.body);
+    expect(posted.map((b) => b.action.type)).toEqual(["sendAsset", "usdClassTransfer", "spotSend"]);
+    expect(posted.map((b) => s.h.world.exchangeSigner!(b))).toEqual([account, account, account]);
+    expect(s.h.world.privateUnits).toBe(11_500_000n);
+    const steps = (await s.app.inject({ method: "GET", url: `/api/home/${start.homeId}`, headers: { cookie: s.cookie } })).json().steps.map((x: any) => x.step);
+    expect(steps).toEqual(["from_xyz", "to_spot", "send", "arrive"]);
+  });
+
+  it("a piece still holding a trade.xyz position is not sent home", async () => {
+    const s = setup("locked");
+    const { account } = nearPiece(s, 0, 0);
+    s.h.world.setPerp(account, 20, 5, [{ position: { coin: "xyz:NVDA", szi: "-0.1", entryPx: "178", liquidationPx: "220" } }], "xyz");
+    const start = (await post(s, "/api/home", {})).json();
+    expect(start.chainSig[0].send).toBeNull();
   });
 });
 

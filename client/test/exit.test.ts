@@ -6,7 +6,7 @@ import { secp256k1 } from "@noble/curves/secp256k1";
 import { bytesToHex } from "@noble/hashes/utils";
 import { base58 } from "@scure/base";
 import { actionDigest, chainSigMessage, chainSigPieceKey, ethAddress, recoverSigner, type ChainSigAction } from "../src/chainsig.js";
-import { l1TypedData, typedDataDigest } from "../src/hyperliquid.js";
+import { USDC_SPOT_TOKEN, l1TypedData, typedDataDigest } from "../src/hyperliquid.js";
 
 // Test-only phrase, never used for money.
 const WORDS = "legal winner thank year wave sausage worth useful legal winner thank yellow";
@@ -31,6 +31,8 @@ interface World {
   noOutlayerPiece?: boolean;
   /** Answers NEAR RPC calls first when set (NEAR-controlled piece tests). */
   near?: (body: any) => unknown | undefined;
+  /** The piece also holds a short NVDA position and 20 USDC on trade.xyz. */
+  xyz?: boolean;
 }
 
 interface Call {
@@ -45,6 +47,8 @@ function world(w: World = {}) {
   const calls: Call[] = [];
   let open = true;
   let movedToSpot = false;
+  let xyzOpen = w.xyz ?? false;
+  let xyzBack = false;
   let privateBalance = 1_000_000n; // 1 USDC already there
   let denied = w.deniedSigns ?? 0;
   let deniedW = w.deniedWithdraws ?? 0;
@@ -69,12 +73,20 @@ function world(w: World = {}) {
       return json(w.keyOnAccount === false ? { error: { name: "HANDLER_ERROR" } } : { result: { permission: "FullAccess", nonce: 1 } });
     }
     if (url.startsWith("https://api.hyperliquid.xyz/info")) {
-      if (body.type === "allMids") return json({ ETH: "2000.0", BTC: "100000.0" });
+      if (body.type === "allMids") return json(body.dex === "xyz" ? { "xyz:NVDA": "178.0" } : { ETH: "2000.0", BTC: "100000.0" });
+      if (body.type === "clearinghouseState" && body.dex === "xyz") {
+        if (!w.xyz) return json({ assetPositions: [], marginSummary: { accountValue: "0.0" }, withdrawable: "0.0" });
+        return json({
+          assetPositions: xyzOpen ? [{ type: "oneWay", position: { coin: "xyz:NVDA", szi: "-0.1", entryPx: "180.0" } }] : [],
+          marginSummary: { accountValue: xyzBack ? "0.0" : "20.0" },
+          withdrawable: xyzOpen || xyzBack ? "0.0" : "20.0",
+        });
+      }
       if (body.type === "clearinghouseState") {
         return json({
           assetPositions: open ? [{ type: "oneWay", position: { coin: "ETH", szi: "0.0125", entryPx: "1990.0" } }] : [],
           marginSummary: { accountValue: "25.5" },
-          withdrawable: movedToSpot ? "0.0" : open ? "0.0" : "25.5",
+          withdrawable: movedToSpot ? "0.0" : open ? "0.0" : xyzBack ? "45.5" : "25.5",
         });
       }
       if (body.type === "spotClearinghouseState") {
@@ -83,10 +95,12 @@ function world(w: World = {}) {
     }
     if (url === "https://api.hyperliquid.xyz/exchange") {
       if (body.action.type === "order") {
-        open = false;
+        if (body.action.orders[0].a >= 110_000) xyzOpen = false;
+        else open = false;
         return json({ status: "ok", response: { type: "order", data: { statuses: [{ filled: { totalSz: "0.0125", avgPx: "1999.5", oid: 1 } }] } } });
       }
       if (body.action.type === "usdClassTransfer") movedToSpot = true;
+      if (body.action.type === "sendAsset") xyzBack = true;
       if (body.action.type === "spotSend") privateBalance += 24_500_000n;
       return json({ status: "ok", response: { type: "default" } });
     }
@@ -329,6 +343,7 @@ describe("exit flow, NEAR-controlled pieces", () => {
       const toPerp = b[o++] === 1;
       return { action: { kind: "usdClassTransfer", amount, toPerp, nonce: u64() }, end: o };
     }
+    if (b[0] === 2) return { action: { kind: "sendAsset", destination: str(), sourceDex: str(), destinationDex: str(), token: str(), amount: str(), nonce: u64() }, end: o };
     if (b[0] === 4) return { action: { kind: "spotSend", destination: str(), token: str(), amount: str(), time: u64() }, end: o };
     throw new Error(`tag ${b[0]}`);
   }
@@ -418,6 +433,23 @@ describe("exit flow, NEAR-controlled pieces", () => {
     const sent = JSON.stringify(w.calls);
     expect(sent).not.toContain(bytesToHex(piece.secret));
     for (const word of WORDS.split(" ")) expect(sent).not.toContain(`"${word}"`);
+  });
+
+  it("closes trade.xyz positions too and moves that money back to the main balance first", async () => {
+    const n = nearFake();
+    const w = world({ noOutlayerPiece: true, near: n.near, xyz: true, spotTotal: "45.5" });
+    const t = io(["yes"]);
+    const r = await runExit({ ...base(w.f, t.io), relay: { account: "relay.near", key: RELAY_SECRET } });
+    expect(n.signed.map((a) => a.kind)).toEqual(["approveAgent", "sendAsset", "usdClassTransfer", "spotSend"]);
+    expect(n.signed[1]).toMatchObject({ destination: ACCOUNT_HL, sourceDex: "xyz", destinationDex: "", token: USDC_SPOT_TOKEN, amount: "20" });
+    expect(n.signed[2]).toMatchObject({ amount: "45.5", toPerp: false });
+    const orders = w.calls.filter((c) => c.url.endsWith("/exchange") && c.body.action.type === "order").map((c) => c.body.action.orders[0]);
+    // ETH sold, NVDA bought back on trade.xyz (asset 110002), both reduce-only
+    expect(orders.map((o) => [o.a, o.b, o.r])).toEqual([
+      [1, false, true],
+      [110_002, true, true],
+    ]);
+    expect(r).toMatchObject({ closed: 2, movedUsdc: "44.5" });
   });
 
   it("without a relay, says what it needs and leaves the piece as it is", async () => {

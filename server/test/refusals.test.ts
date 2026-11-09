@@ -24,6 +24,7 @@ const CODES = [
   "sealed_call_required",
   "chainsig_refused",
   "chainsig_sign_again",
+  "stocks_need_near",
 ];
 
 describe("refusal map complete", () => {

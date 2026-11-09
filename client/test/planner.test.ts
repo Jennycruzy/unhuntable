@@ -2,8 +2,13 @@ import { createHash } from "node:crypto";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import {
   LADDER,
+  ROUTE_FEE_USD,
+  TRADING_FEE_RESERVE,
+  XYZ_KEEP_USD,
   fundingNeed,
   isPlanError,
+  isolatedLeverage,
+  ladderAmount,
   maintenanceRatio,
   pieceEquity,
   plan,
@@ -230,15 +235,58 @@ describe("plan_refusals", () => {
 });
 
 describe("no_inter_piece_transfer", () => {
+  // xyzMoveUsd is a move inside one piece's own account (main perps -> trade.xyz), never between pieces.
   it("plan and piece carry only the listed fields", () => {
     expectTypeOf<keyof Plan>().toEqualTypeOf<
-      "coin" | "side" | "leverage" | "totalSize" | "pieces" | "totalFundingUsd" | "estFeesUsd" | "vrfHex"
+      "coin" | "side" | "leverage" | "openLeverage" | "xyzMoveUsd" | "totalSize" | "pieces" | "totalFundingUsd" | "estFeesUsd" | "vrfHex"
     >();
     expectTypeOf<keyof Piece>().toEqualTypeOf<"index" | "size" | "notionalUsd" | "fundingUsd" | "entryOffsetMs" | "reserveUsd">();
     const p = ok(plan(eth(), VRF_A));
-    expect(Object.keys(p).sort()).toEqual(["coin", "estFeesUsd", "leverage", "pieces", "side", "totalFundingUsd", "totalSize", "vrfHex"]);
+    expect(Object.keys(p).sort()).toEqual(["coin", "estFeesUsd", "leverage", "openLeverage", "pieces", "side", "totalFundingUsd", "totalSize", "vrfHex", "xyzMoveUsd"]);
     for (const x of p.pieces) {
       expect(Object.keys(x).sort()).toEqual(["entryOffsetMs", "fundingUsd", "index", "notionalUsd", "reserveUsd", "size"]);
     }
+  });
+});
+
+describe("trade.xyz pieces", () => {
+  const nvda = { coin: "xyz:NVDA", side: "short" as const, notionalUsd: 40, leverage: 10, hiding: "normal" as const, markPx: 178.28, szDecimals: 3, maxLeverage: 20 };
+
+  it("isolated leverage keeps liquidation at least 18% away", () => {
+    expect(isolatedLeverage(10, 20)).toBe(4); // 1/4 - 1/40 = 22.5%
+    expect(isolatedLeverage(10, 50)).toBe(5); // 1/5 - 1/100 = 19%
+    expect(isolatedLeverage(3, 20)).toBe(3);
+    expect(isolatedLeverage(10, 1)).toBe(1);
+    for (const max of [1, 3, 5, 10, 20, 25, 50]) {
+      for (let lev = 1; lev <= Math.min(10, max); lev++) {
+        const l = isolatedLeverage(lev, max);
+        if (l > 1) expect(1 / l - maintenanceRatio(max)).toBeGreaterThanOrEqual(0.18);
+      }
+    }
+  });
+
+  it("plans with isolated margin, a move onto trade.xyz and the canonical name", () => {
+    const p = plan({ ...nvda, coin: "XYZ:nvda" }, new Uint8Array(32).fill(7));
+    if (isPlanError(p)) throw new Error(p.message);
+    expect(p.coin).toBe("xyz:NVDA");
+    expect(p.openLeverage).toBe(4);
+    const x = p.pieces[0];
+    // margin at 4x, fees, route fee and the dollar left on the main balance
+    expect(x.fundingUsd).toBe(ladderAmount(x.notionalUsd / 4 + TRADING_FEE_RESERVE * x.notionalUsd + ROUTE_FEE_USD + XYZ_KEEP_USD));
+    expect(p.xyzMoveUsd).toEqual([x.fundingUsd - XYZ_KEEP_USD]);
+    // what is moved covers the isolated margin and the fees
+    expect(p.xyzMoveUsd![0]).toBeGreaterThanOrEqual(x.notionalUsd / 4 + TRADING_FEE_RESERVE * x.notionalUsd);
+  });
+
+  it("crypto plans are unchanged: cross margin, no move", () => {
+    const p = plan({ ...nvda, coin: "ETH", markPx: 3000, szDecimals: 4, maxLeverage: 25 }, new Uint8Array(32).fill(7));
+    if (isPlanError(p)) throw new Error(p.message);
+    expect(p.openLeverage).toBe(10);
+    expect(p.xyzMoveUsd).toBeNull();
+  });
+
+  it("refuses markets it does not trade", () => {
+    const p = plan({ ...nvda, coin: "xyz:JIO" }, new Uint8Array(32).fill(7));
+    expect(isPlanError(p) && p.code).toBe("bad_input");
   });
 });

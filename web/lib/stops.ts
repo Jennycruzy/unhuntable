@@ -82,6 +82,13 @@ export async function sealLevels(api: Api, account: string, positionId: string, 
 }
 
 export const STOP_COPY = "Your stop is not on the exchange. It lives sealed inside the guard and fires when at least 3 of 7 price sources agree.";
+export const STOCK_STOP_COPY =
+  "Your stop is not on the exchange. It lives sealed inside the guard and fires when at least 3 prices agree, 2 of them from outside trade.xyz's order book (its oracle, Yahoo, Nasdaq).";
+
+/** What the sealed stop waits for, by market. */
+export function stopCopy(coin: string): string {
+  return coin.startsWith("xyz:") ? STOCK_STOP_COPY : STOP_COPY;
+}
 
 export { hyperliquidPage } from "./links";
 

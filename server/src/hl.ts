@@ -67,8 +67,9 @@ export class Hyperliquid {
     return this.post("/info", body);
   }
 
-  async allMids(): Promise<Record<string, number>> {
-    const j = await this.info({ type: "allMids" });
+  /** Mids of one market list: "" for Hyperliquid's own, "xyz" for trade.xyz (keys like "xyz:NVDA"). */
+  async allMids(dex = ""): Promise<Record<string, number>> {
+    const j = await this.info(dex ? { type: "allMids", dex } : { type: "allMids" });
     const out: Record<string, number> = {};
     for (const [k, v] of Object.entries(j ?? {})) {
       const n = num(v);
@@ -77,15 +78,16 @@ export class Hyperliquid {
     return out;
   }
 
-  async meta(coin: string): Promise<CoinMeta> {
-    const j = await this.info({ type: "meta" });
+  async meta(coin: string, dex = ""): Promise<CoinMeta> {
+    const j = await this.info(dex ? { type: "meta", dex } : { type: "meta" });
     const m = (j?.universe ?? []).find((u: any) => u?.name === coin);
     if (!m || !Number.isInteger(m.szDecimals) || !(m.maxLeverage > 0)) throw new HyperliquidError(`Hyperliquid meta has no ${coin}.`);
     return { name: m.name, szDecimals: m.szDecimals, maxLeverage: m.maxLeverage };
   }
 
-  async perp(user: string): Promise<PerpState> {
-    const j = await this.info({ type: "clearinghouseState", user });
+  /** A user's perps on one market list: "" for Hyperliquid's own, "xyz" for trade.xyz. */
+  async perp(user: string, dex = ""): Promise<PerpState> {
+    const j = await this.info(dex ? { type: "clearinghouseState", user, dex } : { type: "clearinghouseState", user });
     return {
       withdrawable: String(j?.withdrawable ?? "0"),
       accountValue: num(j?.marginSummary?.accountValue) ?? 0,

@@ -105,21 +105,56 @@ pub fn round_sz(sz: f64, sz_decimals: u32) -> f64 {
 
 // ---------------------------------------------------------------- actions
 
-pub struct Asset {
-    pub coin: &'static str,
-    pub index: u64,
-    pub sz_decimals: u32,
+/// Where a market's outside prices come from (trade.xyz stocks and indexes).
+pub struct Outside {
+    /// Yahoo Finance chart symbol, URL-encoded.
+    pub yahoo: &'static str,
+    /// Nasdaq quote symbol and asset class, when Nasdaq has one.
+    pub nasdaq: Option<(&'static str, &'static str)>,
 }
 
-/// Perp universe indexes, checked against Hyperliquid /info meta.
+pub struct Asset {
+    /// Hyperliquid's name: "BTC" on the main list, "xyz:NVDA" on trade.xyz.
+    pub coin: &'static str,
+    /// Asset id in orders: the universe index on the main list, 110000 + index on trade.xyz.
+    pub index: u64,
+    pub sz_decimals: u32,
+    /// "" for Hyperliquid's own list, "xyz" for trade.xyz (HIP-3).
+    pub dex: &'static str,
+    /// None for crypto (seven exchanges); Some for stocks (Hyperliquid oracle, Yahoo, Nasdaq).
+    pub outside: Option<Outside>,
+}
+
+const fn crypto(coin: &'static str, index: u64, sz_decimals: u32) -> Asset {
+    Asset { coin, index, sz_decimals, dex: "", outside: None }
+}
+
+const fn xyz(coin: &'static str, i: u64, sz_decimals: u32, yahoo: &'static str, nasdaq: Option<(&'static str, &'static str)>) -> Asset {
+    Asset { coin, index: 110_000 + i, sz_decimals, dex: "xyz", outside: Some(Outside { yahoo, nasdaq }) }
+}
+
+/// Perp universe indexes, checked against Hyperliquid /info meta (trade.xyz: meta with dex "xyz").
 pub const ASSETS: &[Asset] = &[
-    Asset { coin: "BTC", index: 0, sz_decimals: 5 },
-    Asset { coin: "ETH", index: 1, sz_decimals: 4 },
-    Asset { coin: "SOL", index: 5, sz_decimals: 2 },
+    crypto("BTC", 0, 5),
+    crypto("ETH", 1, 4),
+    crypto("SOL", 5, 2),
+    xyz("xyz:XYZ100", 0, 4, "%5ENDX", Some(("NDX", "index"))),
+    xyz("xyz:TSLA", 1, 3, "TSLA", Some(("TSLA", "stocks"))),
+    xyz("xyz:NVDA", 2, 3, "NVDA", Some(("NVDA", "stocks"))),
+    xyz("xyz:INTC", 5, 2, "INTC", Some(("INTC", "stocks"))),
+    xyz("xyz:META", 8, 3, "META", Some(("META", "stocks"))),
+    xyz("xyz:AAPL", 9, 3, "AAPL", Some(("AAPL", "stocks"))),
+    xyz("xyz:MSFT", 10, 3, "MSFT", Some(("MSFT", "stocks"))),
+    xyz("xyz:GOOGL", 12, 3, "GOOGL", Some(("GOOGL", "stocks"))),
+    xyz("xyz:AMZN", 13, 3, "AMZN", Some(("AMZN", "stocks"))),
+    xyz("xyz:AMD", 14, 3, "AMD", Some(("AMD", "stocks"))),
+    xyz("xyz:MU", 15, 3, "MU", Some(("MU", "stocks"))),
+    xyz("xyz:SP500", 52, 3, "%5EGSPC", None),
 ];
 
+/// The market for a coin name, any case ("eth", "XYZ:NVDA").
 pub fn asset(coin: &str) -> Option<&'static Asset> {
-    ASSETS.iter().find(|a| a.coin == coin)
+    ASSETS.iter().find(|a| a.coin.eq_ignore_ascii_case(coin))
 }
 
 /// One reduce-only IOC order. The guard composes every field itself; no
@@ -239,6 +274,114 @@ pub fn agreed(prices: &[f64]) -> Option<Vec<f64>> {
     if a.len() >= MIN_AGREE { Some(a) } else { None }
 }
 
+/// Outside prices count only while this fresh.
+pub const MAX_OUTSIDE_AGE_S: u64 = 300;
+/// A stock needs at least this many agreeing sources that are not the trade.xyz order book.
+pub const MIN_OUTSIDE: usize = 2;
+
+/// Agreement for a stock or index: (price, is_outside) pairs. At least MIN_AGREE sources
+/// within MAX_SPREAD of the median, and at least MIN_OUTSIDE of those agreeing must be
+/// outside the order book (trade.xyz's oracle, Yahoo, Nasdaq). Moving the book alone
+/// can therefore never make a stop fire. None otherwise, for example when the US market
+/// is shut and the outside prices are stale.
+pub fn agreed_outside(prices: &[(f64, bool)]) -> Option<Vec<f64>> {
+    let ok: Vec<(f64, bool)> = prices.iter().cloned().filter(|(p, _)| p.is_finite() && *p > 0.0).collect();
+    if ok.len() < MIN_AGREE {
+        return None;
+    }
+    let m = median(&ok.iter().map(|x| x.0).collect::<Vec<_>>());
+    let a: Vec<(f64, bool)> = ok.into_iter().filter(|(p, _)| ((p - m) / m).abs() <= MAX_SPREAD).collect();
+    if a.len() >= MIN_AGREE && a.iter().filter(|x| x.1).count() >= MIN_OUTSIDE {
+        Some(a.into_iter().map(|x| x.0).collect())
+    } else {
+        None
+    }
+}
+
+/// The last price in a Yahoo chart answer and its time (unix seconds): the last minute
+/// candle with a close, pre- and after-market included.
+pub fn yahoo_last(v: &serde_json::Value) -> Option<(f64, u64)> {
+    let r = &v["chart"]["result"][0];
+    let ts = r["timestamp"].as_array()?;
+    let cl = r["indicators"]["quote"][0]["close"].as_array()?;
+    ts.iter().zip(cl.iter()).rev().find_map(|(t, c)| Some((c.as_f64().filter(|x| x.is_finite() && *x > 0.0)?, t.as_u64()?)))
+}
+
+/// Nasdaq's "$178.125" or "27,997.14".
+pub fn nasdaq_price(s: &str) -> Option<f64> {
+    s.trim().trim_start_matches('$').replace(',', "").parse().ok().filter(|x: &f64| x.is_finite() && *x > 0.0)
+}
+
+fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = y - era * 400;
+    let mp = (m as i64 + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + d as i64 - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146097 + doe - 719468
+}
+
+/// Day of month of the n-th Sunday of a month.
+fn nth_sunday(y: i64, m: u32, n: u32) -> u32 {
+    let wd = (days_from_civil(y, m, 1) + 4).rem_euclid(7) as u32; // 0 = Sunday
+    1 + (7 - wd) % 7 + 7 * (n - 1)
+}
+
+/// US Eastern daylight time: second Sunday of March to first Sunday of November (2 am local).
+fn us_eastern_dst(y: i64, m: u32, d: u32, hour: u32) -> bool {
+    match m {
+        4..=10 => true,
+        3 => {
+            let s = nth_sunday(y, 3, 2);
+            d > s || (d == s && hour >= 2)
+        }
+        11 => {
+            let s = nth_sunday(y, 11, 1);
+            d < s || (d == s && hour < 2)
+        }
+        _ => false,
+    }
+}
+
+/// Nasdaq's lastTradeTimestamp, "Nov 9, 2026 3:25 PM ET" (any leading words), as unix seconds.
+pub fn nasdaq_time(s: &str) -> Option<u64> {
+    const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    let w: Vec<&str> = s.split_whitespace().collect();
+    let i = w.iter().position(|x| MONTHS.contains(&x.trim_end_matches('.')))?;
+    let rest = w.get(i..i + 6)?;
+    let m = MONTHS.iter().position(|x| *x == rest[0].trim_end_matches('.'))? as u32 + 1;
+    let d: u32 = rest[1].trim_end_matches(',').parse().ok()?;
+    let y: i64 = rest[2].parse().ok()?;
+    let (hh, mm) = rest[3].split_once(':')?;
+    let (mut h, mi): (u32, u32) = (hh.parse().ok()?, mm.parse().ok()?);
+    if h == 0 || h > 12 || mi > 59 || d == 0 || d > 31 || rest[5] != "ET" {
+        return None;
+    }
+    match rest[4] {
+        "AM" if h == 12 => h = 0,
+        "AM" => {}
+        "PM" if h != 12 => h += 12,
+        "PM" => {}
+        _ => return None,
+    }
+    let offset = if us_eastern_dst(y, m, d, h) { 4 } else { 5 };
+    let secs = days_from_civil(y, m, d) * 86400 + ((h + offset) as i64) * 3600 + mi as i64 * 60;
+    u64::try_from(secs).ok()
+}
+
+/// Fresh enough to count: not older than MAX_OUTSIDE_AGE_S (a little clock skew allowed).
+pub fn fresh(t: u64, now_s: u64) -> bool {
+    t <= now_s + 120 && now_s.saturating_sub(t) <= MAX_OUTSIDE_AGE_S
+}
+
+/// trade.xyz's oracle price for a market from metaAndAssetCtxs (dex "xyz").
+pub fn oracle_px(meta_and_ctxs: &serde_json::Value, coin: &str) -> Option<f64> {
+    let u = meta_and_ctxs[0]["universe"].as_array()?;
+    let i = u.iter().position(|x| x["name"].as_str() == Some(coin))?;
+    num_of(&meta_and_ctxs[1][i]["oraclePx"]).filter(|x| *x > 0.0)
+}
+
 // ---------------------------------------------------------------- stops
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq)]
@@ -344,8 +487,7 @@ pub fn check_outer_shard(outer: &serde_json::Value, inner: &serde_json::Value) -
 /// A stop or take-profit from input: supported coin, long or short, positive trigger and size.
 pub fn check_trigger(v: &serde_json::Value, what: &str) -> Result<Stop, String> {
     let mut st: Stop = serde_json::from_value(v.clone()).map_err(|_| format!("{what} missing or malformed"))?;
-    st.coin = st.coin.to_uppercase();
-    asset(&st.coin).ok_or("unsupported coin")?;
+    st.coin = asset(&st.coin).ok_or("unsupported coin")?.coin.to_string();
     if (st.side != "long" && st.side != "short") || !(st.trigger > 0.0 && st.trigger.is_finite()) || !(st.size > 0.0 && st.size.is_finite()) {
         return Err(format!("bad {what}"));
     }
@@ -644,7 +786,8 @@ pub fn update_leverage_action(a: &Asset, leverage: u64) -> V {
     V::M(vec![
         ("type".into(), s("updateLeverage")),
         ("asset".into(), V::U(a.index)),
-        ("isCross".into(), V::B(true)),
+        // trade.xyz markets are isolated margin (several allow nothing else)
+        ("isCross".into(), V::B(a.dex.is_empty())),
         ("leverage".into(), V::U(leverage)),
     ])
 }

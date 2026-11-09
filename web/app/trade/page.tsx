@@ -1,12 +1,13 @@
 "use client";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Facts, Notice, Screen, SignedIn } from "../../components/ui";
 import { sentence } from "../../lib/api";
 import { DEFAULT_JITTER_BPS } from "../../lib/config";
 import { usd } from "../../lib/format";
 import { api, useInterval } from "../../lib/session";
-import { STOP_COPY, checkLevel, keepUntilOpen, sealOpened } from "../../lib/stops";
+import { checkLevel, keepUntilOpen, sealOpened, stopCopy } from "../../lib/stops";
+import { ASSETS, asset, ticker } from "unhuntable-client/hyperliquid";
 import { approveBatch, checkTrade, openPosition, reviewRows } from "../../lib/trade";
 import type { Balance, Coin, Hiding, Me, PlanAnswer, PositionAnswer, Side, TradeRequest } from "../../lib/types";
 import { usePiecesKey } from "../../lib/usekey";
@@ -22,6 +23,43 @@ function Choice<T extends string>({ name, value, options, onChange }: { name: st
         </label>
       ))}
     </div>
+  );
+}
+
+type Group = "crypto" | "stocks";
+const inGroup = (g: Group) => ASSETS.filter((a) => (g === "crypto" ? a.dex === "" : a.dex !== ""));
+
+/** Crypto on Hyperliquid, or US stocks and indexes on trade.xyz. */
+function Market({ coin, onChange }: { coin: Coin; onChange: (c: Coin) => void }) {
+  const group: Group = asset(coin)?.dex ? "stocks" : "crypto";
+  return (
+    <>
+      <Choice
+        name="Market"
+        value={group}
+        onChange={(g) => onChange(inGroup(g)[0].coin)}
+        options={[
+          { v: "crypto", label: "Crypto" },
+          { v: "stocks", label: "US stocks" },
+        ]}
+      />
+      {group === "crypto" ? (
+        <Choice name="Coin" value={coin} onChange={onChange} options={inGroup("crypto").map((a) => ({ v: a.coin, label: a.label }))} />
+      ) : (
+        <>
+          <select id="market" aria-label="Stock or index" value={coin} onChange={(e) => onChange(e.target.value)}>
+            {inGroup("stocks").map((a) => (
+              <option key={a.coin} value={a.coin}>
+                {ticker(a.coin)} · {a.label}
+              </option>
+            ))}
+          </select>
+          <p className="muted small" data-testid="stocks-note">
+            Trades on trade.xyz. Stops fire only while US prices are live, 4:00 to 20:00 New York time on weekdays.
+          </p>
+        </>
+      )}
+    </>
   );
 }
 
@@ -144,7 +182,7 @@ function Trade({ me }: { me: Me }) {
             void review();
           }}
         >
-          <Choice name="Market" value={coin} onChange={setCoin} options={[{ v: "BTC", label: "BTC" }, { v: "ETH", label: "ETH" }, { v: "SOL", label: "SOL" }]} />
+          <Market coin={coin} onChange={setCoin} />
           <div className="labelrow">
             <label htmlFor="size">Size</label>
             {balance && <output className="muted">{usd(balance.privateUsdc)} available</output>}
@@ -216,7 +254,7 @@ function Trade({ me }: { me: Me }) {
           <Notice kind="ok" testId="trade-opened">
             Your position is on its way.
           </Notice>
-          {stage.levels && stage.sealed && <Notice testId="stop-sealed">{STOP_COPY}</Notice>}
+          {stage.levels && stage.sealed && <Notice testId="stop-sealed">{stopCopy(coin)}</Notice>}
           {stage.levels && !stage.sealed && <Notice kind="warn">Your stop will be sealed as soon as the position is open. Keep Positions open on this device.</Notice>}
           <Link className="button" href="/positions/">
             See positions
@@ -229,7 +267,8 @@ function Trade({ me }: { me: Me }) {
 
 function Review({ stage, onBack, onConfirm }: { stage: { req: TradeRequest; plan: PlanAnswer }; onBack: () => void; onConfirm: () => void }) {
   const r = reviewRows(stage.plan);
-  const coin = stage.req.coin;
+  const coin = ticker(stage.req.coin);
+  const isolated = stage.plan.plan.openLeverage !== undefined && asset(stage.req.coin)?.dex === "xyz";
   return (
     <div data-testid="review">
       <h2>
@@ -258,6 +297,9 @@ function Review({ stage, onBack, onConfirm }: { stage: { req: TradeRequest; plan
           rows={[
             ["Fees", <span key="f" data-testid="fees">${r.feesUsd}</span>],
             ["Exit fee", <span key="x" data-testid="exit-fee">${r.exitFeeUsd}</span>],
+            ...(isolated
+              ? ([["Margin", <span key="m" data-testid="isolated">Isolated, {stage.plan.plan.openLeverage}x on trade.xyz</span>]] as [string, ReactNode][])
+              : []),
           ]}
         />
       </div>

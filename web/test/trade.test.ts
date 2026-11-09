@@ -15,6 +15,8 @@ const PLAN: PlanAnswer = {
     coin: "ETH",
     side: "long",
     leverage: 3,
+    openLeverage: 3,
+    xyzMoveUsd: null,
     totalSize: 0.0912,
     pieces: [
       { index: 0, size: 0.0456, notionalUsd: 150.25, fundingUsd: 75, entryOffsetMs: 130000, reserveUsd: 12.5 },
@@ -67,6 +69,8 @@ describe("trade", () => {
     expect(checkTrade(REQ)).toBeUndefined();
     expect(checkTrade({ ...REQ, leverage: 11 })).toBe("Leverage is a whole number from 1 to 10.");
     expect(checkTrade({ ...REQ, notionalUsd: 0 })).toBe("Enter a size in USD.");
+    expect(checkTrade({ ...REQ, coin: "xyz:NVDA" })).toBeUndefined();
+    expect(checkTrade({ ...REQ, coin: "xyz:JIO" })).toBe("Pick a market.");
   });
 
   it("confirm with 2 new pieces makes 2 wallets, then continues", async () => {

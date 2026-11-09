@@ -6,10 +6,13 @@
 //   - the piece's Hyperliquid account is the one NEAR's MPC network derives for that
 //     contract and key (asked from a public NEAR RPC, not from our server),
 //   - the action is what this step is for: approving an agent (which cannot move money),
-//     or, going home, perps -> spot and a USDC send to a deposit address of the user's own
-//     private balance that this page asked OutLayer for itself.
+//     moving the piece's own USDC from its main balance onto trade.xyz (same account), or,
+//     going home, trade.xyz -> main balance (same account), perps -> spot and a USDC send to
+//     a deposit address of the user's own private balance that this page asked OutLayer for
+//     itself.
 import { MPC_SIGNER, addressFromDerivedKey, chainSigPieceKey, mpcPath, signPieceAction, type ChainSigAction } from "unhuntable-client/chainsig";
-import { USDC_SPOT_TOKEN } from "unhuntable-client/hyperliquid";
+import { LADDER } from "unhuntable-client/planner";
+import { USDC_SPOT_TOKEN, XYZ_DEX } from "unhuntable-client/hyperliquid";
 import { OutLayerDeterministic, seedFor, type PiecesKey } from "unhuntable-client/keys";
 import { bytesToHex } from "@noble/hashes/utils";
 import type { Api, Fetch } from "./api";
@@ -57,11 +60,28 @@ export async function setupChainSigPiece(d: ChainSigDeps, label: string): Promis
   if (r.contract !== CHAINSIG_CONTRACT) throw new Error(`The server named contract ${r.contract}; this app signs only for ${CHAINSIG_CONTRACT}. Nothing was signed.`);
   const mine = await derivedAccount(d.outlayerFetch ?? ((...a) => fetch(...a)), piece.publicKey);
   if (mine !== r.account) throw new Error("The piece's account the server reported is not the one NEAR derives. Nothing was signed.");
-  if (!r.approve) return r.account;
-  const a = r.approve.action;
-  if (a.kind !== "approveAgent" || !/^0x[0-9a-f]{40}$/.test(a.agentAddress) || a.agentName !== "") throw new Error("That is not an agent approval. Nothing was signed.");
-  const sig = signPieceAction(piece, CHAINSIG_CONTRACT, r.approve.counter, a);
-  await d.api.chainSigApprove(label, bytesToHex(sig));
+  let approveSig: string | null = null;
+  if (r.approve) {
+    const a = r.approve.action;
+    if (a.kind !== "approveAgent" || !/^0x[0-9a-f]{40}$/.test(a.agentAddress) || a.agentName !== "") throw new Error("That is not an agent approval. Nothing was signed.");
+    approveSig = bytesToHex(signPieceAction(piece, CHAINSIG_CONTRACT, r.approve.counter, a));
+  }
+  let moveSig: string | null = null;
+  if (r.move) {
+    const m = r.move.action;
+    const ok =
+      m.kind === "sendAsset" &&
+      m.destination === mine &&
+      m.sourceDex === "" &&
+      m.destinationDex === XYZ_DEX &&
+      m.token === USDC_SPOT_TOKEN &&
+      Number(m.amount) > 0 &&
+      Number(m.amount) <= LADDER[LADDER.length - 1] &&
+      (!r.approve || r.move.counter === r.approve.counter + 1);
+    if (!ok) throw new Error("That is not a move of this piece's own USDC onto trade.xyz. Nothing was signed.");
+    moveSig = bytesToHex(signPieceAction(piece, CHAINSIG_CONTRACT, r.move.counter, m));
+  }
+  if (approveSig || moveSig) await d.api.chainSigApprove(label, approveSig, moveSig);
   return r.account;
 }
 
@@ -85,7 +105,7 @@ export async function ownDepositAddress(d: ChainSigDeps, sendUsdc: string): Prom
   return to.toLowerCase();
 }
 
-/** The piece key's signatures for going home: perps -> spot (when there is any), then the send to a deposit address of our own. */
+/** The piece key's signatures for going home: trade.xyz -> main (when there is any), perps -> spot (when there is any), then the send to a deposit address of our own. */
 export async function signHome(d: ChainSigDeps, plan: HomeChainSigPlan) {
   if (plan.send === null) return null;
   const piece = chainSigPieceKey(d.key, pieceNumber(plan.label));
@@ -95,6 +115,10 @@ export async function signHome(d: ChainSigDeps, plan: HomeChainSigPlan) {
   const t = (d.now ?? Date.now)();
   const signed: { counter: number; action: ChainSigAction; signature: string }[] = [];
   let c = plan.counter;
+  if (plan.fromXyz && plan.fromXyz !== "0") {
+    const a: ChainSigAction = { kind: "sendAsset", destination: mine, sourceDex: XYZ_DEX, destinationDex: "", token: USDC_SPOT_TOKEN, amount: plan.fromXyz, nonce: t - 1 };
+    signed.push({ counter: c, action: a, signature: bytesToHex(signPieceAction(piece, CHAINSIG_CONTRACT, c++, a)) });
+  }
   if (plan.toSpot !== "0") {
     const a: ChainSigAction = { kind: "usdClassTransfer", amount: plan.toSpot, toPerp: false, nonce: t };
     signed.push({ counter: c, action: a, signature: bytesToHex(signPieceAction(piece, CHAINSIG_CONTRACT, c++, a)) });

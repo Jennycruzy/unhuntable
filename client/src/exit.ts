@@ -42,7 +42,7 @@ import {
   type MpcAnswer,
 } from "./chainsig.js";
 import { NearRelay, RelayError } from "./neartx.js";
-import { USDC_SPOT_TOKEN, typedDataDigest } from "./hyperliquid.js";
+import { USDC_SPOT_TOKEN, XYZ_DEX, typedDataDigest } from "./hyperliquid.js";
 import {
   DeterministicWalletError,
   OUTLAYER_API,
@@ -522,13 +522,22 @@ async function nearPieces(c: NearCtx): Promise<bigint> {
     await c.post(chainSigExchangeBody(a, mpc, p.account));
   };
 
+  // Hyperliquid's own perps and trade.xyz (stocks) keep separate balances and positions.
+  const read = async (account: string) => {
+    const main = await c.info({ type: "clearinghouseState", user: account });
+    const xyz = await c.info({ type: "clearinghouseState", user: account, dex: XYZ_DEX });
+    const positions = [main, xyz].flatMap((st: any) => (st?.assetPositions ?? []).map((x: any) => x.position).filter((x: any) => x && Number(x.szi) !== 0));
+    return { main, xyz, positions };
+  };
+
   let moved = 0n;
   for (const p of pieces) {
-    let perp = await c.info({ type: "clearinghouseState", user: p.account });
+    let st = await read(p.account);
     const spot0 = await c.info({ type: "spotClearinghouseState", user: p.account });
     const spotUsdc0 = String((spot0?.balances ?? []).find((b: any) => b.coin === "USDC")?.total ?? "0");
-    const open = (perp?.assetPositions ?? []).map((x: any) => x.position).filter((x: any) => x && Number(x.szi) !== 0);
-    const total = toUnits(String(perp?.marginSummary?.accountValue ?? "0"), 8) + toUnits(spotUsdc0, 8);
+    const open = st.positions;
+    const total =
+      toUnits(String(st.main?.marginSummary?.accountValue ?? "0"), 8) + toUnits(String(st.xyz?.marginSummary?.accountValue ?? "0"), 8) + toUnits(spotUsdc0, 8);
     if (open.length === 0 && sendableUsdc(fromUnits(total, 8)) < BigInt(MIN_SEND_USDC) * 10n ** 8n) {
       io.say(`${p.label} (${p.account}) holds too little to move; it stays.`);
       continue;
@@ -547,7 +556,7 @@ async function nearPieces(c: NearCtx): Promise<bigint> {
       const agent = ethAddress(secp256k1.getPublicKey(agentKey, false));
       io.say(`${p.label}: approving a one-time agent key made on this computer, so it can close the open position.`);
       await step(p, { kind: "approveAgent", agentAddress: agent, agentName: "", nonce: c.now() });
-      const mids = await c.info({ type: "allMids" });
+      const mids = { ...(await c.info({ type: "allMids" })), ...(await c.info({ type: "allMids", dex: XYZ_DEX })) };
       for (const pos of open) {
         const a = asset(pos.coin);
         const mid = Number(mids?.[pos.coin]);
@@ -561,12 +570,20 @@ async function nearPieces(c: NearCtx): Promise<bigint> {
         await c.post(exchangeBody(action, nonce, sig, true));
         c.result.closed += 1;
       }
-      perp = await c.info({ type: "clearinghouseState", user: p.account });
-      if ((perp?.assetPositions ?? []).some((x: any) => Number(x?.position?.szi) !== 0)) {
+      st = await read(p.account);
+      if (st.positions.length > 0) {
         throw new ExitStopped(`A position on ${p.label} did not close fully, maybe because the price moved. Run the tool again.`);
       }
     }
 
+    // trade.xyz -> Hyperliquid's own perps, inside the piece's own account
+    const fromXyz = String(st.xyz?.withdrawable ?? "0");
+    if (toUnits(fromXyz, 8) > 0n) {
+      io.say(`${p.label}: moving ${fromXyz} USDC back from trade.xyz, signed by NEAR Chain Signatures.`);
+      await step(p, { kind: "sendAsset", destination: p.account, sourceDex: XYZ_DEX, destinationDex: "", token: USDC_SPOT_TOKEN, amount: fromUnits(toUnits(fromXyz, 8), 8), nonce: c.now() });
+      st = await read(p.account);
+    }
+    const perp = st.main;
     const withdrawable = String(perp?.withdrawable ?? "0");
     if (toUnits(withdrawable, 8) > 0n) {
       io.say(`${p.label}: moving ${withdrawable} USDC from perps to spot, signed by NEAR Chain Signatures.`);

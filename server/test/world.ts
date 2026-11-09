@@ -96,17 +96,22 @@ export class World {
     this.keys.set(key, this.wallets.get(walletId)!);
   }
 
-  perpOf(addr: string): any {
-    return this.perp.get(addr.toLowerCase()) ?? reply("hl-clearinghouse-empty");
+  /** trade.xyz: its own perps balance per user, its mids and its meta. */
+  xyzPerp = new Map<string, any>();
+  xyzMids: Record<string, string> = { "xyz:NVDA": "178.28", "xyz:TSLA": "381.0" };
+  xyzMeta = { universe: [{ name: "xyz:XYZ100", szDecimals: 4, maxLeverage: 30 }, { name: "xyz:TSLA", szDecimals: 3, maxLeverage: 20 }, { name: "xyz:NVDA", szDecimals: 3, maxLeverage: 20 }], collateralToken: 0 };
+
+  perpOf(addr: string, dex = ""): any {
+    return (dex === "xyz" ? this.xyzPerp : this.perp).get(addr.toLowerCase()) ?? reply("hl-clearinghouse-empty");
   }
 
-  setPerp(addr: string, accountValue: number, withdrawable = accountValue, positions: any[] = []): void {
+  setPerp(addr: string, accountValue: number, withdrawable = accountValue, positions: any[] = [], dex = ""): void {
     const p = reply("hl-clearinghouse-empty");
     p.marginSummary.accountValue = String(accountValue);
     p.crossMarginSummary.accountValue = String(accountValue);
     p.withdrawable = String(withdrawable);
     p.assetPositions = positions;
-    this.perp.set(addr.toLowerCase(), p);
+    (dex === "xyz" ? this.xyzPerp : this.perp).set(addr.toLowerCase(), p);
   }
 
   fetch: typeof fetch = (async (input: string | URL | Request, init?: RequestInit) => {
@@ -208,6 +213,17 @@ export class World {
         this.setPerp(addr, 0, 0, p.assetPositions);
         this.spot.set(addr, String(Number(this.spot.get(addr) ?? "0") + Number(a.amount)));
       }
+      if (a.type === "sendAsset") {
+        // between the signer's own market lists: "" (main perps) and "xyz"
+        const addr = signer ?? "";
+        const amt = Number(a.amount);
+        const from = this.perpOf(addr, a.sourceDex);
+        const to = this.perpOf(addr, a.destinationDex);
+        const fv = Number(from.marginSummary.accountValue) - amt;
+        const tv = Number(to.marginSummary.accountValue) + amt;
+        this.setPerp(addr, fv, fv, from.assetPositions, a.sourceDex);
+        this.setPerp(addr, tv, tv, to.assetPositions, a.destinationDex);
+      }
       if (a.type === "spotSend") {
         const addr = signer ?? "";
         this.spot.set(addr, "0");
@@ -216,9 +232,9 @@ export class World {
       return json(reply("hl-exchange-ok"));
     }
     const b = call.body;
-    if (b.type === "allMids") return json({ ...this.mids });
-    if (b.type === "meta") return json(reply("hl-meta"));
-    if (b.type === "clearinghouseState") return json(this.perpOf(b.user));
+    if (b.type === "allMids") return json(b.dex === "xyz" ? { ...this.xyzMids } : { ...this.mids });
+    if (b.type === "meta") return json(b.dex === "xyz" ? this.xyzMeta : reply("hl-meta"));
+    if (b.type === "clearinghouseState") return json(this.perpOf(b.user, b.dex ?? ""));
     if (b.type === "spotClearinghouseState") {
       const s = reply("hl-spot");
       s.balances[0].total = this.spot.get(String(b.user).toLowerCase()) ?? "0.0";

@@ -1,7 +1,8 @@
 // The shapes of our HTTP API. Amounts are decimal strings in USDC, times are unix milliseconds.
 import type { Plan } from "unhuntable-client/planner";
 
-export type Coin = "BTC" | "ETH" | "SOL";
+/** Hyperliquid's market name: "BTC", "ETH", "SOL", or trade.xyz's "xyz:NVDA" and so on. */
+export type Coin = string;
 export type Side = "long" | "short";
 export type Hiding = "normal" | "whale";
 
@@ -168,6 +169,8 @@ export interface HomeChainSigPlan {
   label: string;
   account: string;
   counter: number;
+  /** USDC to move back from trade.xyz first ("0" when none). */
+  fromXyz?: string;
   toSpot: string;
   send: string | null;
 }

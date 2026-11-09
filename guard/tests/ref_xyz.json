@@ -1,0 +1,43 @@
+{
+ "addr": "0x1563915e194d8cfba1943570603f7606a3115508",
+ "lev": {
+  "action": {
+   "type": "updateLeverage",
+   "asset": 110002,
+   "isCross": false,
+   "leverage": 5
+  },
+  "nonce": 1730000000020,
+  "sig": {
+   "r": "0x1493a5b43d8bedce255f7bc189ebf99bb044ec88779a8fca0fc2ba1001c4f124",
+   "s": "0x1b3f6c0cc50d334376e11e14fdd54f885c14da847297a55c4fbe80a61946a90f",
+   "v": 28
+  }
+ },
+ "open": {
+  "action": {
+   "type": "order",
+   "orders": [
+    {
+     "a": 110002,
+     "b": false,
+     "p": "172.93",
+     "s": "0.112",
+     "r": false,
+     "t": {
+      "limit": {
+       "tif": "Ioc"
+      }
+     }
+    }
+   ],
+   "grouping": "na"
+  },
+  "nonce": 1730000000021,
+  "sig": {
+   "r": "0x5afb502b62eaa0d174a2636fac5347244bcfb74f225f19ef9da19321c11e8a80",
+   "s": "0x5169795553282b0acce167bfb0c4541257b821d89306d3c876a6101a0b247751",
+   "v": 28
+  }
+ }
+}

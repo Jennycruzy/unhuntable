@@ -16,6 +16,7 @@ import {
   USDC_NEAR,
   VrfStream,
   exchangeBody,
+  hlAsset,
   isPlanError,
   plan,
   sha256,
@@ -31,7 +32,7 @@ import { addAlert, balanceWallet, userRow, usd, walletById, walletByLabel, type 
 import { newId, newShardId } from "./db.js";
 import { GuardRefusal, GuardUnreachable } from "./guard.js";
 import { approveAgent } from "./hl.js";
-import { approveAgentNow, isChainSig, needsBrowser } from "./chainsig.js";
+import { approveAgentNow, isChainSig, moveToXyzNow, needsBrowser, xyzMoveDone } from "./chainsig.js";
 import { OutLayerWalletError } from "./outlayer.js";
 import { balancePolicy, balanceSentence, buildBatch, lockSentence, piecePolicy, readBack, walletAccount, type BatchItem, type PolicyBatch } from "./policy.js";
 import { ApiError, sentence, type RefusalCode } from "./refusals.js";
@@ -46,7 +47,12 @@ export const UNREACHABLE_AFTER = 3;
 const FUNDING_SLACK_USD = 1;
 
 export const PlanBody = z.object({
-  coin: z.enum(["BTC", "ETH", "SOL"]),
+  /** "BTC", "ETH", "SOL" or a trade.xyz market such as "xyz:NVDA"; kept in Hyperliquid's spelling. */
+  coin: z
+    .string()
+    .max(24)
+    .refine((c) => hlAsset(c) !== undefined)
+    .transform((c) => hlAsset(c)!.coin),
   side: z.enum(["long", "short"]),
   notionalUsd: z.number().finite().positive(),
   leverage: z.number().int().min(1).max(100),
@@ -73,7 +79,7 @@ type State = "planned" | "funding" | "policy_wait" | "opening" | "open" | "closi
 interface PositionRow {
   id: string;
   user_id: string;
-  coin: "BTC" | "ETH" | "SOL";
+  coin: string;
   side: "long" | "short";
   notional_usd: number;
   leverage: number;
@@ -113,9 +119,16 @@ function planError(code: string): ApiError {
   return new ApiError("bad_request");
 }
 
+/** "" for Hyperliquid's own list, "xyz" for trade.xyz. */
+function dexOf(coin: string): "" | "xyz" {
+  return hlAsset(coin)?.dex ?? "";
+}
+
 async function makePlan(ctx: Ctx, body: PlanBody, vrf: Uint8Array): Promise<Plan> {
-  const mids = await ctx.hl.allMids();
-  const meta = await ctx.hl.meta(body.coin);
+  const dex = dexOf(body.coin);
+  if (dex && !ctx.chainsig) throw new ApiError("stocks_need_near");
+  const mids = await ctx.hl.allMids(dex);
+  const meta = await ctx.hl.meta(body.coin, dex);
   const markPx = mids[body.coin];
   if (!(markPx > 0)) throw new ApiError("stale_price");
   const r = plan({ ...body, markPx, szDecimals: meta.szDecimals, maxLeverage: meta.maxLeverage }, vrf);
@@ -141,8 +154,11 @@ export function busyPieceIds(ctx: Ctx, userId: string): Set<string> {
   return new Set(rows.map((r) => r.piece_id));
 }
 
-/** Locked, ready pieces with no open position and not on their way home: used before making new ones. */
-export function freePieces(ctx: Ctx, userId: string): WalletRow[] {
+/**
+ * Locked, ready pieces with no open position and not on their way home: used before making
+ * new ones. nearOnly: only chain-signature pieces (trade.xyz needs the piece key to move funds).
+ */
+export function freePieces(ctx: Ctx, userId: string, nearOnly = false): WalletRow[] {
   const busy = busyPieceIds(ctx, userId);
   const home = activeHomeLabels(ctx, userId);
   const rows = ctx.db
@@ -151,7 +167,7 @@ export function freePieces(ctx: Ctx, userId: string): WalletRow[] {
        AND (wallet_id IS NOT NULL OR control = 'near') AND hl_address IS NOT NULL AND agent IS NOT NULL ORDER BY created_ms, label`,
     )
     .all(userId) as WalletRow[];
-  return rows.filter((r) => !busy.has(r.id) && !home.has(r.label ?? ""));
+  return rows.filter((r) => !busy.has(r.id) && !home.has(r.label ?? "") && (!nearOnly || isChainSig(r)));
 }
 
 function nextPieceNumber(ctx: Ctx, userId: string): number {
@@ -167,7 +183,7 @@ function world(p: Plan) {
 export async function previewPlan(ctx: Ctx, userId: string, body: PlanBody) {
   userRow(ctx, userId);
   const p = await makePlan(ctx, body, ctx.random(32));
-  const free = freePieces(ctx, userId).length;
+  const free = freePieces(ctx, userId, dexOf(body.coin) !== "").length;
   return {
     plan: p,
     feesUsd: usd(p.estFeesUsd),
@@ -267,7 +283,7 @@ function browserWork(ctx: Ctx, positionId: string) {
   const ws = pieceRows(ctx, positionId).map((pp) => walletById(ctx, pp.piece_id));
   return {
     needWallets: ws.filter((w) => !isChainSig(w) && !w.wallet_id).map((w) => w.label!),
-    needChainSig: ws.filter((w) => needsBrowser(ctx, w)).map((w) => w.label!),
+    needChainSig: ws.filter((w) => needsBrowser(ctx, w, positionId)).map((w) => w.label!),
   };
 }
 
@@ -306,7 +322,7 @@ export async function createPosition(ctx: Ctx, userId: string, body: PlanBody) {
          VALUES (?, ?, ?, ?, ?, ?, ?, 'planned', ?, ?, ?, ?, ?, ?)`,
       )
       .run(id, userId, body.coin, body.side, body.notionalUsd, body.leverage, body.hiding, JSON.stringify(p), draw.outputHex, draw.proof, draw.alpha, ctx.now(), ctx.network);
-    const free = freePieces(ctx, userId);
+    const free = freePieces(ctx, userId, dexOf(body.coin) !== "");
     let n = nextPieceNumber(ctx, userId);
     p.pieces.forEach((x, i) => {
       let pieceId: string;
@@ -405,8 +421,11 @@ async function fundPiece(ctx: Ctx, pos: PositionRow, pp: PieceRow, bal: WalletRo
 /** Funding landed: approve the guard's agent for this shard with the piece's master key, then register it. */
 async function approvePiece(ctx: Ctx, pos: PositionRow, pp: PieceRow): Promise<boolean> {
   const piece = walletById(ctx, pp.piece_id);
-  const perp = await ctx.hl.perp(piece.hl_address!);
-  if (perp.accountValue < pp.funding_usd - FUNDING_SLACK_USD) return false;
+  // Once the funding has moved onto trade.xyz the main balance is nearly empty: it landed.
+  if (!(dexOf(pos.coin) && xyzMoveDone(ctx, piece.id, pos.id))) {
+    const perp = await ctx.hl.perp(piece.hl_address!);
+    if (perp.accountValue < pp.funding_usd - FUNDING_SLACK_USD) return false;
+  }
   if (!piece.agent && isChainSig(piece)) {
     // NEAR's MPC network signs the approval the piece key signed in the browser.
     try {
@@ -419,7 +438,19 @@ async function approvePiece(ctx: Ctx, pos: PositionRow, pp: PieceRow): Promise<b
       throw e;
     }
     guardOk(ctx, pos.id);
-  } else if (!piece.agent) {
+  }
+  if (isChainSig(piece) && dexOf(pos.coin)) {
+    // A stock position: move the funding onto trade.xyz with the move the piece key signed.
+    try {
+      await moveToXyzNow(ctx, piece, pos.id);
+    } catch (e) {
+      if (e instanceof ApiError && (e.code === "chainsig_sign_again" || e.code === "chainsig_refused")) {
+        noteError(ctx, pos, e.code, `${pos.coin} piece Account ${pp.idx + 1}: ${e.message}`);
+        return false;
+      }
+      throw e;
+    }
+  } else if (!piece.agent && !isChainSig(piece)) {
     const agent = await ctx.guard.agent(piece.shard_id!);
     const a = approveAgent(agent, `unhuntable ${piece.shard_id}`, ctx.now());
     const sig = await ctx.wallet.signTypedData(piece.wallet_id!, "arbitrum", typedDataJson(a.typed));
@@ -444,7 +475,7 @@ async function openPiece(ctx: Ctx, pos: PositionRow, pp: PieceRow): Promise<void
     const order = ctx.db.prepare("SELECT px FROM piece_orders WHERE position_id = ? AND piece_id = ? AND kind = 'open'").get(pos.id, piece.id) as
       | { px: number | null }
       | undefined;
-    const held = (await ctx.hl.perp(piece.hl_address!)).positions.find((x) => x.coin === pos.coin);
+    const held = (await ctx.hl.perp(piece.hl_address!, dexOf(pos.coin))).positions.find((x) => x.coin === pos.coin);
     if (order || held) {
       ctx.db.prepare("UPDATE position_pieces SET state = 'open', entry_px = ? WHERE id = ?").run(order?.px ?? held?.entryPx ?? null, pp.id);
       return;
@@ -452,12 +483,14 @@ async function openPiece(ctx: Ctx, pos: PositionRow, pp: PieceRow): Promise<void
   } else if (!setPieceState(ctx, pp.id, "opening", pp.state)) return;
 
   try {
-    await ctx.guard.leverage(piece.shard_id!, pos.coin, pos.leverage);
+    // trade.xyz pieces are isolated: the plan's openLeverage keeps liquidation 18% away
+    const planned = (JSON.parse(pos.plan_json) as { openLeverage?: number }).openLeverage;
+    await ctx.guard.leverage(piece.shard_id!, pos.coin, planned ?? pos.leverage);
     const fill = await ctx.guard.open(piece.shard_id!, pos.coin, pos.side, pp.size, ctxOrder);
     guardOk(ctx, pos.id);
     let liq: number | null = null;
     try {
-      const held = (await ctx.hl.perp(piece.hl_address!)).positions.find((x) => x.coin === pos.coin);
+      const held = (await ctx.hl.perp(piece.hl_address!, dexOf(pos.coin))).positions.find((x) => x.coin === pos.coin);
       if (held?.liquidationPx && fill.px > 0) liq = Math.abs(held.liquidationPx - fill.px) / fill.px;
     } catch {
       // the distance is filled in by the next read

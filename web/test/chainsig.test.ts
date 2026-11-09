@@ -69,6 +69,81 @@ describe("setting up a NEAR-controlled piece", () => {
   });
 });
 
+describe("a NEAR-controlled piece for a trade.xyz stock", () => {
+  const MOVE: ChainSigAction = { kind: "sendAsset", destination: ACCOUNT, sourceDex: "", destinationDex: "xyz", token: "USDC:0x6d1e7cde53ba9467b783cb7c530ce054", amount: "11", nonce: 1800000000001 };
+
+  it("also signs moving its own USDC onto trade.xyz, right after the approval", async () => {
+    const f = scriptedFetch([
+      ["POST /api/chainsig/register", { body: { label: "piece:0", account: ACCOUNT, contract: "unhuntable.near", approve: { counter: 0, action: APPROVE }, move: { counter: 1, action: MOVE } } }],
+      ["POST fastnear.com", rpcDerived],
+      ["POST /api/chainsig/approve", (s) => {
+        const b = JSON.parse(s.body);
+        expect(signedOk(s.body, 0, APPROVE)).toBe(true);
+        expect(ed25519.verify(hexToBytes(b.moveSignature), utf8ToBytes(chainSigMessage("unhuntable.near", piece0.publicKey, 1, MOVE)), piece0.publicKey)).toBe(true);
+        return { body: { ok: true, label: "piece:0" } };
+      }],
+    ]);
+    const api = new Api(f.fetch, "https://api.test");
+    expect(await setupChainSigPiece({ api, key, account: "alice.near", outlayerFetch: f.fetch }, "piece:0")).toBe(ACCOUNT);
+  });
+
+  it("a piece already set up signs just the move", async () => {
+    const f = scriptedFetch([
+      ["POST /api/chainsig/register", { body: { label: "piece:0", account: ACCOUNT, contract: "unhuntable.near", approve: null, move: { counter: 4, action: MOVE } } }],
+      ["POST fastnear.com", rpcDerived],
+      ["POST /api/chainsig/approve", (s) => {
+        const b = JSON.parse(s.body);
+        expect(b.signature).toBeUndefined();
+        expect(ed25519.verify(hexToBytes(b.moveSignature), utf8ToBytes(chainSigMessage("unhuntable.near", piece0.publicKey, 4, MOVE)), piece0.publicKey)).toBe(true);
+        return { body: { ok: true, label: "piece:0" } };
+      }],
+    ]);
+    const api = new Api(f.fetch, "https://api.test");
+    await setupChainSigPiece({ api, key, account: "alice.near", outlayerFetch: f.fetch }, "piece:0");
+  });
+
+  it("refuses a move to anyone else, to another market list, or out of order", async () => {
+    const bad: [ChainSigAction, number][] = [
+      [{ ...MOVE, destination: "0x" + "66".repeat(20) } as ChainSigAction, 1],
+      [{ ...MOVE, destinationDex: "flx" } as ChainSigAction, 1],
+      [{ ...MOVE, sourceDex: "xyz", destinationDex: "" } as ChainSigAction, 1],
+      [{ ...MOVE, amount: "5000" } as ChainSigAction, 1],
+      [{ kind: "spotSend", destination: ACCOUNT, token: "USDC:0x6d1e7cde53ba9467b783cb7c530ce054", amount: "11", time: 1 }, 1],
+      [MOVE, 3],
+    ];
+    for (const [action, counter] of bad) {
+      const f = scriptedFetch([
+        ["POST /api/chainsig/register", { body: { label: "piece:0", account: ACCOUNT, contract: "unhuntable.near", approve: { counter: 0, action: APPROVE }, move: { counter, action } } }],
+        ["POST fastnear.com", rpcDerived],
+      ]);
+      const api = new Api(f.fetch, "https://api.test");
+      await expect(setupChainSigPiece({ api, key, account: "alice.near", outlayerFetch: f.fetch }, "piece:0")).rejects.toThrow(/not a move of this piece's own USDC/);
+      expect(f.sent.some((s) => s.url.includes("/api/chainsig/approve"))).toBe(false);
+    }
+  });
+
+  it("going home, moves trade.xyz back to the piece's own main balance first", async () => {
+    const DEP = "0x" + "d0".repeat(20);
+    const f = scriptedFetch([
+      ["POST fastnear.com", rpcDerived],
+      ["POST /wallet/v1/confidential/deposit/cross-chain", { body: { deposit_address: DEP } }],
+      ["POST /api/home/h1/chainsig", (s) => {
+        const signed = JSON.parse(s.body).pieces[0].signed;
+        expect(signed.map((x: any) => [x.action.kind, x.counter])).toEqual([
+          ["sendAsset", 3],
+          ["usdClassTransfer", 4],
+          ["spotSend", 5],
+        ]);
+        expect(signed[0].action).toMatchObject({ destination: ACCOUNT, sourceDex: "xyz", destinationDex: "", amount: "12" });
+        return { body: { ok: true, state: "moving" } };
+      }],
+    ]);
+    const api = new Api(f.fetch, "https://api.test");
+    const start = { homeId: "h1", feeUsd: "1.20", unlockBatch: null, chainSig: [{ label: "piece:0", account: ACCOUNT, counter: 3, fromXyz: "12", toSpot: "12.5", send: "11.5" }] };
+    expect(await signHomeAll({ api, key, account: "alice.near", outlayerFetch: f.fetch, now: () => 1800000000000 }, start)).toBe(1);
+  });
+});
+
 describe("going home from a NEAR-controlled piece", () => {
   it("sends only to a deposit address this page asked OutLayer for, with the piece key", async () => {
     const DEP = "0x" + "d0".repeat(20);

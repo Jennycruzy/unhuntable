@@ -2,9 +2,11 @@
 // with the op name inside, so OutLayer's public call record shows only ciphertext.
 import { sealedBox, type RandomSource } from "./box.js";
 import { callGuard, type CallOptions } from "./call.js";
+import { ASSETS, asset } from "./hyperliquid.js";
 
-export const COINS = ["BTC", "ETH", "SOL"] as const;
-export type Coin = (typeof COINS)[number];
+/** Every market the guard trades: Hyperliquid's own crypto list and trade.xyz stocks. */
+export const COINS: readonly string[] = ASSETS.map((a) => a.coin);
+export type Coin = string;
 export type Side = "long" | "short";
 export const MAX_LEVERAGE = 10;
 export const MAX_JITTER_BPS = 100;
@@ -49,9 +51,9 @@ export function checkShard(shard: string): string {
 }
 
 export function checkCoin(coin: string): Coin {
-  const c = typeof coin === "string" ? coin.toUpperCase() : "";
-  if (!(COINS as readonly string[]).includes(c)) throw new TypeError(`unsupported coin ${coin}`);
-  return c as Coin;
+  const a = asset(coin);
+  if (!a) throw new TypeError(`unsupported coin ${coin}`);
+  return a.coin;
 }
 
 export function checkSide(side: string): Side {

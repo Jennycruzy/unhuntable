@@ -12,20 +12,58 @@ export const USDC_SPOT_TOKEN = "USDC:0x6d1e7cde53ba9467b783cb7c530ce054";
 export const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 export interface Asset {
+  /** Hyperliquid's name: "BTC" on the main list, "xyz:NVDA" on trade.xyz. */
   coin: string;
+  /** Asset id in orders: universe index on the main list, 110000 + index on trade.xyz. */
   index: number;
   szDecimals: number;
+  /** "" for Hyperliquid's own list, "xyz" for trade.xyz (HIP-3). */
+  dex: "" | "xyz";
+  /** What people call it. */
+  label: string;
+  kind: "crypto" | "stock" | "index";
 }
 
-/** Perp universe indexes, as in the guard. */
+/** trade.xyz, the HIP-3 market list for US stocks and indexes on Hyperliquid. */
+export const XYZ_DEX = "xyz";
+
+const crypto = (coin: string, index: number, szDecimals: number): Asset => ({ coin, index, szDecimals, dex: "", label: coin, kind: "crypto" });
+const xyz = (name: string, i: number, szDecimals: number, label: string, kind: "stock" | "index" = "stock"): Asset => ({
+  coin: `xyz:${name}`,
+  index: 110_000 + i,
+  szDecimals,
+  dex: "xyz",
+  label,
+  kind,
+});
+
+/** Perp universe indexes, as in the guard (guard/src/lib.rs ASSETS). */
 export const ASSETS: readonly Asset[] = [
-  { coin: "BTC", index: 0, szDecimals: 5 },
-  { coin: "ETH", index: 1, szDecimals: 4 },
-  { coin: "SOL", index: 5, szDecimals: 2 },
+  crypto("BTC", 0, 5),
+  crypto("ETH", 1, 4),
+  crypto("SOL", 5, 2),
+  xyz("XYZ100", 0, 4, "Nasdaq-100", "index"),
+  xyz("SP500", 52, 3, "S&P 500", "index"),
+  xyz("NVDA", 2, 3, "Nvidia"),
+  xyz("TSLA", 1, 3, "Tesla"),
+  xyz("AAPL", 9, 3, "Apple"),
+  xyz("MSFT", 10, 3, "Microsoft"),
+  xyz("GOOGL", 12, 3, "Alphabet"),
+  xyz("AMZN", 13, 3, "Amazon"),
+  xyz("META", 8, 3, "Meta"),
+  xyz("AMD", 14, 3, "AMD"),
+  xyz("MU", 15, 3, "Micron"),
+  xyz("INTC", 5, 2, "Intel"),
 ];
 
+/** The market for a coin name, any case ("eth", "XYZ:NVDA"). */
 export function asset(coin: string): Asset | undefined {
-  return ASSETS.find((a) => a.coin === coin);
+  return typeof coin === "string" ? ASSETS.find((a) => a.coin.toLowerCase() === coin.toLowerCase()) : undefined;
+}
+
+/** Short ticker for screens: "BTC", "NVDA". */
+export function ticker(coin: string): string {
+  return coin.startsWith("xyz:") ? coin.slice(4) : coin;
 }
 
 // ------------------------------------------------------------ msgpack
@@ -143,7 +181,8 @@ export function openOrder(a: Asset, isBuy: boolean, mid: number, sz: number) {
 }
 
 export function updateLeverageAction(a: Asset, leverage: number) {
-  return { type: "updateLeverage", asset: a.index, isCross: true, leverage };
+  // trade.xyz markets are isolated margin (several allow nothing else), as in the guard
+  return { type: "updateLeverage", asset: a.index, isCross: a.dex === "", leverage };
 }
 
 /** keccak256(msgpack(action) ‖ nonce u64 BE ‖ 0x00): the hash of an L1 action with no vault. */

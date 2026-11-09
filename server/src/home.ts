@@ -23,6 +23,7 @@ import {
   toUnits,
   typedDataJson,
   usdClassTransfer,
+  XYZ_DEX,
   type TypedData,
   type HlValue as Value,
 } from "unhuntable-client";
@@ -328,7 +329,8 @@ async function moveChainSigPiece(ctx: Ctx, h: HomeRow, w: WalletRow, bal: Wallet
   }
   if (!last) {
     const perp = await ctx.hl.perp(w.hl_address!);
-    if (perp.positions.length > 0) {
+    const xyz = await ctx.hl.perp(w.hl_address!, XYZ_DEX);
+    if (perp.positions.length > 0 || xyz.positions.length > 0) {
       addStep(ctx, h.id, w.id, "check", "failed", "This piece still holds a position. Close it first.");
       throw new StepFailed("piece_in_use");
     }
@@ -345,7 +347,8 @@ async function moveChainSigPiece(ctx: Ctx, h: HomeRow, w: WalletRow, bal: Wallet
       if (final) throw new StepFailed(`This step did not go through: ${(e as Error).message}`);
       throw e;
     }
-    if (r.purpose === "home_to_spot") addStep(ctx, h.id, w.id, "to_spot", "done", `${a.amount} USDC moved from perps to spot, signed by NEAR Chain Signatures.`);
+    if (r.purpose === "home_from_xyz") addStep(ctx, h.id, w.id, "from_xyz", "done", `${a.amount} USDC moved back from trade.xyz, signed by NEAR Chain Signatures.`);
+    else if (r.purpose === "home_to_spot") addStep(ctx, h.id, w.id, "to_spot", "done", `${a.amount} USDC moved from perps to spot, signed by NEAR Chain Signatures.`);
     else {
       addStep(ctx, h.id, w.id, "send", "done", `${a.amount} USDC sent to your private balance's deposit address, signed by NEAR Chain Signatures; Hyperliquid keeps 1 USDC.`);
       addStep(ctx, h.id, w.id, "arrive", "waiting", JSON.stringify({ before: before.toString(), sent: a.amount }));

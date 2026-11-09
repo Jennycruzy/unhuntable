@@ -3,9 +3,11 @@
 // with, how much of that is reserve, and when it enters. Pure and deterministic:
 // the same input and the same bytes always give the same plan, so anyone holding
 // the VRF output can check it later. It never touches the network.
+import { asset } from "./hyperliquid.js";
 import { VrfStream, toHex } from "./vrf.js";
 
-export type PlanCoin = "BTC" | "ETH" | "SOL";
+/** A market's Hyperliquid name: "BTC", "ETH", "SOL" or a trade.xyz one such as "xyz:NVDA". */
+export type PlanCoin = string;
 export type PlanSide = "long" | "short";
 export type Hiding = "normal" | "whale";
 
@@ -18,7 +20,7 @@ export interface PlanInput {
   /** normal: one piece. whale: split into 2-12 pieces. */
   hiding: Hiding;
   markPx: number;
-  /** Hyperliquid size decimals for the coin (BTC 5, ETH 4, SOL 2). */
+  /** Hyperliquid size decimals for the coin (BTC 5, ETH 4, SOL 2, NVDA 3). */
   szDecimals: number;
   /** The venue's leverage limit for the coin, passed in by the caller. */
   maxLeverage: number;
@@ -40,6 +42,14 @@ export interface Plan {
   coin: PlanCoin;
   side: PlanSide;
   leverage: number;
+  /**
+   * Leverage set on Hyperliquid when opening. Same as leverage on the main list (cross
+   * margin, the reserve keeps liquidation away). On trade.xyz pieces are isolated, so the
+   * margin itself must keep liquidation at least 18% away: this is lower when needed.
+   */
+  openLeverage: number;
+  /** trade.xyz: USDC each piece moves from its main balance onto trade.xyz before opening. */
+  xyzMoveUsd: number[] | null;
   totalSize: number;
   pieces: Piece[];
   totalFundingUsd: number;
@@ -67,6 +77,8 @@ export const MIN_LIQ_DISTANCE = 0.18;
 export const TRADING_FEE_RESERVE = 0.002;
 export const ROUTE_FEE_USD = 0.33;
 export const TAKER_FEE = 0.00045;
+/** trade.xyz: USDC a piece keeps on its main balance when it moves its funding onto trade.xyz. */
+export const XYZ_KEEP_USD = 1;
 export const NORMAL_ENTRY_MS: readonly [number, number] = [0, 90_000];
 export const WHALE_ENTRY_MS: readonly [number, number] = [120_000, 1_200_000];
 export const WHALE_MIN_GAP_MS = 20_000;
@@ -91,14 +103,23 @@ export function maintenanceRatio(maxLeverage: number): number {
   return 1 / (2 * maxLeverage);
 }
 
+/**
+ * Isolated leverage for a trade.xyz piece: the chosen leverage, lowered until the margin
+ * alone keeps liquidation at least MIN_LIQ_DISTANCE away (1/L - maintenance >= 18%).
+ */
+export function isolatedLeverage(leverage: number, maxLeverage: number): number {
+  return Math.max(1, Math.min(leverage, Math.floor(1 / (MIN_LIQ_DISTANCE + maintenanceRatio(maxLeverage)))));
+}
+
 /** Account equity a piece needs: enough for the margin and an 18% liquidation distance. */
-export function pieceEquity(notionalUsd: number, leverage: number, maxLeverage: number): number {
+export function pieceEquity(notionalUsd: number, leverage: number, maxLeverage: number, isolated = false): number {
+  if (isolated) return notionalUsd / isolatedLeverage(leverage, maxLeverage);
   return notionalUsd * Math.max(1 / leverage, MIN_LIQ_DISTANCE + maintenanceRatio(maxLeverage));
 }
 
-/** What a piece must be funded with at least: equity, trading fees and the funding route fee. */
-export function fundingNeed(notionalUsd: number, leverage: number, maxLeverage: number): number {
-  return pieceEquity(notionalUsd, leverage, maxLeverage) + TRADING_FEE_RESERVE * notionalUsd + ROUTE_FEE_USD;
+/** What a piece must be funded with at least: equity, trading fees and the funding route fee (and, on trade.xyz, what stays behind). */
+export function fundingNeed(notionalUsd: number, leverage: number, maxLeverage: number, isolated = false): number {
+  return pieceEquity(notionalUsd, leverage, maxLeverage, isolated) + TRADING_FEE_RESERVE * notionalUsd + ROUTE_FEE_USD + (isolated ? XYZ_KEEP_USD : 0);
 }
 
 /** Smallest ladder value at or above need, or undefined if need is over the top rung. */
@@ -115,7 +136,7 @@ function floorUnits(x: number, decimals: number): number {
 function checkInput(input: PlanInput, vrf: Uint8Array): PlanError | undefined {
   const pos = (x: unknown) => typeof x === "number" && Number.isFinite(x) && x > 0;
   if (typeof input !== "object" || input === null) return fail("bad_input", "The plan input is missing.");
-  if (!["BTC", "ETH", "SOL"].includes(input.coin)) return fail("bad_input", "Coin must be BTC, ETH or SOL.");
+  if (!asset(input.coin)) return fail("bad_input", "That market is not one Unhuntable trades.");
   if (input.side !== "long" && input.side !== "short") return fail("bad_input", "Side must be long or short.");
   if (input.hiding !== "normal" && input.hiding !== "whale") return fail("bad_input", "Hiding must be normal or whale.");
   if (!pos(input.notionalUsd)) return fail("bad_input", "Position size in USD must be a positive number.");
@@ -148,7 +169,9 @@ function splitUnits(total: number, n: number, s: VrfStream): number[] {
 export function plan(input: PlanInput, vrf: Uint8Array): Plan | PlanError {
   const bad = checkInput(input, vrf);
   if (bad) return bad;
-  const { coin, side, notionalUsd, leverage, hiding, markPx, szDecimals, maxLeverage } = input;
+  const { side, notionalUsd, leverage, hiding, markPx, szDecimals, maxLeverage } = input;
+  const coin = asset(input.coin)!.coin;
+  const isolated = asset(coin)!.dex === "xyz";
 
   const most = Math.min(MAX_PLAN_LEVERAGE, maxLeverage);
   if (leverage < 1 || leverage > most) return fail("max_leverage", MSG.leverage(most));
@@ -160,7 +183,7 @@ export function plan(input: PlanInput, vrf: Uint8Array): Plan | PlanError {
   const notionalOf = (u: number) => (u / scale) * markPx;
   const minOk = (units: number[]) => units.every((u) => notionalOf(u) >= MIN_PIECE_USD);
   const capOk = (units: number[]) =>
-    units.every((u) => notionalOf(u) <= MAX_PIECE_NOTIONAL_USD && ladderAmount(fundingNeed(notionalOf(u), leverage, maxLeverage)) !== undefined);
+    units.every((u) => notionalOf(u) <= MAX_PIECE_NOTIONAL_USD && ladderAmount(fundingNeed(notionalOf(u), leverage, maxLeverage, isolated)) !== undefined);
   // Each candidate piece count reads the VRF stream from the start, so the plan depends only on the count chosen.
   const attempt = (n: number) => {
     const s = new VrfStream(vrf);
@@ -212,12 +235,12 @@ export function plan(input: PlanInput, vrf: Uint8Array): Plan | PlanError {
 
   const pieces: Piece[] = units.map((u, index) => {
     const n = notionalOf(u);
-    const equity = pieceEquity(n, leverage, maxLeverage);
+    const equity = pieceEquity(n, leverage, maxLeverage, isolated);
     return {
       index,
       size: u / scale,
       notionalUsd: n,
-      fundingUsd: ladderAmount(fundingNeed(n, leverage, maxLeverage))!,
+      fundingUsd: ladderAmount(fundingNeed(n, leverage, maxLeverage, isolated))!,
       entryOffsetMs: offsets[index],
       reserveUsd: equity - n / leverage,
     };
@@ -227,6 +250,8 @@ export function plan(input: PlanInput, vrf: Uint8Array): Plan | PlanError {
     coin,
     side,
     leverage,
+    openLeverage: isolated ? isolatedLeverage(leverage, maxLeverage) : leverage,
+    xyzMoveUsd: isolated ? pieces.map((p) => p.fundingUsd - XYZ_KEEP_USD) : null,
     totalSize: totalUnits / scale,
     pieces,
     totalFundingUsd: pieces.reduce((a, p) => a + p.fundingUsd, 0),

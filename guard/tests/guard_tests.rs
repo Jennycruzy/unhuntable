@@ -1,4 +1,5 @@
 use guardlib::*;
+use serde_json::json;
 fn sign(d: [u8; 32]) -> Vec<u8> {
     sign_with(&[0x11u8; 32], &d).unwrap()
 }
@@ -237,7 +238,7 @@ fn trig(side: &str, trigger: f64) -> Stop {
 
 #[test]
 fn outer_shard_must_match_box() {
-    use serde_json::json;
+
     let inner = json!({ "op": "tick", "shard": "ab12", "coin": "ETH" });
     assert!(check_outer_shard(&json!({ "box": {}, "shard": "ab12" }), &inner).is_ok());
     assert_eq!(check_outer_shard(&json!({ "box": {}, "shard": "cd34" }), &inner).unwrap_err(), "shard does not match the sealed call");
@@ -335,7 +336,7 @@ fn stop_jitter_within_tolerance() {
     assert!(seen.iter().all(|x| *x));
     assert_eq!(jitter_trigger(2000.0, 100, 0.0), 1980.0);
     // jitter_bps: missing is 0, 0-100 whole numbers pass, the rest is refused
-    use serde_json::json;
+
     assert_eq!(check_jitter_bps(&json!(null)).unwrap(), 0);
     assert_eq!(check_jitter_bps(&json!(100)).unwrap(), 100);
     assert!(check_jitter_bps(&json!(101)).is_err());
@@ -390,7 +391,7 @@ fn tick_coin_matches_single_ticks() {
 
 #[test]
 fn tick_coin_shard_list_checks() {
-    use serde_json::json;
+
     assert_eq!(check_shards(&json!(["a", "b2"])).unwrap(), vec!["a".to_string(), "b2".to_string()]);
     let full: Vec<String> = (0..32).map(|i| format!("s{i}")).collect();
     assert_eq!(check_shards(&json!(full)).unwrap().len(), 32);
@@ -497,7 +498,7 @@ fn open_over_cap_refused() {
 
 #[test]
 fn seal_inputs_checked() {
-    use serde_json::json;
+
     let st = check_trigger(&json!({ "coin": "eth", "side": "long", "trigger": 2100.0, "size": 0.01, "fired": true }), "stop").unwrap();
     assert_eq!(st, trig("long", 2100.0));
     assert!(check_trigger(&json!({ "coin": "DOGE", "side": "long", "trigger": 1.0, "size": 1.0 }), "stop").is_err());
@@ -567,4 +568,105 @@ fn guard_has_no_transfer_path() {
     assert!(main[start..end].contains("usdSend"));
     let rest = format!("{}{}", &main[..start], &main[end..]);
     assert!(!rest.contains("usdSend"), "usdSend outside withdraw_probe");
+}
+
+// ---------------------------------------------------------------- trade.xyz (HIP-3)
+
+#[test]
+fn trade_xyz_leverage_and_open_match_reference_sdk() {
+    let r: serde_json::Value = serde_json::from_str(include_str!("ref_xyz.json")).unwrap();
+    let k = [0x22u8; 32];
+    let nvda = asset("xyz:NVDA").unwrap();
+    assert_eq!(nvda.index, 110_002);
+    assert_eq!(nvda.dex, "xyz");
+    let lev = update_leverage_action(nvda, 5);
+    assert_eq!(to_json(&lev), r["lev"]["action"]);
+    assert_eq!(sig_json(&sign_with(&k, &l1_digest(&lev, 1730000000020)).unwrap()), r["lev"]["sig"]);
+    // short 0.112 NVDA at mid 178.28: 3% through is 172.93
+    let op = open_order(nvda, false, 178.28, 0.112, None);
+    assert_eq!(to_json(&op), r["open"]["action"]);
+    assert_eq!(sig_json(&sign_with(&k, &l1_digest(&op, 1730000000021)).unwrap()), r["open"]["sig"]);
+}
+
+#[test]
+fn coin_names_any_case() {
+    assert_eq!(asset("xyz:nvda").unwrap().coin, "xyz:NVDA");
+    assert_eq!(asset("eth").unwrap().coin, "ETH");
+    assert!(asset("NVDA").is_none(), "a stock is only known by its trade.xyz name");
+    assert!(asset("xyz:JIO").is_none(), "no outside price, so no market");
+    assert_eq!(to_json(&update_leverage_action(asset("BTC").unwrap(), 3))["isCross"], true);
+    let st = check_trigger(&json!({ "coin": "XYZ:tsla", "side": "short", "trigger": 400.0, "size": 0.5 }), "stop").unwrap();
+    assert_eq!(st.coin, "xyz:TSLA");
+}
+
+#[test]
+fn every_market_is_unique_and_stocks_have_outside_prices() {
+    for (i, a) in ASSETS.iter().enumerate() {
+        assert!(ASSETS.iter().skip(i + 1).all(|b| b.coin != a.coin && b.index != a.index), "{}", a.coin);
+        assert_eq!(a.dex == "xyz", a.coin.starts_with("xyz:"), "{}", a.coin);
+        assert_eq!(a.dex == "xyz", a.outside.is_some(), "{}", a.coin);
+        assert_eq!(a.dex == "xyz", a.index >= 110_000, "{}", a.coin);
+    }
+}
+
+#[test]
+fn moving_the_xyz_book_alone_cannot_fire_a_stock_stop() {
+    let stop = Stop { coin: "xyz:NVDA".into(), side: "long".into(), trigger: 170.0, size: 0.1, fired: false };
+    // the book is pushed to 165; oracle, Yahoo and Nasdaq stay at 178
+    let a = agreed_outside(&[(165.0, false), (178.1, true), (178.2, true), (178.15, true)]).unwrap();
+    assert!(!should_fire(&stop, &a));
+    // a real fall: everything at 169
+    let a = agreed_outside(&[(169.0, false), (169.1, true), (168.9, true), (169.05, true)]).unwrap();
+    assert!(should_fire(&stop, &a));
+}
+
+#[test]
+fn stocks_need_two_outside_sources() {
+    // market shut: Yahoo and Nasdaq stale, only the book and the oracle are left
+    assert!(agreed_outside(&[(178.0, false), (178.1, true)]).is_none());
+    // three agree but only one is outside the book
+    assert!(agreed_outside(&[(178.0, false), (178.05, false), (178.1, true)]).is_none());
+    // book, oracle and Yahoo agree: two outside
+    assert_eq!(agreed_outside(&[(178.0, false), (178.1, true), (178.05, true)]).unwrap().len(), 3);
+    // an outside source far away does not count
+    assert!(agreed_outside(&[(178.0, false), (178.1, true), (190.0, true)]).is_none());
+}
+
+#[test]
+fn yahoo_last_minute_with_a_close() {
+    let v = json!({ "chart": { "result": [{ "timestamp": [100, 160, 220], "indicators": { "quote": [{ "close": [178.1, 178.2, null] }] } }] } });
+    assert_eq!(yahoo_last(&v), Some((178.2, 160)));
+    assert_eq!(yahoo_last(&json!({ "chart": { "result": null } })), None);
+}
+
+#[test]
+fn nasdaq_prices_and_times() {
+    assert_eq!(nasdaq_price("$178.125"), Some(178.125));
+    assert_eq!(nasdaq_price("27,997.14"), Some(27997.14));
+    assert_eq!(nasdaq_price("N/A"), None);
+    // after the first Sunday of November: EST, UTC-5, so 3:25 PM ET = 20:25 UTC
+    assert_eq!(nasdaq_time("Nov 9, 2026 3:25 PM ET"), Some(1794255900));
+    // July: EDT, UTC-4, so 9:30 AM ET = 13:30 UTC
+    assert_eq!(nasdaq_time("Jul 2, 2026 9:30 AM ET"), Some(1782999000));
+    // after-hours wording, 12 PM and 12 AM
+    assert_eq!(nasdaq_time("After Hours: Jul 2, 2026 12:05 PM ET"), Some(1782999000 + 9300));
+    assert_eq!(nasdaq_time("Jan 5, 2026 12:00 AM ET"), Some(1767589200));
+    assert_eq!(nasdaq_time("yesterday"), None);
+    assert_eq!(nasdaq_time("Nov 9, 2026 13:25 PM ET"), None);
+    assert!(fresh(1794255900, 1794255900 + 300));
+    assert!(!fresh(1794255900, 1794255900 + 301));
+    assert!(!fresh(1794255900 + 1000, 1794255900));
+}
+
+#[test]
+fn oracle_price_by_name() {
+    let v = json!([{ "universe": [{ "name": "xyz:XYZ100" }, { "name": "xyz:TSLA" }] }, [{ "oraclePx": "28005.0" }, { "oraclePx": "381.01" }]]);
+    assert_eq!(oracle_px(&v, "xyz:TSLA"), Some(381.01));
+    assert_eq!(oracle_px(&v, "xyz:NVDA"), None);
+}
+
+#[test]
+fn xyz_positions_read_by_full_name() {
+    let st = json!({ "assetPositions": [{ "position": { "coin": "xyz:NVDA", "szi": "-0.112", "liquidationPx": "205.1" } }] });
+    assert_eq!(position_of(&st, "xyz:NVDA"), Some(Position { szi: -0.112, liquidation_px: Some(205.1) }));
 }

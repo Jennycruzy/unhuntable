@@ -183,6 +183,8 @@ export async function watchMids(ctx: Ctx): Promise<Coin[]> {
   const open = openPieces(ctx);
   if (open.length === 0) return [];
   const mids = await ctx.hl.allMids();
+  // trade.xyz mids come from their own list ("xyz:NVDA" keys)
+  if (open.some((o) => o.coin.startsWith("xyz:"))) Object.assign(mids, await ctx.hl.allMids("xyz"));
   const out = new Set<Coin>();
   for (const o of open) {
     const m = mids[o.coin];

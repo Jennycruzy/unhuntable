@@ -8,7 +8,8 @@
 //!
 //! Stops and take-profits arrive encrypted to the guard's sealed X25519 key (the
 //! public input hash of an OutLayer call reveals nothing), are stored sealed, and
-//! fire only when at least three of seven price sources agree. Answers never
+//! fire only when at least three price sources agree (crypto: of seven exchanges; trade.xyz
+//! stocks: of the book, the oracle, Yahoo and Nasdaq, with two or more outside the book). Answers never
 //! contain a trigger level or a master address. Every decision is a pure function
 //! in lib.rs; this file only reads, writes and sends.
 
@@ -106,36 +107,75 @@ mod guest {
         v.as_str().and_then(|s| s.parse().ok()).or_else(|| v.as_f64())
     }
 
-    /// Seven public sources. Each failure is reported, not fatal.
-    fn prices(coin: &str) -> (Vec<(String, f64)>, Vec<String>, u64) {
+    fn now_s() -> u64 {
+        now_ms() / 1000
+    }
+
+    /// Hyperliquid's mid for a coin from allMids (with the market's dex).
+    fn hl_mid(a: &Asset) -> Result<Option<f64>, String> {
+        let body = if a.dex.is_empty() { json!({"type": "allMids"}) } else { json!({"type": "allMids", "dex": a.dex}) };
+        post_json(&format!("{HL}/info"), &body).and_then(|(_, b)| serde_json::from_str::<Value>(&b).map_err(e)).map(|v| num(&v[a.coin]))
+    }
+
+    /// Price sources for a market as (name, price, outside the order book). Each failure is
+    /// reported, not fatal. Crypto: seven exchanges. trade.xyz stocks: the book's mid, the
+    /// oracle, Yahoo and Nasdaq, the last two only while fresh.
+    fn prices(a: &Asset) -> (Vec<(String, f64, bool)>, Vec<String>, u64) {
         let t = Instant::now();
         let mut ok = Vec::new();
         let mut bad = Vec::new();
-        let mut take = |name: &str, r: Result<Option<f64>, String>| match r {
-            Ok(Some(p)) => ok.push((name.to_string(), p)),
+        let mut take = |name: &str, outside: bool, r: Result<Option<f64>, String>| match r {
+            Ok(Some(p)) => ok.push((name.to_string(), p, outside)),
             Ok(None) => bad.push(format!("{name}: no price")),
             Err(err) => bad.push(format!("{name}: {err}")),
         };
-        take("hyperliquid", post_json(&format!("{HL}/info"), &json!({"type": "allMids"}))
-            .and_then(|(_, b)| serde_json::from_str::<Value>(&b).map_err(e))
-            .map(|v| num(&v[coin])));
-        take("binance", get_json(&format!("https://api.binance.com/api/v3/ticker/price?symbol={coin}USDT")).map(|v| num(&v["price"])));
-        take("okx", get_json(&format!("https://www.okx.com/api/v5/market/ticker?instId={coin}-USDT")).map(|v| num(&v["data"][0]["last"])));
-        take("coinbase", get_json(&format!("https://api.coinbase.com/v2/prices/{coin}-USD/spot")).map(|v| num(&v["data"]["amount"])));
-        take("bybit", get_json(&format!("https://api.bybit.com/v5/market/tickers?category=linear&symbol={coin}USDT")).map(|v| num(&v["result"]["list"][0]["lastPrice"])));
+        take("hyperliquid", a.outside.is_none(), hl_mid(a));
+        if let Some(o) = &a.outside {
+            take("xyz_oracle", true, post_json(&format!("{HL}/info"), &json!({"type": "metaAndAssetCtxs", "dex": a.dex}))
+                .and_then(|(_, b)| serde_json::from_str::<Value>(&b).map_err(e))
+                .map(|v| oracle_px(&v, a.coin)));
+            take("yahoo", true, get_json(&format!("https://query1.finance.yahoo.com/v8/finance/chart/{}?interval=1m&range=1d&includePrePost=true", o.yahoo))
+                .map(|v| yahoo_last(&v).filter(|(_, t)| fresh(*t, now_s())).map(|(p, _)| p)));
+            if let Some((sym, class)) = o.nasdaq {
+                take("nasdaq", true, get_json(&format!("https://api.nasdaq.com/api/quote/{sym}/info?assetclass={class}")).map(|v| {
+                    let d = &v["data"]["primaryData"];
+                    let t = d["lastTradeTimestamp"].as_str().and_then(nasdaq_time)?;
+                    nasdaq_price(d["lastSalePrice"].as_str()?).filter(|_| fresh(t, now_s()))
+                }));
+            }
+            return (ok, bad, t.elapsed().as_millis() as u64);
+        }
+        let coin = a.coin;
+        take("binance", true, get_json(&format!("https://api.binance.com/api/v3/ticker/price?symbol={coin}USDT")).map(|v| num(&v["price"])));
+        take("okx", true, get_json(&format!("https://www.okx.com/api/v5/market/ticker?instId={coin}-USDT")).map(|v| num(&v["data"][0]["last"])));
+        take("coinbase", true, get_json(&format!("https://api.coinbase.com/v2/prices/{coin}-USD/spot")).map(|v| num(&v["data"]["amount"])));
+        take("bybit", true, get_json(&format!("https://api.bybit.com/v5/market/tickers?category=linear&symbol={coin}USDT")).map(|v| num(&v["result"]["list"][0]["lastPrice"])));
         // Kraken and Bitstamp answer from every worker region (Binance 451 / Bybit 403 on some)
-        take("kraken", get_json(&format!("https://api.kraken.com/0/public/Ticker?pair={coin}USD"))
+        take("kraken", true, get_json(&format!("https://api.kraken.com/0/public/Ticker?pair={coin}USD"))
             .map(|v| v["result"].as_object().and_then(|m| m.values().next()).and_then(|t| num(&t["c"][0]))));
-        take("bitstamp", get_json(&format!("https://www.bitstamp.net/api/v2/ticker/{}usd/", coin.to_lowercase())).map(|v| num(&v["last"])));
+        take("bitstamp", true, get_json(&format!("https://www.bitstamp.net/api/v2/ticker/{}usd/", coin.to_lowercase())).map(|v| num(&v["last"])));
         (ok, bad, t.elapsed().as_millis() as u64)
     }
 
+    /// The agreeing prices under the market's rule.
+    fn agreement(a: &Asset, ps: &[(String, f64, bool)]) -> Option<Vec<f64>> {
+        if a.outside.is_some() {
+            agreed_outside(&ps.iter().map(|p| (p.1, p.2)).collect::<Vec<_>>())
+        } else {
+            agreed(&ps.iter().map(|p| p.1).collect::<Vec<_>>())
+        }
+    }
+
     fn agreed_mid(coin: &str) -> Result<(f64, Vec<f64>, Value), String> {
-        let (ps, bad, ms) = prices(coin);
-        let vals: Vec<f64> = ps.iter().map(|p| p.1).collect();
-        let a = agreed(&vals).ok_or(format!("fewer than {MIN_AGREE} price sources agree"))?;
-        let info = json!({ "sources_ok": ps.len(), "sources_agree": a.len(), "source_errors": bad, "price_ms": ms });
-        Ok((median(&a), a, info))
+        let a = asset(coin).ok_or("asset")?;
+        let (ps, bad, ms) = prices(a);
+        let ag = agreement(a, &ps).ok_or(if a.outside.is_some() {
+            format!("fewer than {MIN_AGREE} price sources agree, with at least {MIN_OUTSIDE} outside trade.xyz's order book")
+        } else {
+            format!("fewer than {MIN_AGREE} price sources agree")
+        })?;
+        let info = json!({ "sources_ok": ps.len(), "sources_agree": ag.len(), "source_errors": bad, "price_ms": ms });
+        Ok((median(&ag), ag, info))
     }
 
     /// Sign an L1 action with the shard's agent key and send it.
@@ -149,9 +189,8 @@ mod guest {
     }
 
     fn coin_of(v: &Value) -> Result<String, String> {
-        let c = v["coin"].as_str().unwrap_or("ETH").to_uppercase();
-        asset(&c).ok_or(format!("unsupported coin {c}"))?;
-        Ok(c)
+        let c = v["coin"].as_str().unwrap_or("ETH");
+        Ok(asset(c).ok_or(format!("unsupported coin {c}"))?.coin.to_string())
     }
 
     fn stop_name(shard: &str, coin: &str) -> String {
@@ -172,9 +211,11 @@ mod guest {
 
     /// One price fetch: agreeing prices (if at least three agree), their median, and the summary.
     fn price_round(coin: &str) -> (Option<Vec<f64>>, Option<f64>, PriceInfo) {
-        let (ps, bad, price_ms) = prices(coin);
-        let vals: Vec<f64> = ps.iter().map(|p| p.1).collect();
-        let agree = agreed(&vals);
+        let Some(a) = asset(coin) else {
+            return (None, None, PriceInfo { source_errors: vec![format!("unsupported coin {coin}")], ..Default::default() });
+        };
+        let (ps, bad, price_ms) = prices(a);
+        let agree = agreement(a, &ps);
         let mid = agree.as_ref().map(|a| median(a));
         let info = PriceInfo { sources_ok: ps.len(), sources_agree: agree.as_ref().map(|a| a.len()), source_errors: bad, price_ms };
         (agree, mid, info)
@@ -186,8 +227,14 @@ mod guest {
         String::from_utf8(r.into_plaintext()).map_err(e)
     }
 
+    /// clearinghouseState on a market list: "" for Hyperliquid's own, "xyz" for trade.xyz.
+    fn clearinghouse(master: &str, dex: &str) -> Result<(u16, String), String> {
+        let body = if dex.is_empty() { json!({"type": "clearinghouseState", "user": master}) } else { json!({"type": "clearinghouseState", "user": master, "dex": dex}) };
+        post_json(&format!("{HL}/info"), &body)
+    }
+
     fn position(master: &str, coin: &str) -> Result<Option<Position>, String> {
-        let (st, b) = post_json(&format!("{HL}/info"), &json!({"type": "clearinghouseState", "user": master}))?;
+        let (st, b) = clearinghouse(master, asset(coin).ok_or("asset")?.dex)?;
         if st != 200 {
             return Err(format!("clearinghouseState {st}"));
         }
@@ -451,8 +498,10 @@ mod guest {
                 let (mut equity, mut net) = (0f64, 0f64);
                 for sh in &list {
                     let m = String::from_utf8(sealed::get(ENC, None, &format!("master:{sh}")).map_err(e)?.ok_or("master missing")?.into_plaintext()).map_err(e)?;
-                    let perp: Value = serde_json::from_str(&post_json(&format!("{HL}/info"), &json!({"type":"clearinghouseState","user": m}))?.1).map_err(e)?;
+                    let perp: Value = serde_json::from_str(&clearinghouse(&m, "")?.1).map_err(e)?;
                     equity += num(&perp["marginSummary"]["accountValue"]).ok_or("perp equity")?;
+                    let xyz: Value = serde_json::from_str(&clearinghouse(&m, "xyz")?.1).map_err(e)?;
+                    equity += num(&xyz["marginSummary"]["accountValue"]).unwrap_or(0.0);
                     let spot: Value = serde_json::from_str(&post_json(&format!("{HL}/info"), &json!({"type":"spotClearinghouseState","user": m}))?.1).map_err(e)?;
                     for b in spot["balances"].as_array().cloned().unwrap_or_default() {
                         if b["coin"] == "USDC" {
