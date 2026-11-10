@@ -4,7 +4,15 @@
 
 > Every Hyperliquid account is public: its size, its entry, the exact price that liquidates it, and every stop-loss resting on the book. NEAR's own near.com already makes perps confidential, so nobody can tie a position back to you. But hunters do not need your name. They push the price to the level they can read on the book, take the liquidation, and the market watches.
 
-**Unhuntable removes the level itself.** Your position is split across separate Hyperliquid accounts ("pieces") that nobody can tie together, so there is no big position to find. Your stop-loss is sealed inside an attested enclave and is not on the book until the moment it fires. A guard watches every piece and cuts size before liquidation, and Hyperliquid itself refuses it when it tries to move money. Every new piece's Hyperliquid account is controlled by **NEAR Chain Signatures**, under a contract that signs only what that piece's own key approved: no private key for the account exists anywhere, and our server cannot sign a thing.
+**Unhuntable removes the level itself.** Your position is split across separate Hyperliquid accounts ("pieces") that nobody can tie together, so there is no big position to find. Your stop-loss is sealed inside a TEE on OutLayer and is not on the book until the moment it fires. A guard watches every piece and cuts size before liquidation, and Hyperliquid itself refuses it when it tries to move money. Every new piece's Hyperliquid account is controlled by **NEAR Chain Signatures**, under a contract that signs only what that piece's own key approved: no private key for the account exists anywhere, and our server cannot sign a thing.
+
+## Two NEAR technologies carry the whole product
+
+**1. NEAR Chain Signatures: Hyperliquid accounts with no private key.** Every new piece's Hyperliquid account belongs to our NEAR contract, [`unhuntable.near`](https://nearblocks.io/address/unhuntable.near), and NEAR's MPC network (`v1.signer`) signs for it. No private key for the account exists anywhere: not on our server, not in the enclave, not in a wallet. The contract signs only the exact action that piece's own key approved, so **we could not move your money even if we wanted to.** Live on mainnet: [NEAR signed the guard's approval in 6.5 seconds](https://nearblocks.io/txns/86qJbTWkiXwXsKfCCWqK63yLanzvkbxikMj1R4HfufVd) and Hyperliquid answered `ok`.
+
+**2. A TEE on OutLayer: the guard nobody can read.** The guard runs inside OutLayer's trusted execution environment (Intel TDX, attested). It holds your sealed stops and one trading key per piece, draws piece sizes and timing from OutLayer's verifiable randomness, and fires your stop only when 3 of 7 price sources agree. Your stop is not on Hyperliquid's book and our server cannot read it. **Hunters have no level to push the price to.** Live on mainnet: while a sealed-stop trade was open, the account's public order list was empty (`[]`); then the stop fired as a reduce-only close. The attestation names the exact guard build that ran, and `check_guard` on our records contract answers whether that build is one we published.
+
+Together: **no key to steal, no stop to read, no accounts to link.**
 
 Tracks: **Privacy & Private AI** · **Unstoppable DeFi** · **AI Security & Defense**
 
@@ -13,10 +21,10 @@ Tracks: **Privacy & Private AI** · **Unstoppable DeFi** · **AI Security & Defe
 | | What it does in Unhuntable | Proof on mainnet |
 | --- | --- | --- |
 | **NEAR Chain Signatures** | `unhuntable.near` asks `v1.signer` to sign Hyperliquid actions for a piece, so the piece's Hyperliquid account has no private key anywhere | [`unhuntable.near`](https://nearblocks.io/address/unhuntable.near) · [approve-agent tx](https://nearblocks.io/txns/86qJbTWkiXwXsKfCCWqK63yLanzvkbxikMj1R4HfufVd) · [the account it controls](https://app.hyperliquid.xyz/explorer/address/0x35c99eff31255e9ac3fc2a3c6e4dd70cb026b02a) |
+| **OutLayer TEE (Intel TDX)** | Runs the guard: sealed stops, one agent key per piece, seven price sources, the defence ladder | Sealed-stop trade: public order list `[]` while open, then a reduce-only close |
 | **NEAR Intents (Confidential)** | Holds your private balance and funds each piece with no public link between pieces | 2.5 USDC sent privately to a piece, arriving as 2.178894 USDC |
 | **1Click** | Deposits from any chain, and pays out to Hyperliquid through a shared payer used by thousands of accounts | [15 USDT in from BNB Chain](#what-ran-on-mainnet-with-real-money); ~2,000 shared-payer sends to 991 accounts in 12 hours |
 | **Aurora Intents** | A second private way in, straight to a piece's Hyperliquid account, with our 6 basis point integrator fee | 2 USDC from Arbitrum landed as 1.6827 USDC, fee applied |
-| **OutLayer enclave** | Runs the guard: sealed stops, one agent key per piece, seven price sources, the defence ladder | Sealed-stop trade: public order list `[]` while open, then a reduce-only close |
 | **OutLayer VRF** | Draws piece sizes, entry times and stop jitter, with proofs anyone can check | Each plan stores its VRF output and proof |
 | **OutLayer custody + on-chain policies** | Your wallets, under policies owned by **your** NEAR account that our server cannot change | Policies stored by the owner's Meteor wallet and read back from chain before money moved |
 | **NEAR wallets (NEP-413)** | Sign-in, the pieces key, every policy approval | Meteor on mainnet; HOT and MyNearWallet supported |
@@ -48,9 +56,9 @@ How the app uses it, end to end:
 - **No lock to sign, nothing to unlock.** The contract is the lock: a piece's money can move only on its own key's signature. Going home, your browser asks OutLayer for a deposit address of your own private balance and signs the moves to it; our server only relays them.
 - **Leave without us.** The exit tool finds these pieces from your 12 words alone, closes an open position with a one-time agent key it makes and approves through the contract, and brings the money home. Any NEAR account can pay the gas; it cannot change what it relays.
 
-### OutLayer: the guard, the wallets and your rules
+### OutLayer TEE: the guard, the wallets and your rules
 
-The guard ([`guard/`](guard/)) is a Rust program that runs inside OutLayer's attested enclave. It holds one Hyperliquid agent key per piece, keeps your stops in sealed storage, draws every random choice from OutLayer's VRF, checks seven price sources, fires stops and runs the defence ladder. OutLayer custody wallets hold your private balance, under a policy stored on chain with **you** as owner: where money may go, and that Hyperliquid signing stays off. Our server cannot change it.
+The guard ([`guard/`](guard/)) is a Rust program that runs inside OutLayer's trusted execution environment (TEE: Intel TDX, attested). It holds one Hyperliquid agent key per piece, keeps your stops in sealed storage, draws every random choice from OutLayer's VRF, checks seven price sources, fires stops and runs the defence ladder. OutLayer custody wallets hold your private balance, under a policy stored on chain with **you** as owner: where money may go, and that Hyperliquid signing stays off. Our server cannot change it.
 
 - A sealed-stop trade on a Chain Signatures piece: the public order list stayed empty (`[]`) while the position was open, and the stop fired as a reduce-only close.
 - Policy changes approved by the owner's NEAR wallet and read back from chain before any money moved.
