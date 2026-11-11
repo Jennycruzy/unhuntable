@@ -192,7 +192,8 @@ jobs:
           git diff --exit-code -- exit.js
 
   web:
-    runs-on: ubuntu-latest
+    # Chromium's system packages come from apt; ubuntu-24.04 keeps that install reliable
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
