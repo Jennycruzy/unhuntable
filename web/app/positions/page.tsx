@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { HunterView } from "../../components/HunterView";
+import { Refills } from "../../components/Refills";
 import { Notice, Screen, SignedIn } from "../../components/ui";
 import { sentence } from "../../lib/api";
 import { num, pct, time, usd } from "../../lib/format";
@@ -248,6 +249,7 @@ function Positions({ me }: { me: Me }) {
           </Notice>
         ))}
       {positions?.map((p) => <PositionCard key={p.id} p={p} account={me.accountId} record={record} onRecord={reloadRecord} />)}
+      {positions && positions.length > 0 && <Refills />}
     </>
   );
 }

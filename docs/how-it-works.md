@@ -24,7 +24,7 @@ Every step of a position, the parts that run it, and why they are built this way
             │ HTTPS                    │
             ▼                          │
   Server (server/)                     │   NEAR mainnet
-   ├─ plans, jobs, ticks               │    ├─ outlayer.near: wallet policies (owner = you)
+   ├─ plans, jobs, ticks, refills      │    ├─ outlayer.near: wallet policies (owner = you)
    ├─ wallet API keys, encrypted       │    └─ unhuntable.near: Chain Signatures for piece accounts (v1.signer)
    └─ never holds a stop level         │
             │                          ▼
@@ -53,13 +53,13 @@ Each price round asks up to seven public sources (seven for crypto; for stocks, 
 | under 5% | close the piece |
 | back to 15% or more | the ladder resets |
 
-Each rung is saved before the order goes out and fires once, so a cut is not repeated while the price hovers. A cut that would be under Hyperliquid's $10 minimum, or leave less than $10, closes the piece instead.
+Each rung is saved before the order goes out and fires once, so a cut is not repeated while the price hovers. A cut that would be under Hyperliquid's $10 minimum, or leave less than $10, closes the piece instead. Turn on auto-refill on the Positions screen, and a piece the guard cut is topped back up from your private balance, never from another piece, up to the daily limit you set there.
 
 ## Engineering decisions
 
 - **Seal the whole call, not just the stop.** After we recovered inputs from public hashes, every op except `addr` and `box_pub` became one sealed box: X25519, a SHA-256 key step and ChaCha20-Poly1305 with aad `unhuntable-call-v1`, plus a 32-byte salt. The op name is inside too.
 - **One agent per piece.** Hyperliquid publishes which account an agent trades for. A shared agent would tie every piece together in one lookup.
-- **The guard never touches money.** Funding and going home run through OutLayer custody wallets under your on-chain policy. The guard only trades.
+- **The guard never touches money.** Funding, refills and going home run through OutLayer custody wallets under your on-chain policy. The guard only trades.
 - **Deterministic wallets.** Wallets come from your account and your 12 words, so the exit tool can always find them.
 - **VRF for every random choice.** Piece sizes, entry times, stop jitter and wake-band edges come from OutLayer VRF, with the proof kept, so a plan can be checked later.
 - **Hyperliquid's $10 minimum applies to closes too.** Every piece starts at $12 or more, and a defence cut that would go under $10 closes the piece instead of leaving dust nobody can close.

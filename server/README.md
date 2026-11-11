@@ -300,6 +300,10 @@ cookie.
 - `POST /api/positions/:id/close` `{ now? }` → `{ ok, state }`.
 - `POST /api/home` `{ labels? }` → `{ homeId, feeUsd, unlockBatch }`.
 - `GET /api/home/:id` → state, steps, relock batch and USDC arrived.
+- `GET /api/settings` → `{ autoRefill, refillCapUsdPerDay, refilledTodayUsd }`;
+  `POST /api/settings` `{ autoRefill, refillCapUsdPerDay }` sets them (cap 0-5000 USDC
+  a day). With auto-refill on, a piece the guard cuts is topped up from the private
+  balance to the same piece, within the day's cap.
 - `GET /api/alerts` → the newest alerts.
 - Anything else is 404 with a plain sentence.
 

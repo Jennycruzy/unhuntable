@@ -280,6 +280,8 @@ ul.plain li:last-child { border-bottom: none; }
 .pc-top strong { font-weight: 560; }
 .pc-sub { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 4px; font-size: 0.8125rem; color: var(--fg-3); font-variant-numeric: tabular-nums; }
 .pc-sub a { color: var(--fg-2); }
+label.check { display: flex; align-items: center; gap: 10px; margin: 14px 0 0; color: var(--fg); font-size: 0.9375rem; cursor: pointer; }
+label.check input { width: 20px; height: 20px; min-height: 0; margin: 0; accent-color: var(--accent); }
 .lede-s { color: var(--fg-2); margin: 0 0 12px; }
 pre.code { white-space: pre-wrap; margin: 10px 0; font-size: 0.75rem; line-height: 1.5; }
 .inline { display: grid; grid-template-columns: 1fr 10.5rem; gap: 8px; }

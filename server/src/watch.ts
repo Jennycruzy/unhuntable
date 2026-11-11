@@ -5,6 +5,7 @@
 // Defence: when the guard cut or closed a piece, the user gets an alert, and with
 // auto_refill on (and under the day's cap) a refill goes from the private balance to that
 // same piece's own address: the smallest ladder amount that restores its reserve.
+import { z } from "zod";
 import { LADDER, USDC_NEAR, ladderAmount, toUnits, type Coin } from "unhuntable-client";
 import { addAlert, balanceWallet, walletById, type Ctx } from "./ctx.js";
 import { newId } from "./db.js";
@@ -109,6 +110,38 @@ function defence(ctx: Ctx, o: OpenPiece, d: Defence): void {
     return;
   }
   queueRefill(ctx, o);
+}
+
+export const SettingsBody = z
+  .object({
+    autoRefill: z.boolean(),
+    /** Most the private balance may send to pieces as refills in one UTC day, in USDC. */
+    refillCapUsdPerDay: z.number().finite().min(0).max(5000),
+  })
+  .strict();
+
+/** The user's refill settings and what refills have used today. */
+export function getSettings(ctx: Ctx, userId: string) {
+  const s = ctx.db.prepare("SELECT auto_refill, refill_cap_usd_per_day FROM settings WHERE user_id = ?").get(userId) as
+    | { auto_refill: number; refill_cap_usd_per_day: number }
+    | undefined;
+  const spent = ctx.db
+    .prepare(
+      `SELECT COALESCE(SUM(r.amount), 0) AS t FROM refills r JOIN pieces p ON p.id = r.piece_id
+       WHERE p.user_id = ? AND r.day = ? AND r.status != 'failed'`,
+    )
+    .get(userId, day(ctx.now())) as { t: number };
+  return { autoRefill: s?.auto_refill === 1, refillCapUsdPerDay: s?.refill_cap_usd_per_day ?? 0, refilledTodayUsd: spent.t };
+}
+
+export function setSettings(ctx: Ctx, userId: string, body: z.infer<typeof SettingsBody>) {
+  ctx.db
+    .prepare(
+      `INSERT INTO settings (user_id, auto_refill, refill_cap_usd_per_day, created_ms, network) VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET auto_refill = excluded.auto_refill, refill_cap_usd_per_day = excluded.refill_cap_usd_per_day`,
+    )
+    .run(userId, body.autoRefill ? 1 : 0, body.refillCapUsdPerDay, ctx.now(), ctx.network);
+  return getSettings(ctx, userId);
 }
 
 /** Queue one refill for a piece the guard cut, if the user allows it and the day's cap has room. */

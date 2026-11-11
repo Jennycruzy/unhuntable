@@ -106,6 +106,13 @@ export interface HunterView {
   accounts: PublicAccount[];
 }
 
+/** GET and POST /api/settings */
+export interface Settings {
+  autoRefill: boolean;
+  refillCapUsdPerDay: number;
+  refilledTodayUsd: number;
+}
+
 /** POST /api/agents: the key is in this answer only. */
 export interface NewAgentKey {
   id: string;

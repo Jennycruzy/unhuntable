@@ -24,7 +24,7 @@ import {
   previewPlan,
 } from "./positions.js";
 import { ApiError } from "./refusals.js";
-import { sendRefill } from "./watch.js";
+import { SettingsBody, getSettings, sendRefill, setSettings } from "./watch.js";
 import { ConfirmBody, KeyBody, PiecesKeyBody, balances, confirmWallet, me, newKey, setPiecesKey } from "./wallets.js";
 
 const ConfirmPolicyBody = z
@@ -91,6 +91,9 @@ export function registerMoneyRoutes(app: FastifyInstance, ctx: Ctx): void {
   app.post("/api/home", async (req) => startHome(ctx, user(req), parse(HomeBody, req.body)));
   app.get("/api/home/:id", async (req) => homeStatus(ctx, user(req), id(req)));
   app.post("/api/home/:id/chainsig", async (req) => takeHomeChainSig(ctx, user(req), id(req), parse(HomeSigsBody, req.body)));
+
+  app.get("/api/settings", async (req) => getSettings(ctx, user(req)));
+  app.post("/api/settings", async (req) => setSettings(ctx, user(req), parse(SettingsBody, req.body)));
 
   app.get("/api/alerts", async (req) => {
     const rows = ctx.db.prepare("SELECT text, created_ms FROM alerts WHERE user_id = ? ORDER BY created_ms DESC, rowid DESC LIMIT 100").all(user(req)) as {

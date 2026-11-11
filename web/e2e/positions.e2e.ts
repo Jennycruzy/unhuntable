@@ -63,3 +63,18 @@ test("hunter's view says so when Hyperliquid cannot be read, and shows no made-u
   await expect(view.getByTestId("hunter-account")).toHaveCount(0);
   await expect(view.getByTestId("hunter-you")).toContainText("Long $300.00 ETH");
 });
+
+test("the owner switches auto-refill on with a daily limit", async ({ page, apiRequests, signedIn }, info) => {
+  await signedIn();
+  await page.goto("/positions/");
+  const card = page.getByTestId("refills");
+  await expect(card.getByLabel("Refill cut pieces")).not.toBeChecked();
+  await card.getByLabel("Refill cut pieces").check();
+  await card.getByLabel("Daily limit, in dollars").fill("40");
+  await card.getByRole("button", { name: "Save" }).click();
+  await expect(card).toContainText("Auto-refill is on, up to $40.00 a day.");
+  await expect(card.getByTestId("refilled-today")).toHaveText("Refilled today: $0.00 of $40.00");
+  const sent = apiRequests.find((r) => r.method === "POST" && r.url.endsWith("/api/settings"))!;
+  expect(JSON.parse(sent.body!)).toEqual({ autoRefill: true, refillCapUsdPerDay: 40 });
+  await shot(page, "positions-refills", info.project.name);
+});

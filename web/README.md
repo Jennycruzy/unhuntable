@@ -51,7 +51,9 @@ HTTP API, or is a plain sentence the API sent back.
   is not answering, it says so and offers Close now. Each open position
   also shows Hunter's view: what you see beside what Hyperliquid's public API
   shows for each piece (address, side, size, liquidation price, resting orders),
-  read again every 15 seconds.
+  read again every 15 seconds. Below the positions, Auto-refill: switch it on and
+  set a daily limit, and a piece the guard cuts is topped back up from your
+  private balance.
 - `/hunt-map` The Hunt Map, open to everyone: the visible liquidation prices of
   Hyperliquid's largest accounts by market, the accounts nearest the price, and
   how often the price went on to reach a level everyone could read.

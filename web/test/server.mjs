@@ -225,6 +225,11 @@ function api(method, path, body, c) {
   if (method === "GET" && path.startsWith("/api/home/"))
     return ok({ homeId: "home1", state: home.state, steps: home.steps, relockBatch: home.state === "relock_wait" ? policyBatch("lock") : null, ...(home.arrivedUsdc ? { arrivedUsdc: home.arrivedUsdc } : {}) });
   if (method === "GET" && path === "/api/alerts") return ok({ alerts: [] });
+  if (method === "GET" && path === "/api/settings") return ok({ autoRefill: false, refillCapUsdPerDay: 0, refilledTodayUsd: 0 });
+  if (method === "POST" && path === "/api/settings") {
+    if (typeof body.refillCapUsdPerDay !== "number" || body.refillCapUsdPerDay < 0) return fail(400, "bad_request", "That request is not in the shape we expect.");
+    return ok({ autoRefill: body.autoRefill, refillCapUsdPerDay: body.refillCapUsdPerDay, refilledTodayUsd: 0 });
+  }
   if (method === "GET" && path === "/api/agents")
     return ok({
       price: scenario === "agents_free" ? null : "0.002",

@@ -166,6 +166,42 @@ describe("defence and refills", () => {
   });
 });
 
+describe("refill settings", () => {
+  const app = (s: S) => buildServer({ config: testConfig(), db: s.h.db, now: s.h.ctx.now, money: s.h.ctx });
+  const get = (s: S) => app(s).inject({ method: "GET", url: "/api/settings", headers: { cookie: s.cookie } });
+  const set = (s: S, payload: object) => app(s).inject({ method: "POST", url: "/api/settings", headers: { cookie: s.cookie }, payload });
+
+  it("start off, are switched on by the owner with a daily cap, and then a cut is refilled", async () => {
+    const s = openSetup(2);
+    expect((await get(s)).json()).toEqual({ autoRefill: false, refillCapUsdPerDay: 0, refilledTodayUsd: 0 });
+    s.h.world.guardTick = tickAnswer(s, { action: "cut", rung: 1, distance: 0.11, size: 0.0015 }, 1);
+    await tickCoin(s.h.ctx, "ETH");
+    expect(s.h.db.prepare("SELECT COUNT(*) AS n FROM refills").get()).toEqual({ n: 0 });
+
+    const r = await set(s, { autoRefill: true, refillCapUsdPerDay: 30 });
+    expect(r.json()).toEqual({ autoRefill: true, refillCapUsdPerDay: 30, refilledTodayUsd: 0 });
+    s.h.clock.t += 4 * 60_000;
+    await tickCoin(s.h.ctx, "ETH");
+    expect(s.h.db.prepare("SELECT amount FROM refills").all()).toEqual([{ amount: 12 }]);
+    expect((await get(s)).json()).toEqual({ autoRefill: true, refillCapUsdPerDay: 30, refilledTodayUsd: 12 });
+
+    // switched off again, nothing more is queued
+    await set(s, { autoRefill: false, refillCapUsdPerDay: 30 });
+    s.h.clock.t += 4 * 60_000;
+    await runFor(s.h, 5_000);
+    await tickCoin(s.h.ctx, "ETH");
+    expect(s.h.db.prepare("SELECT COUNT(*) AS n FROM refills").get()).toEqual({ n: 1 });
+  });
+
+  it("need a session and refuse a cap that is not a sensible amount", async () => {
+    const s = openSetup(1);
+    expect((await app(s).inject({ method: "GET", url: "/api/settings" })).statusCode).toBe(401);
+    for (const bad of [{ autoRefill: true }, { autoRefill: "yes", refillCapUsdPerDay: 10 }, { autoRefill: true, refillCapUsdPerDay: -1 }, { autoRefill: true, refillCapUsdPerDay: 9000 }]) {
+      expect((await set(s, bad)).statusCode).toBe(400);
+    }
+  });
+});
+
 describe("stop forwarder", () => {
   it("forwards each box unchanged with the shard outside", async () => {
     const s = openSetup(2);

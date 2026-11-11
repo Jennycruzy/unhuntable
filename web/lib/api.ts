@@ -6,6 +6,7 @@ import type {
   HuntMap,
   HunterView,
   AgentKeys,
+  Settings,
   NewAgentKey,
   Balance,
   DepositState,
@@ -160,6 +161,12 @@ export class Api {
   }
   homeState(id: string) {
     return this.call<HomeState>("GET", `/api/home/${encodeURIComponent(id)}`);
+  }
+  settings() {
+    return this.call<Settings>("GET", "/api/settings");
+  }
+  saveSettings(body: { autoRefill: boolean; refillCapUsdPerDay: number }) {
+    return this.call<Settings>("POST", "/api/settings", body);
   }
   agents() {
     return this.call<AgentKeys>("GET", "/api/agents");
