@@ -43,6 +43,8 @@ export interface Config {
   relayAccount: string;
   /** The Hunt Map collector's SQLite file, read for /api/hunt-map; unset = no map. */
   huntmapDb?: string;
+  /** HUNT_US_FILE: the live challenge position for the Hunt us page, { coin, pieces }; unset = no challenge. */
+  huntUsFile?: string;
   /** BUILDER_FEE=on: new NEAR-controlled pieces approve the builder fee and their opens carry it. */
   builderFee: boolean;
   /** X402=on: agent calls are paid per call in USDC on NEAR, settled by RELAY_ACCOUNT. */
@@ -133,6 +135,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     relayAccount: env.RELAY_ACCOUNT ?? "",
     huntmapDb: env.HUNTMAP_DB || undefined,
     builderFee: onOff("BUILDER_FEE", env.BUILDER_FEE),
+    huntUsFile: env.HUNT_US_FILE || undefined,
     x402: onOff("X402", env.X402),
     x402PayTo: env.X402_PAY_TO || env.CHAINSIG_CONTRACT || "",
     x402Price: env.X402_PRICE || "0.002",

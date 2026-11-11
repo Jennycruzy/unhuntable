@@ -41,7 +41,7 @@ function Frame({ children }: { children: ReactNode }) {
   const path = usePathname() || "/";
   const norm = path.endsWith("/") ? path : path + "/";
   // the Hunt Map is a public page and keeps the cover's frame for everyone
-  const cover = (norm === "/" && me.status !== "ok") || norm === "/hunt-map/";
+  const cover = (norm === "/" && me.status !== "ok") || norm === "/hunt-map/" || norm === "/hunt-us/";
   if (cover) return <div className="shell">{children}</div>;
   return (
     <div className="shell app">

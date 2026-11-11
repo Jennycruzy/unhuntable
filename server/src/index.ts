@@ -33,6 +33,7 @@ import { WHALE_EVERY_MS, WhaleWatch } from "./whale.js";
 import { openHuntDbReadOnly } from "./huntmap.js";
 import { HuntMapView } from "./huntview.js";
 import { registerAgentRoutes } from "./agents.js";
+import { HuntUs } from "./huntus.js";
 import { nearPaywall, type Paywall } from "./x402.js";
 
 export interface ServerDeps {
@@ -49,6 +50,8 @@ export interface ServerDeps {
   huntMap?: HuntMapView;
   /** x402 payments for agent calls; without it agent calls are free. */
   paywall?: Paywall;
+  /** The Hunt us challenge; without it the page says there is none running. */
+  huntUs?: HuntUs;
 }
 
 const SECURITY_HEADERS: Record<string, string> = {
@@ -126,6 +129,19 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
 
   // Public data only: the visible liquidation prices of the largest Hyperliquid accounts.
   app.get("/api/hunt-map", async () => ({ map: deps.huntMap?.read() ?? null }));
+
+  // Hunt us: one piece shown, 90 seconds, then the rest with Hyperliquid's public facts.
+  app.get("/api/hunt-us", async () => ({ challenge: deps.huntUs?.open() ?? null }));
+  app.post("/api/hunt-us/start", async () => {
+    if (!deps.huntUs) throw new ApiError("not_found");
+    return deps.huntUs.start();
+  });
+  app.get("/api/hunt-us/reveal", async (req) => {
+    if (!deps.huntUs) throw new ApiError("not_found");
+    const token = (req.query as { token?: unknown }).token;
+    if (typeof token !== "string") throw new ApiError("bad_request");
+    return deps.huntUs.reveal(token);
+  });
 
   if (deps.money) {
     registerMoneyRoutes(app, deps.money);
@@ -206,7 +222,15 @@ export async function main(): Promise<void> {
       rpcUrl: config.nearRpcUrl,
     });
   }
-  const app = buildServer({ config, db, log, money, whale, huntMap, paywall });
+  let huntUs: HuntUs | undefined;
+  if (config.huntUsFile) {
+    try {
+      huntUs = HuntUs.fromFile(money.hl, config.huntUsFile);
+    } catch (e) {
+      log.warn({ error: e instanceof Error ? e.message : String(e) }, "hunt us file cannot be read; the page shows no challenge");
+    }
+  }
+  const app = buildServer({ config, db, log, money, whale, huntMap, paywall, huntUs });
   let watching = false;
   const watch = (fn: () => Promise<unknown>) => () => {
     if (watching) return;

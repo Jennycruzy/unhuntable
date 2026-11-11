@@ -502,6 +502,18 @@ html[data-session] .cover:not(.open) { visibility: hidden; }
 .hm-ladder .hm-bar { fill: var(--danger); }
 .hm-ladder .hm-now { display: block; min-height: 0; margin: 6px 0; padding: 6px 0; border-block: 1px solid var(--line-2); }
 .hm-ladder .hm-now b { font-weight: 600; }
+.hu-start { margin-top: 18px; }
+.hu-start .addr { display: block; margin: 8px 0 12px; color: var(--fg); text-decoration: none; }
+.hu-clock { margin: 12px 0 0; font-size: 2rem; font-weight: 600; letter-spacing: -0.03em; }
+.hu-reveal { padding-bottom: 28px; }
+.hu-reveal h2 { margin: 0 0 16px; font-size: 1.375rem; letter-spacing: -0.02em; }
+.hu-rows { display: grid; gap: 12px; }
+@media (min-width: 900px) { .hu-rows { grid-template-columns: repeat(3, 1fr); } }
+.hu-addr { font-family: var(--mono); font-size: 0.8125rem; color: var(--fg-2); }
+.hu-facts { margin: 0 0 10px; font-size: 0.8125rem; }
+.hu-facts > div { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-top: 1px solid var(--line); }
+.hu-facts dt { color: var(--fg-3); }
+.hu-facts dd { margin: 0; color: var(--fg); }
 .hm-table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
 .hm-table th { padding: 8px 0; text-align: left; font-weight: 500; color: var(--fg-3); }
 .hm-table td { padding: 9px 12px 9px 0; border-top: 1px solid var(--line); color: var(--fg-2); vertical-align: top; }

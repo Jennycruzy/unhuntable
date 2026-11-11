@@ -58,6 +58,7 @@ export const API_ERRORS = {
   wrong_state: "This can't be done in the position's current state. Reload and try again.",
   route_unavailable: "This deposit route is not available right now. Try the other route.",
   agent_key_missing: "Send this agent's key as Authorization: Bearer <key>.",
+  hunt_wait: "Keep hunting: the answer opens in {seconds} seconds.",
   agent_key_refused: "That agent key is not known or was revoked.",
 } as const;
 
@@ -98,6 +99,7 @@ export const HTTP_STATUS: Record<ErrorCode, number> = {
   payment_required: 402,
   payment_failed: 402,
   agent_key_missing: 401,
+  hunt_wait: 409,
   agent_key_refused: 401,
   bad_request: 400,
   not_found: 404,

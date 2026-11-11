@@ -7,6 +7,8 @@ import type {
   HunterView,
   AgentKeys,
   Settings,
+  HuntUsChallenge,
+  HuntUsReveal,
   NewAgentKey,
   Balance,
   DepositState,
@@ -161,6 +163,15 @@ export class Api {
   }
   homeState(id: string) {
     return this.call<HomeState>("GET", `/api/home/${encodeURIComponent(id)}`);
+  }
+  huntUs() {
+    return this.call<{ challenge: HuntUsChallenge | null }>("GET", "/api/hunt-us");
+  }
+  huntUsStart() {
+    return this.call<{ token: string; revealAtMs: number }>("POST", "/api/hunt-us/start", {});
+  }
+  huntUsReveal(token: string) {
+    return this.call<HuntUsReveal>("GET", `/api/hunt-us/reveal?token=${encodeURIComponent(token)}`);
   }
   settings() {
     return this.call<Settings>("GET", "/api/settings");

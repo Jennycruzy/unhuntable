@@ -106,6 +106,14 @@ function api(method, path, body, c) {
           ? null
           : { address: "0x5b5d51203a0f9079f8aeb098a6523a13f298c060", coin: "ETH", side: "short", sizeUsd: 213452000, entryPx: 2322.71, liqPx: 3893.16, markPx: 3401.2, stopPx: null, asOfMs: Date.now() - 120_000 },
     });
+  // public: the Hunt us challenge
+  if (method === "GET" && path === "/api/hunt-us")
+    return ok({ challenge: scenario === "no_hunt" ? null : { coin: "ETH", count: 3, shown: "0x" + "a1".repeat(20), seconds: 90 } });
+  if (method === "POST" && path === "/api/hunt-us/start") return ok({ token: "1767225600000." + "ab".repeat(32), revealAtMs: Date.now() + 1500 });
+  if (method === "GET" && path === "/api/hunt-us/reveal") {
+    const piece = (a, side, liq, at) => ({ address: "0x" + a.repeat(20), side, size: 0.004, valueUsd: 10.1, entryPx: 2500, liqPx: liq, leverage: 3, restingOrders: 0, triggerPxs: [], fundedBy: "0x6b9e773128f453f5c2c60935ee2de2cbc5390a24", fundedAtMs: at, payerAccounts: 871 });
+    return ok({ coin: "ETH", asOfMs: 1767226000000, restingOrders: 0, sendsBetweenPieces: 0, payerWindowHours: 6, pieces: [piece("a1", "long", 2050, 1767225000000), piece("b2", "long", 2061, 1767225400000), piece("c3", "long", 2044, 1767225800000)] });
+  }
   if (method === "GET" && path === "/api/hunt-map")
     return ok({
       map:

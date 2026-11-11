@@ -49,6 +49,7 @@ Settings come from the environment:
 | `X402` | `off` | `on`: agent calls are paid per call in USDC on NEAR with x402, settled by `RELAY_ACCOUNT` (needs `relayKey`) |
 | `X402_PAY_TO` | `CHAINSIG_CONTRACT` | NEAR account that receives agent payments; it must be registered for USDC |
 | `X402_PRICE` | `0.002` | Price of one agent call in USDC |
+| `HUNT_US_FILE` | none | JSON `{ coin, pieces: [2-12 Hyperliquid addresses] }`: the live position the Hunt us page challenges visitors to find |
 | `BUILDER_FEE` | `off` | `on`: new NEAR-controlled pieces approve the builder fee and their crypto opens carry it, while the signer contract and the guard name the same builder |
 | `HUNTMAP_DB` | none | Path of the Hunt Map collector's SQLite file; without it `/api/hunt-map` answers `{ "map": null }` |
 
@@ -271,6 +272,13 @@ cookie.
   addresses or levels), `POST /api/agent/positions` (open on ready pieces only,
   crypto only), `POST /api/agent/positions/:id/stop` `{ boxes }` and
   `POST /api/agent/positions/:id/close` `{ now? }`. `GET /api/agent/box-pub` is free.
+- `GET /api/hunt-us` → `{ challenge }`: the market, how many pieces, and the one
+  piece shown, or `null`. `POST /api/hunt-us/start` → `{ token, revealAtMs }`, a
+  signed start time. `GET /api/hunt-us/reveal?token=` answers `hunt_wait` until 90
+  seconds have passed, then every piece as Hyperliquid's public API shows it: its
+  position, its resting orders, who funded it and how many other accounts that payer
+  funded in the last 6 hours, and how many sends ever went between the pieces. No
+  session needed.
 - `GET /api/whale` → `{ whale }`: the largest public position right now, or
   `null`. No session needed.
 - `GET /api/hunt-map` → `{ map }`: the Hunt Map, or `null` when no collector

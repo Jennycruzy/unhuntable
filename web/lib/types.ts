@@ -106,6 +106,24 @@ export interface HunterView {
   accounts: PublicAccount[];
 }
 
+/** GET /api/hunt-us */
+export interface HuntUsChallenge {
+  coin: string;
+  count: number;
+  shown: string;
+  seconds: number;
+}
+
+/** GET /api/hunt-us/reveal: every piece as Hyperliquid's public API shows it. */
+export interface HuntUsReveal {
+  coin: string;
+  asOfMs: number;
+  pieces: (PublicAccount & { fundedBy: string | null; fundedAtMs: number | null; payerAccounts: number | null })[];
+  restingOrders: number;
+  sendsBetweenPieces: number;
+  payerWindowHours: number;
+}
+
 /** GET and POST /api/settings */
 export interface Settings {
   autoRefill: boolean;
