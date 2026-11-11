@@ -16,7 +16,9 @@ const offer = (network: string, asset: string) => ({
   maxTimeoutSeconds: 300,
   extra: { assetTransferMethod: "near-intents", paymentFlow: "upfront", destination: { network: "near:mainnet", asset: USDC, amount: "200000", recipient: "unhuntable.near" } },
 });
-const OFFERS = [offer("near:mainnet", "nep141:wrap.near"), offer("eip155:8453", "eip155:8453/erc20:0x833589fcd6edb6e08f4c7c32d4f71b54bda02913")];
+const OFFERS = [offer("near:mainnet", "nep141:wrap.near"), offer("eip155:8453", "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913")];
+/** Ping's real list is about 200 offers; most are tokens nobody pays an API call with. */
+const MANY = [...Array.from({ length: 200 }, (_, i) => offer("eip155:1", "0x" + i.toString(16).padStart(40, "0"))), ...OFFERS];
 
 /** PingPay's Agent Pay facilitator, as its middleware talks to it. No network. */
 function fakePing(over: { settle?: object; execute?: boolean; offersDown?: boolean } = {}) {
@@ -27,7 +29,7 @@ function fakePing(over: { settle?: object; execute?: boolean; offersDown?: boole
     const body = init?.body ? JSON.parse(String(init.body)) : null;
     asked.push({ path: u.pathname + u.search, key, body });
     const json = (x: unknown, status = 200) => new Response(JSON.stringify(x), { status });
-    if (u.pathname.endsWith("/offers")) return over.offersDown ? json({ error: "down" }, 503) : json({ x402Version: 2, accepts: OFFERS });
+    if (u.pathname.endsWith("/offers")) return over.offersDown ? json({ error: "down" }, 503) : json({ x402Version: 2, accepts: MANY });
     if (u.pathname.endsWith("/verify"))
       return json({ isValid: true, extra: { depositAddress: "0xdeposit", amountIn: "201234", refundDeadline: "2026-11-12T00:00:00.000Z", operationToken: "op-1" } });
     if (u.pathname.endsWith("/settle")) return json(over.settle ?? { success: true, transaction: "NearTx111", network: "near:mainnet", payer: "0xagent" });
@@ -68,7 +70,9 @@ describe("PingPay as a second way for agents to pay", () => {
     const challenge = decode(r.headers["payment-required"]);
     expect(challenge.accepts).toHaveLength(3);
     expect(challenge.accepts[0]).toMatchObject({ network: "near:mainnet", amount: "2000", payTo: "unhuntable.near" });
-    expect(challenge.accepts.slice(1).map((a: any) => a.network)).toEqual(["near:mainnet", "eip155:8453"]);
+    // only the listed main assets, in the list's order: Ping's other ~200 would not fit in a header
+    expect(challenge.accepts.slice(1).map((a: any) => `${a.network} ${a.asset}`)).toEqual(["near:mainnet nep141:wrap.near", "eip155:8453 0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"]);
+    expect(String(r.headers["payment-required"]).length).toBeLessThan(8 * 1024);
     expect(challenge.accepts[1].extra.destination).toMatchObject({ amount: "200000", recipient: "unhuntable.near" });
     // offers are asked for 0.2 USDC in USDC units, with our key
     expect(ping.asked[0]).toMatchObject({ path: "/agentpay/x402/offers?amountOut=200000", key: "ping-key" });
@@ -106,7 +110,7 @@ describe("PingPay as a second way for agents to pay", () => {
     const s = await setup(fakePing({ settle: { success: false, errorReason: "settlement_pending" } }));
     const r = await s.call(sig(OFFERS[0]!, { type: "deposit", operationToken: "op-1", depositAddress: "0xdeposit", txHash: "originTx" }));
     expect(r.statusCode).toBe(402);
-    expect(r.json()).toMatchObject({ error: "payment_failed", message: "The payment did not go through: settlement_pending. Nothing was done." });
+    expect(r.json()).toMatchObject({ error: "payment_settling", errorReason: "settlement_pending" });
     expect(s.calls()).toEqual([]);
   });
 

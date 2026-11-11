@@ -64,6 +64,8 @@ export interface Config {
   /** PingPay host and the price of one agent call paid through it (at least 0.2 USDC). */
   pingUrl: string;
   pingPrice: string;
+  /** PingPay offers to list in the challenge, as "network asset"; empty = the default list. */
+  pingAssets: string[];
   secrets: Secrets;
 }
 
@@ -156,6 +158,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     nearaiModel: env.NEARAI_MODEL || NEARAI_MODEL,
     pingUrl: (env.PINGPAY_URL || "https://pay.pingpay.io").replace(/\/+$/, ""),
     pingPrice: env.PINGPAY_PRICE || "0.2",
+    pingAssets: (env.PINGPAY_ASSETS ?? "").split(",").map((s) => s.trim()).filter(Boolean),
     secrets: readSecrets(env.SECRETS_FILE),
   };
 }

@@ -27,7 +27,8 @@ TEST_PATHS='(^|/)tests?/|\.test\.ts$'
 PATH_LABELS='(^|[^A-Za-z0-9])(v[0-9]+|[GA][0-9]+)([^A-Za-z0-9]|$)|[0-9]{4}-[0-9]{2}-[0-9]{2}'
 # Field names of outside APIs that look like labels; removed from a line before the label check.
 # payload_v2: the request field of NEAR's MPC signer (v1.signer sign).
-EXTERNAL_NAMES='payload_v2'
+# 1cs_v1: 1Click's asset id prefix for native coins, as PingPay's offers name them.
+EXTERNAL_NAMES='payload_v2|1cs_v1'
 # Wider attribution set for pull request text.
 TEXT_ATTRIB='(co-authored-by|generated (with|by)|claude\.ai/code|noreply@anthropic\.com)'
 

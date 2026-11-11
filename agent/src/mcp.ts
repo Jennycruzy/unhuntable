@@ -16,7 +16,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createNearPaymentFetch } from "@fastnear/x402";
 import { createLocalNearSigner } from "@fastnear/x402/node";
-import { NEAR_USDC, createPingPaymentFetch, nearTokenDeposit } from "./pingpay.js";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { NEAR_USDC, createPingPaymentFetch, fileProofs, nearTokenDeposit } from "./pingpay.js";
 import { z } from "zod";
 import { AgentApi, AgentApiError } from "./api.js";
 import { describeStatus } from "./words.js";
@@ -135,6 +137,8 @@ async function main(): Promise<void> {
           accountId: need("NEAR_PAYER_ACCOUNT_ID"),
           token: process.env.PINGPAY_TOKEN ?? NEAR_USDC,
           deposit: nearTokenDeposit(process.env.NEAR_RPC_URL ?? "https://free.rpc.fastnear.com", need("NEAR_PAYER_ACCOUNT_ID"), need("NEAR_PAYER_SECRET_KEY")),
+          // a payment still settling when a call ends is sent again by the next call, never paid twice
+          proofs: fileProofs(join(process.env.UNHUNTABLE_STATE_DIR ?? join(homedir(), ".unhuntable-agent"), "pingpay-proofs.json")),
         })
       : (createNearPaymentFetch({ signer, network }) as typeof fetch);
   const api = new AgentApi(process.env.UNHUNTABLE_URL ?? "https://tryunhuntable.site", need("UNHUNTABLE_AGENT_KEY"), paidFetch);

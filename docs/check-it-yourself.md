@@ -50,7 +50,7 @@ cd web && npm ci && npm test && npm run build && npx playwright test
 cd client && npm run build && cd ../agent && npm ci && npm test
 ```
 
-→ `10 passed`. Stops sealed on the agent's machine open only with the guard's key; a full MCP session opens, seals, reads status and closes; no tool answer and no request ever carries the stop price; the PingPay payer quotes, deposits once and retries while NEAR Intents settles.
+→ `12 passed`. Stops sealed on the agent's machine open only with the guard's key; a full MCP session opens, seals, reads status and closes; no tool answer and no request ever carries the stop price; the PingPay payer quotes, deposits once and retries while NEAR Intents settles.
 
 **7. The exit tool is exactly its source:**
 

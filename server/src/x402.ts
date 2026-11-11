@@ -105,6 +105,23 @@ export async function nearPaywall(o: {
 
 /** PingPay Agent Pay's smallest payment, 0.2 USDC. */
 export const PING_MIN_PRICE = "0.2";
+/**
+ * The PingPay offers put in the challenge, as "network asset". Ping offers about 200 (every
+ * token on 30+ chains, ~90 KB), far past what HTTP clients take in one header, so the
+ * challenge carries the main ones: USDC on NEAR, Base, Ethereum, Arbitrum and Solana, NEAR,
+ * and Bitcoin. PINGPAY_ASSETS replaces the list.
+ */
+export const PING_ASSETS = [
+  "near:mainnet nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+  "near:mainnet nep141:wrap.near",
+  "eip155:8453 0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+  "eip155:1 0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+  "eip155:42161 0xaf88d065e77c8cc2239327c5edb3a432268e5831",
+  "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+  "bip122:000000000019d6689c085ae165831e93 1cs_v1:btc:native:coin",
+];
+/** The challenge header stays under this, whatever the list says. */
+export const CHALLENGE_MAX_BYTES = 8 * 1024;
 const OFFERS_KEEP_MS = 60_000;
 
 const paymentHeader = (req: FastifyRequest): string | undefined => {
@@ -138,12 +155,13 @@ export interface PingRoute {
  * second 402 with a deposit address and amount; it deposits on its own chain and sends a
  * "deposit" payload; Ping settles USDC to our account, and the call is claimed once.
  */
-export function pingRoute(o: { apiKey: string; price: string; base?: string; fetch?: typeof fetch; now?: () => number }): PingRoute {
+export function pingRoute(o: { apiKey: string; price: string; base?: string; assets?: string[]; fetch?: typeof fetch; now?: () => number }): PingRoute {
   if (!/^\d+(\.\d{1,6})?$/.test(o.price) || Number(o.price) < Number(PING_MIN_PRICE)) throw new Error(`PingPay price must be at least ${PING_MIN_PRICE} USDC`);
   const f = o.fetch ?? ((...a) => fetch(...a));
   const now = o.now ?? Date.now;
   const fac = `${(o.base ?? "https://pay.pingpay.io").replace(/\/+$/, "")}/agentpay/x402`;
   const amountOut = usdcUnits(o.price);
+  const wanted = (o.assets ?? PING_ASSETS).map((a) => a.trim().toLowerCase()).filter(Boolean);
   let kept: { at: number; accepts: unknown[] } | undefined;
   const post = async (path: string, body: unknown): Promise<{ status: number; j: any }> => {
     let res: Response;
@@ -170,7 +188,18 @@ export function pingRoute(o: { apiKey: string; price: string; base?: string; fet
       if (kept && now() - kept.at < OFFERS_KEEP_MS) return kept.accepts;
       const res = await f(`${fac}/offers?amountOut=${amountOut}`, { headers: { "X-Api-Key": o.apiKey }, signal: AbortSignal.timeout(20_000) });
       if (!res.ok) throw new Error(`PingPay offers answered HTTP ${res.status}`);
-      const accepts = ((await res.json())?.accepts ?? []).map((a: object) => ({ ...a, description: "One Unhuntable agent call" }));
+      const all: any[] = (await res.json())?.accepts ?? [];
+      const accepts: unknown[] = [];
+      let bytes = 0;
+      // in the order of the list, and never past the header budget
+      for (const w of wanted) {
+        const a = all.find((x) => `${x?.network} ${x?.asset}`.toLowerCase() === w);
+        if (!a) continue;
+        const entry = { ...a, description: "One Unhuntable agent call" };
+        bytes += JSON.stringify(entry).length;
+        if (bytes * 1.4 > CHALLENGE_MAX_BYTES - 1024) break;
+        accepts.push(entry);
+      }
       kept = { at: now(), accepts };
       return accepts;
     },

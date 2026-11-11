@@ -31,6 +31,7 @@ const CODES = [
   "agent_stocks",
   "payment_required",
   "payment_failed",
+  "payment_settling",
 ];
 
 describe("refusal map complete", () => {

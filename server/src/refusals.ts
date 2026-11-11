@@ -33,6 +33,7 @@ export const REFUSALS = {
   agent_stocks: "Agents trade crypto only. Stocks need the owner's pieces key, which never leaves the owner's browser.",
   payment_required: "This call costs {price} USDC on NEAR, paid with x402. Pay and send it again.",
   payment_failed: "The payment did not go through: {reason}. Nothing was done.",
+  payment_settling: "Your payment is still settling through NEAR Intents. Send the same payment proof again in a minute; nothing is charged twice.",
 } as const;
 
 /** Errors of the API itself: sign-in, bad requests, unknown routes. */
@@ -101,6 +102,7 @@ export const HTTP_STATUS: Record<ErrorCode, number> = {
   agent_stocks: 422,
   payment_required: 402,
   payment_failed: 402,
+  payment_settling: 402,
   agent_key_missing: 401,
   hunt_wait: 409,
   agent_key_refused: 401,

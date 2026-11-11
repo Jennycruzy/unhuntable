@@ -1,6 +1,9 @@
 import { keyFromSecret } from "unhuntable-client";
 import { describe, expect, it } from "vitest";
-import { NEAR_USDC, createPingPaymentFetch, nearTokenDeposit } from "../src/pingpay.js";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { NEAR_USDC, createPingPaymentFetch, fileProofs, memoryProofs, nearTokenDeposit } from "../src/pingpay.js";
 
 const b64 = (x: unknown) => Buffer.from(JSON.stringify(x)).toString("base64");
 const unb64 = (s: string) => JSON.parse(Buffer.from(s, "base64").toString("utf8"));
@@ -54,6 +57,30 @@ describe("paying an agent call through PingPay", () => {
     expect(r.status).toBe(200);
     expect(deposits).toBe(1);
     expect(waits).toEqual([10, 10]);
+  });
+
+  it("keeps a payment that is still settling when the call ends, and the next call sends it again without paying twice", async () => {
+    const s = fakeServer({ unsettled: 4 });
+    let deposits = 0;
+    const proofs = fileProofs(join(mkdtempSync(join(tmpdir(), "agent-")), "proofs.json"));
+    const payer = { accountId: "a.near", token: NEAR_USDC, deposit: async () => (deposits++, "DepTx"), sleep: async () => {}, tries: 1, proofs };
+    const first = await createPingPaymentFetch(payer, s.f)("https://u.test/x", { headers: {} });
+    expect(first.status).toBe(402);
+    expect(proofs.get("GET https://u.test/x")?.payload).toEqual({ type: "deposit", operationToken: "op-1", depositAddress: "deposit.near", txHash: "DepTx" });
+    // a new process, the same file
+    const again = await createPingPaymentFetch({ ...payer, tries: 5 }, s.f)("https://u.test/x", { headers: {} });
+    expect(again.status).toBe(200);
+    expect(deposits).toBe(1);
+    expect(proofs.get("GET https://u.test/x")).toBeUndefined();
+    // the second call went straight to the proof: no new challenge, no new quote
+    expect(s.seen.slice(5).every((x) => x.sig?.payload?.type === "deposit")).toBe(true);
+  });
+
+  it("forgets a proof once the payment is settled or refused", async () => {
+    const proofs = memoryProofs();
+    const s = fakeServer();
+    await createPingPaymentFetch({ accountId: "a", token: NEAR_USDC, deposit: async () => "x", proofs }, s.f)("https://u.test/y", { headers: {} });
+    expect(proofs.get("GET https://u.test/y")).toBeUndefined();
   });
 
   it("leaves an answer alone when it is not a 402 or has no Ping offer for its token", async () => {

@@ -88,9 +88,9 @@ account needs a little NEAR for gas.
 npm test
 ```
 
-Ten tests, no network: stops sealed here open only with the guard's key and carry each
+Twelve tests, no network: stops sealed here open only with the guard's key and carry each
 piece's size; a full MCP session over an in-memory transport opens, seals, reads status
 and closes; nothing that leaves the machine and no tool answer contains the stop price;
 refusals come back in the server's own words; the PingPay payer quotes with its own refund
 address, deposits once, retries while NEAR Intents settles, and registers the deposit
-address before transferring.
+address before transferring, and keeps a settling payment's proof so the next call resumes it.

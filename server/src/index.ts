@@ -227,7 +227,7 @@ export async function main(): Promise<void> {
     });
     if (config.secrets.pingKey) {
       const network = config.network === "mainnet" ? "near:mainnet" : "near:testnet";
-      paywall = bothPaywalls(paywall, pingRoute({ apiKey: config.secrets.pingKey, price: config.pingPrice, base: config.pingUrl }), { payTo: config.x402PayTo, network });
+      paywall = bothPaywalls(paywall, pingRoute({ apiKey: config.secrets.pingKey, price: config.pingPrice, base: config.pingUrl, ...(config.pingAssets.length ? { assets: config.pingAssets } : {}) }), { payTo: config.x402PayTo, network });
     }
   }
   let huntUs: HuntUs | undefined;

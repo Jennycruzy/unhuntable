@@ -232,8 +232,10 @@ export function registerAgentRoutes(app: FastifyInstance, ctx: Ctx, paywall?: Pa
         const tried = req.headers["payment-signature"] !== undefined || req.headers["x-payment"] !== undefined;
         // a second challenge (PingPay's quote: deposit address and amount) is not a failure
         const challenge = Array.isArray((body as { accepts?: unknown }).accepts);
-        const e =
-          tried && !challenge
+        const settling = (body as { errorReason?: unknown }).errorReason === "settlement_pending";
+        const e = settling
+          ? new ApiError("payment_settling")
+          : tried && !challenge
             ? new ApiError("payment_failed", { reason: String((body as { error?: unknown }).error ?? "the facilitator refused it") })
             : new ApiError("payment_required", { price: paywall.price });
         return reply.code(c.reply.status).headers(c.reply.headers).send({ ...body, ...e.body() });
