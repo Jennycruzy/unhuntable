@@ -33,6 +33,10 @@ test("the owner sends the NEAR AI hunter and sees what it named against the trut
   await shot(page, "positions-ai-hunter", info.project.name);
 
   await page.locator("nav.nav").evaluate((n) => ((n as HTMLElement).style.position = "static"));
+  // measure the final colours, not a colour-scheme change halfway through its transition
+  await page.getByTestId("ai-hunter").evaluate((card) => {
+    for (const el of [card, ...card.querySelectorAll<HTMLElement>("*")]) (el as HTMLElement).style.transition = "none";
+  });
   for (const colorScheme of ["dark", "light"] as const) {
     await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
     const bad = (await new AxeBuilder({ page }).include('[data-testid="ai-hunter"]').analyze()).violations.filter((v) => v.impact === "serious" || v.impact === "critical");
