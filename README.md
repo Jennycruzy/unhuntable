@@ -26,7 +26,7 @@ Ninety seconds, no wallet and no money needed:
 
 1. **Open the [Hunt Map](https://tryunhuntable.site/hunt-map/).** Real Hyperliquid accounts and the exact prices that liquidate them, read from Hyperliquid's public API every 5 minutes. This is what every trader is exposed to today.
 2. **Open three mainnet transactions.** [A sealed stop firing on an NVDA short](https://app.hyperliquid.xyz/explorer/tx/0xe3658df9d0c075c3e4df04488de8bc02021800df6bc39495872e394c8fc44fae), [NEAR's MPC network signing for a Hyperliquid account with no private key](https://nearblocks.io/txns/86qJbTWkiXwXsKfCCWqK63yLanzvkbxikMj1R4HfufVd), and [an AI agent paying for a call with x402](https://nearblocks.io/txns/7VcZWHJzgrauZaY6irWh1BiHGcr7kDch92UG69MFvMBD).
-3. **Run the tests.** 470 tests across the guard, the signer contract, the client, the server, the MCP server and the app, plus browser tests at phone and desktop size, all in CI: [Check it yourself](docs/check-it-yourself.md).
+3. **Run the tests.** 491 tests across the guard, the signer contract, the client, the server, the MCP server and the app, plus browser tests at phone and desktop size, all in CI: [Check it yourself](docs/check-it-yourself.md).
 
 ---
 
@@ -55,6 +55,7 @@ Ninety seconds, no wallet and no money needed:
 - **Accounts with no private key.** Each piece's Hyperliquid account is controlled by NEAR Chain Signatures through [`unhuntable.near`](https://nearblocks.io/address/unhuntable.near), which signs only what that piece's own key approved. We could not move your money even if we wanted to.
 - **Money in from any chain, with no trail.** Deposits through 1Click or Aurora Intents land in a confidential balance on NEAR Intents, and every piece is funded through the same shared payer that funds thousands of unrelated Hyperliquid accounts.
 - **See yourself as hunters do.** Hunter's View puts each of your positions beside what Hyperliquid's public API shows for it: separate small accounts, no stop on the book. The public [Hunt Map](https://tryunhuntable.site/hunt-map/) shows what everyone else exposes: the liquidation price of every large position held by Hyperliquid's biggest accounts.
+- **Teams and DAOs.** A piece can be handed to a DAO, and then its money moves only on a passed vote: [treasury mode](docs/treasury.md), proven with a Sputnik DAO.
 - **Leave without us.** The exit tool brings your money home from your 12 words alone, even if our servers are gone.
 
 ### For AI agents
@@ -126,6 +127,7 @@ All of these are observed results on NEAR, NEAR Intents, OutLayer and Hyperliqui
 | [The Hunt Map and Hunter's View](docs/hunt-map.md) | How the map is collected and what it counts; your position as the public sees it |
 | [How it works](docs/how-it-works.md) | The life of one position, the architecture, prices and stops, the defence ladder, engineering decisions |
 | [Security and privacy](docs/security.md) | Who could cheat and why they cannot, who sees what, the attacks we ran on our own pieces, the flaw we found for OutLayer |
+| [Treasury mode](docs/treasury.md) | Pieces handed to a DAO: money moves only on a passed Sputnik DAO vote |
 | [Leave without us](docs/leave-without-us.md) | Bringing your money home from your 12 words alone |
 | [Fees and revenue](docs/fees.md) | The Aurora integrator fee, x402 agent calls, the Hyperliquid builder fee |
 | [Check it yourself](docs/check-it-yourself.md) | Every test suite, one command each |
@@ -137,11 +139,11 @@ All of these are observed results on NEAR, NEAR Intents, OutLayer and Hyperliqui
 | Folder | What it is | Tests |
 | --- | --- | --- |
 | `guard/` | The guard: a Rust WASI program for OutLayer. Decisions are pure functions in `src/lib.rs`. | 41 |
-| `client/` | TypeScript: sealed boxes, guard client, position planner, fill savings, pieces key, Hyperliquid signing, Chain Signatures pieces, NEAR relay, exit logic | 171 |
-| `server/` | API, SQLite, jobs, NEAR sign-in, OutLayer wallet client, Chain Signatures relay, money flows, Hunt Map collector, Hunter's View | 193 |
-| `signer/` | NEAR contract `unhuntable.near`: Hyperliquid accounts controlled by Chain Signatures, signing only what each piece key approved | 13 |
+| `client/` | TypeScript: sealed boxes, guard client, position planner, fill savings, pieces key, Hyperliquid signing, Chain Signatures pieces, NEAR relay, exit logic | 174 |
+| `server/` | API, SQLite, jobs, NEAR sign-in, OutLayer wallet client, Chain Signatures relay, money flows, Hunt Map collector, Hunter's View | 203 |
+| `signer/` | NEAR contract `unhuntable.near`: Hyperliquid accounts controlled by Chain Signatures, signing only what each piece key approved | 16 |
 | `agent/` | MCP server for AI agents: open, sealed stop, status, close; pays each call with x402 in USDC on NEAR | 6 |
-| `web/` | Phone-first static web app with a strict CSP | 46 unit + Playwright at two screen sizes |
+| `web/` | Phone-first static web app with a strict CSP | 51 unit + Playwright at two screen sizes |
 | `exit/` | Leave-without-us tool: one HTML page or a CLI | in `client/` |
 | `attacks/` | Linking attacks with public data only | |
 | `tools/` | EAS proof check and its reference | |

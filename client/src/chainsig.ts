@@ -189,6 +189,54 @@ export function pieceKeyArgs(publicKey: Uint8Array): Uint8Array {
   return borshPieceKey(publicKey);
 }
 
+// ------------------------------------------------------------ treasury mode
+
+const ACCOUNT_ID = /^(?=.{2,64}$)(([a-z\d]+[-_])*[a-z\d]+\.)*([a-z\d]+[-_])*[a-z\d]+$/;
+
+function checkAccount(a: string): void {
+  if (!ACCOUNT_ID.test(a)) throw new Error("controller must be a NEAR account id");
+}
+
+/** The exact text the piece key signs to hand the piece to a controller, such as a DAO. */
+export function controllerMessage(contract: string, publicKey: Uint8Array, counter: number, controller: string): string {
+  checkAccount(controller);
+  if (!Number.isSafeInteger(counter) || counter < 0) throw new Error("counter must be a whole number");
+  return `unhuntable-controller-v1:${contract}:${publicKeyHex(publicKey)}:${counter}:${controller}`;
+}
+
+/** The piece key's signature handing the piece to `controller`. Once given, only the controller can have the piece signed for. */
+export function signControllerHandover(piece: PiecesKey, contract: string, counter: number, controller: string): Uint8Array {
+  return ed25519.sign(utf8ToBytes(controllerMessage(contract, piece.publicKey, counter, controller)), piece.secret);
+}
+
+/** Arguments of `set_controller(piece_key, controller, signature)`. */
+export function setControllerArgs(publicKey: Uint8Array, controller: string, signature: Uint8Array): Uint8Array {
+  checkAccount(controller);
+  if (signature.length !== 64) throw new Error("signature must be 64 bytes");
+  return cat([borshPieceKey(publicKey), str(controller), bytes(signature)]);
+}
+
+/** Arguments of `sign_as_controller(piece_key, action)`: what a DAO proposal calls. */
+export function signAsControllerArgs(publicKey: Uint8Array, a: ChainSigAction): Uint8Array {
+  return cat([borshPieceKey(publicKey), borshAction(a)]);
+}
+
+/**
+ * A Sputnik DAO proposal that, once passed, asks `contract` to sign `a` for the piece.
+ * Pass it to the DAO's `add_proposal` (with the DAO's proposal bond attached).
+ */
+export function daoSignProposal(contract: string, publicKey: Uint8Array, a: ChainSigAction, description: string) {
+  const args = signAsControllerArgs(publicKey, a);
+  let b64 = "";
+  for (let i = 0; i < args.length; i += 0x8000) b64 += String.fromCharCode(...args.subarray(i, i + 0x8000));
+  return {
+    proposal: {
+      description,
+      kind: { FunctionCall: { receiver_id: contract, actions: [{ method_name: "sign_as_controller", args: btoa(b64), deposit: "1", gas: SIGN_GAS }] } },
+    },
+  };
+}
+
 /** Arguments of `message(piece_key, action)`. */
 export function messageArgs(publicKey: Uint8Array, a: ChainSigAction): Uint8Array {
   return cat([borshPieceKey(publicKey), borshAction(a)]);

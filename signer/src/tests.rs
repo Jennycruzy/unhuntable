@@ -334,3 +334,100 @@ fn piece_key_wire_format() {
     assert_eq!(&b[..5], &[33, 0, 0, 0, 0]);
     assert_eq!(b.len(), 37);
 }
+
+fn sign_controller_msg(c: &Contract, sk: &SigningKey, pk: &PublicKey, controller: &str) -> Vec<u8> {
+    sk.sign(c.controller_message(pk.clone(), acc(controller)).as_bytes()).to_bytes().to_vec()
+}
+
+#[test]
+fn treasury_mode_the_piece_key_hands_the_piece_to_a_dao() {
+    let mut c = setup(None);
+    let (sk, pk) = key(7);
+    add(&mut c, &pk);
+    assert_eq!(c.controller(pk.clone()), None);
+    let sig = sign_controller_msg(&c, &sk, &pk, "team.sputnik-dao.near");
+    ctx("server.near", NearToken::from_yoctonear(0), 100);
+    c.set_controller(pk.clone(), acc("team.sputnik-dao.near"), sig.clone());
+    assert_eq!(c.controller(pk.clone()), Some(acc("team.sputnik-dao.near")));
+    // the hand-over used one counter, so its signature cannot be used again
+    assert_eq!(c.counter(pk.clone()), Some(1));
+    assert!(get_logs().iter().any(|l| l.contains("\"event\":\"controlled\"") && l.contains("team.sputnik-dao.near")));
+
+    // now the piece key alone gets nothing signed
+    let a = agent(1);
+    let s = sign_with(&c, &sk, &pk, &a);
+    ctx("server.near", NearToken::from_yoctonear(1), 100);
+    let msg = panics(std::panic::AssertUnwindSafe(|| {
+        let _ = c.sign(pk.clone(), a.clone(), s.clone());
+    }));
+    assert!(msg.contains(ERR_CONTROLLED), "{msg}");
+}
+
+#[test]
+fn treasury_mode_only_the_controller_has_it_signed_and_can_hand_it_on() {
+    let mut c = setup(None);
+    let (sk, pk) = key(8);
+    add(&mut c, &pk);
+    let sig = sign_controller_msg(&c, &sk, &pk, "dao.near");
+    c.set_controller(pk.clone(), acc("dao.near"), sig);
+
+    // anyone else is refused
+    ctx("server.near", NearToken::from_yoctonear(1), 100);
+    let msg = panics(std::panic::AssertUnwindSafe(|| {
+        let _ = c.sign_as_controller(pk.clone(), agent(2));
+    }));
+    assert!(msg.contains(ERR_NOT_CONTROLLER), "{msg}");
+
+    // the same checks on the action hold for the controller
+    ctx("dao.near", NearToken::from_yoctonear(1), 100);
+    let msg = panics(std::panic::AssertUnwindSafe(|| {
+        let _ = c.sign_as_controller(pk.clone(), HlAction::ApproveBuilderFee { max_fee_rate: "0.1%".into(), builder: B.into(), nonce: 1 });
+    }));
+    assert!(msg.contains(hl::ERR_FEE_RATE), "{msg}");
+
+    // the DAO itself, through a passed proposal
+    ctx("dao.near", NearToken::from_yoctonear(1), 100);
+    let a = HlAction::UsdClassTransfer { amount: "5".into(), to_perp: false, nonce: 9 };
+    let _ = c.sign_as_controller(pk.clone(), a);
+    assert_eq!(c.counter(pk.clone()), Some(2));
+    assert_eq!(get_created_receipts().last().unwrap().receiver_id, acc("v1.signer"));
+    assert!(get_logs().iter().any(|l| l.contains("\"kind\":\"usd_class_transfer\"") && l.contains("\"controller\":\"dao.near\"")));
+
+    // only the controller hands it on, or back to the piece key
+    ctx("someone.near", NearToken::from_yoctonear(0), 100);
+    let msg = panics(std::panic::AssertUnwindSafe(|| {
+        c.change_controller(pk.clone(), Some(acc("someone.near")));
+    }));
+    assert!(msg.contains(ERR_NOT_CONTROLLER), "{msg}");
+    ctx("dao.near", NearToken::from_yoctonear(0), 100);
+    c.change_controller(pk.clone(), None);
+    assert_eq!(c.controller(pk.clone()), None);
+    // back with the piece key, which signs again at the current counter
+    let a2 = agent(3);
+    let s2 = sign_with(&c, &sk, &pk, &a2);
+    ctx("server.near", NearToken::from_yoctonear(1), 100);
+    let _ = c.sign(pk.clone(), a2, s2);
+    assert_eq!(c.counter(pk), Some(3));
+}
+
+#[test]
+fn treasury_mode_a_hand_over_needs_the_piece_key_and_happens_once() {
+    let mut c = setup(None);
+    let (sk, pk) = key(11);
+    let (other, _) = key(12);
+    add(&mut c, &pk);
+    let forged = sign_controller_msg(&c, &other, &pk, "dao.near");
+    let msg = panics(std::panic::AssertUnwindSafe(|| {
+        c.set_controller(pk.clone(), acc("dao.near"), forged.clone());
+    }));
+    assert!(msg.contains(ERR_PIECE_SIG), "{msg}");
+    assert_eq!(c.controller(pk.clone()), None);
+    let good = sign_controller_msg(&c, &sk, &pk, "dao.near");
+    c.set_controller(pk.clone(), acc("dao.near"), good);
+    let again = sign_controller_msg(&c, &sk, &pk, "other.near");
+    let msg = panics(std::panic::AssertUnwindSafe(|| {
+        c.set_controller(pk.clone(), acc("other.near"), again.clone());
+    }));
+    assert!(msg.contains(ERR_HAS_CONTROLLER), "{msg}");
+    assert_eq!(c.controller(pk), Some(acc("dao.near")));
+}

@@ -45,6 +45,18 @@ is exactly `0.01%`; a build without that address refuses every one. `SendAsset` 
 trade.xyz and back; the app only ever sends it from a piece to itself. The hashes match Hyperliquid's own Python SDK for
 every action type (`src/hl_vectors.json`, test `typed_data_hash_matches_hyperliquid_sdk`).
 
+## Treasury mode
+
+A piece's key can hand the piece to a controller, such as a DAO, with
+`set_controller`: its signature over `controller_message(piece_key, controller)`
+(`unhuntable-controller-v1:<contract>:<piece key hex>:<counter>:<controller>`), which
+uses up one counter. From then on `sign` refuses the piece ("this piece is controlled
+by another account") and only the controller can have it signed, by calling
+`sign_as_controller(piece_key, action)` itself, for a Sputnik DAO through a passed
+proposal. The controller can hand the piece on, or back to the piece key, with
+`change_controller(piece_key, Option<AccountId>)`. Controllers are kept under their
+own storage key, so pieces made before treasury mode need no migration.
+
 ## Methods
 
 Arguments and results are borsh, which keeps the contract near 79 KB. A
@@ -57,6 +69,8 @@ order above.
 | --- | --- | --- |
 | `new(signer: Option<AccountId>, hl_chain: Option<String>)` | once | MPC contract (default `v1.signer`) and `"Mainnet"` or `"Testnet"` |
 | `signer()`, `hl_chain()` | view | Settings |
+| `controller(piece_key) -> Option<AccountId>`, `controller_message(piece_key, controller) -> String` | view | Treasury mode: who controls a piece, and the text its key signs to hand it over |
+| `set_controller(piece_key, controller, signature)`, `change_controller(piece_key, controller)`, `sign_as_controller(piece_key, action)` | piece key once; then the controller | Treasury mode (above) |
 | `builder() -> Option<(String, String)>` | view | The one builder address and rate (`0.01%`) a piece can approve, or none when builder fees are off in this build |
 | `path(piece_key) -> String` | view | `u1/` followed by the piece key as 64 hex characters |
 | `add_piece(piece_key) -> { path, cost, refund }` | anyone, payable | Registers a piece key; storage is paid from the deposit and the rest refunded |

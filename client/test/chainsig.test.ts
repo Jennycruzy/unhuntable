@@ -8,6 +8,11 @@ import {
   chainSigExchangeBody,
   chainSigMessage,
   chainSigPieceKey,
+  controllerMessage,
+  daoSignProposal,
+  setControllerArgs,
+  signAsControllerArgs,
+  signControllerHandover,
   hlAction,
   messageArgs,
   mpcPath,
@@ -216,5 +221,38 @@ describe("builder fee", () => {
     expect(readBuilder(Uint8Array.from([0]))).toBeNull();
     expect(() => readBuilder(Uint8Array.from([1, ...enc("nope"), ...enc("0.01%")]))).toThrow();
     expect(() => readBuilder(Uint8Array.from([1, ...enc(B)]))).toThrow();
+  });
+});
+
+describe("treasury mode", () => {
+  const piece = chainSigPieceKey(keyFromMnemonic(WORDS), 3);
+  const DAO = "team.sputnikv2.testnet";
+
+  it("signs the hand-over message the contract checks, with the piece's counter", () => {
+    const m = controllerMessage("unhuntable.near", piece.publicKey, 4, DAO);
+    expect(m).toBe(`unhuntable-controller-v1:unhuntable.near:${bytesToHex(piece.publicKey)}:4:${DAO}`);
+    const sig = signControllerHandover(piece, "unhuntable.near", 4, DAO);
+    expect(sig).toHaveLength(64);
+    expect(() => controllerMessage("unhuntable.near", piece.publicKey, 4, "Not An Account")).toThrow(/NEAR account/);
+  });
+
+  it("encodes set_controller and sign_as_controller in the contract's borsh order", () => {
+    const sig = signControllerHandover(piece, "unhuntable.near", 0, DAO);
+    const a = setControllerArgs(piece.publicKey, DAO, sig);
+    // piece key (4 + 33), controller (4 + len), signature (4 + 64)
+    expect(a.length).toBe(37 + 4 + DAO.length + 68);
+    expect(new TextDecoder().decode(a.subarray(41, 41 + DAO.length))).toBe(DAO);
+    const act: ChainSigAction = { kind: "usdClassTransfer", amount: "5", toPerp: false, nonce: 9 };
+    expect(bytesToHex(signAsControllerArgs(piece.publicKey, act))).toBe(bytesToHex(messageArgs(piece.publicKey, act)));
+  });
+
+  it("builds a Sputnik DAO proposal whose call is exactly sign_as_controller for the piece", () => {
+    const act: ChainSigAction = { kind: "usdClassTransfer", amount: "5", toPerp: false, nonce: 9 };
+    const p = daoSignProposal("unhuntable.near", piece.publicKey, act, "Move 5 USDC to spot");
+    const call = p.proposal.kind.FunctionCall;
+    expect(call.receiver_id).toBe("unhuntable.near");
+    expect(call.actions).toHaveLength(1);
+    expect(call.actions[0]).toMatchObject({ method_name: "sign_as_controller", deposit: "1", gas: "60000000000000" });
+    expect(Buffer.from(call.actions[0].args, "base64").toString("hex")).toBe(bytesToHex(signAsControllerArgs(piece.publicKey, act)));
   });
 });
