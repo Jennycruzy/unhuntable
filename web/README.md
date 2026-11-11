@@ -55,6 +55,9 @@ HTTP API, or is a plain sentence the API sent back.
 - `/hunt-map` The Hunt Map, open to everyone: the visible liquidation prices of
   Hyperliquid's largest accounts by market, the accounts nearest the price, and
   how often the price went on to reach a level everyone could read.
+- `/agents` AI agents: make a key with limits (largest size, markets, opens per
+  day), see it once with ready-to-paste MCP settings, see each call and its x402
+  payment, revoke a key. Linked from the Start screen.
 - `/home` Send home. It tells you the exit fee first, then asks your wallet
   twice: once to unlock the pieces and once to lock them again. A banner, "Lock
   your pieces again", stays on every screen until the second approval is

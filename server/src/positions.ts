@@ -306,7 +306,8 @@ async function answer(ctx: Ctx, pos: PositionRow) {
 
 // ------------------------------------------------------------ confirm and continue
 
-export async function createPosition(ctx: Ctx, userId: string, body: PlanBody) {
+/** reuseOnly: only pieces the owner already set up (agents cannot make pieces). agentKeyId: the agent that opened it. */
+export async function createPosition(ctx: Ctx, userId: string, body: PlanBody, opts: { reuseOnly?: boolean; agentKeyId?: string } = {}) {
   userRow(ctx, userId);
   balanceWallet(ctx, userId);
   const id = newId();
@@ -320,13 +321,14 @@ export async function createPosition(ctx: Ctx, userId: string, body: PlanBody) {
   }
   const p = await makePlan(ctx, body, Buffer.from(draw.outputHex, "hex"));
   ctx.db.transaction(() => {
+    const free = freePieces(ctx, userId, dexOf(body.coin) !== "");
+    if (opts.reuseOnly && free.length < p.pieces.length) throw new ApiError("agent_needs_pieces", { need: p.pieces.length, have: free.length });
     ctx.db
       .prepare(
-        `INSERT INTO positions (id, user_id, coin, side, notional_usd, leverage, hiding, state, plan_json, vrf_hex, vrf_proof, vrf_alpha, created_ms, network)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'planned', ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO positions (id, user_id, coin, side, notional_usd, leverage, hiding, state, plan_json, vrf_hex, vrf_proof, vrf_alpha, created_ms, network, agent_key_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'planned', ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(id, userId, body.coin, body.side, body.notionalUsd, body.leverage, body.hiding, JSON.stringify(p), draw.outputHex, draw.proof, draw.alpha, ctx.now(), ctx.network);
-    const free = freePieces(ctx, userId, dexOf(body.coin) !== "");
+      .run(id, userId, body.coin, body.side, body.notionalUsd, body.leverage, body.hiding, JSON.stringify(p), draw.outputHex, draw.proof, draw.alpha, ctx.now(), ctx.network, opts.agentKeyId ?? null);
     let n = nextPieceNumber(ctx, userId);
     p.pieces.forEach((x, i) => {
       let pieceId: string;

@@ -106,6 +106,33 @@ export interface HunterView {
   accounts: PublicAccount[];
 }
 
+/** POST /api/agents: the key is in this answer only. */
+export interface NewAgentKey {
+  id: string;
+  key: string;
+  name: string;
+}
+
+/** GET /api/agents */
+export interface AgentKeys {
+  keys: {
+    id: string;
+    name: string;
+    maxNotionalUsd: number;
+    coins: string[];
+    dailyOpens: number;
+    createdMs: number;
+    revoked: boolean;
+    calls: number;
+    paidCalls: number;
+    recent: { op: string; result: string; paidTx: string | null; ms: number }[];
+  }[];
+  /** Price of one agent call in USDC, or null when calls are free. */
+  price: string | null;
+  payTo: string | null;
+  network: string | null;
+}
+
 export interface Balance {
   privateUsdc: string;
   pieces: { label: string; shard: string; perpUsd: string; spotUsd: string }[];

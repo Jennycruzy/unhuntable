@@ -7,7 +7,7 @@ import { migrate, newShardId, openDb } from "../src/db.js";
 
 const TABLES = [
   "agent_calls",
-  "agents",
+  "agent_keys",
   "alerts",
   "chainsig_requests",
   "deposits",
@@ -41,12 +41,13 @@ describe("migrations idempotent", () => {
       { name: "003_chainsig.sql", created_ms: 42, network: "mainnet" },
       { name: "004_xyz.sql", created_ms: 42, network: "mainnet" },
       { name: "005_builder.sql", created_ms: 42, network: "mainnet" },
+      { name: "006_agents.sql", created_ms: 42, network: "mainnet" },
     ]);
     db.prepare("INSERT INTO users (id, near_account, created_ms, network) VALUES ('u', 'alice.near', 1, 'mainnet')").run();
     expect(migrate(db, { network: "mainnet" })).toEqual([]);
     db.close();
     const again = openDb(path, { network: "mainnet" });
-    expect(again.prepare("SELECT COUNT(*) AS n FROM migrations").get()).toEqual({ n: 5 });
+    expect(again.prepare("SELECT COUNT(*) AS n FROM migrations").get()).toEqual({ n: 6 });
     expect(again.prepare("SELECT near_account FROM users").get()).toEqual({ near_account: "alice.near" });
     again.close();
   });
@@ -101,7 +102,7 @@ describe("money schema", () => {
     old.close();
 
     const db = openDb(path, { network: "mainnet" });
-    expect((db.prepare("SELECT name FROM migrations ORDER BY name").all() as { name: string }[]).map((r) => r.name)).toEqual(["001_init.sql", "002_money.sql", "003_chainsig.sql", "004_xyz.sql", "005_builder.sql"]);
+    expect((db.prepare("SELECT name FROM migrations ORDER BY name").all() as { name: string }[]).map((r) => r.name)).toEqual(["001_init.sql", "002_money.sql", "003_chainsig.sql", "004_xyz.sql", "005_builder.sql", "006_agents.sql"]);
     expect(db.prepare("SELECT id, kind, shard_id, wallet_id, hl_address, policy_state FROM pieces ORDER BY id").all()).toEqual([
       { id: "p1", kind: "piece", shard_id: "0123456789abcdef", wallet_id: "w1", hl_address: "0x1111111111111111111111111111111111111111", policy_state: "locked" },
       { id: "p2", kind: "piece", shard_id: "fedcba9876543210", wallet_id: null, hl_address: null, policy_state: "unlocked" },

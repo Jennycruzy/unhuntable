@@ -32,6 +32,8 @@ import { HEARTBEAT_MS, MIDS_POLL_MS, heartbeat, watchMids } from "./watch.js";
 import { WHALE_EVERY_MS, WhaleWatch } from "./whale.js";
 import { openHuntDbReadOnly } from "./huntmap.js";
 import { HuntMapView } from "./huntview.js";
+import { registerAgentRoutes } from "./agents.js";
+import { nearPaywall, type Paywall } from "./x402.js";
 
 export interface ServerDeps {
   config: Config;
@@ -45,6 +47,8 @@ export interface ServerDeps {
   whale?: WhaleWatch;
   /** The Hunt Map, read from the collector's store. */
   huntMap?: HuntMapView;
+  /** x402 payments for agent calls; without it agent calls are free. */
+  paywall?: Paywall;
 }
 
 const SECURITY_HEADERS: Record<string, string> = {
@@ -123,7 +127,10 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
   // Public data only: the visible liquidation prices of the largest Hyperliquid accounts.
   app.get("/api/hunt-map", async () => ({ map: deps.huntMap?.read() ?? null }));
 
-  if (deps.money) registerMoneyRoutes(app, deps.money);
+  if (deps.money) {
+    registerMoneyRoutes(app, deps.money);
+    registerAgentRoutes(app, deps.money, deps.paywall);
+  }
 
   return app;
 }
@@ -187,7 +194,19 @@ export async function main(): Promise<void> {
       log.warn({ path: config.huntmapDb }, "hunt map store cannot be opened; /api/hunt-map serves no map");
     }
   }
-  const app = buildServer({ config, db, log, money, whale, huntMap });
+  let paywall: Paywall | undefined;
+  if (config.x402) {
+    if (!config.relayAccount || !config.secrets.relayKey || !config.x402PayTo) throw new ConfigError("X402=on needs RELAY_ACCOUNT, relayKey in the secrets file and X402_PAY_TO");
+    paywall = await nearPaywall({
+      payTo: config.x402PayTo,
+      price: config.x402Price,
+      network: config.network === "mainnet" ? "near:mainnet" : "near:testnet",
+      relayAccount: config.relayAccount,
+      relayKey: config.secrets.relayKey,
+      rpcUrl: config.nearRpcUrl,
+    });
+  }
+  const app = buildServer({ config, db, log, money, whale, huntMap, paywall });
   let watching = false;
   const watch = (fn: () => Promise<unknown>) => () => {
     if (watching) return;

@@ -1,0 +1,31 @@
+{
+  "name": "unhuntable-agent",
+  "version": "1.0.0",
+  "description": "MCP server and client for AI agents that trade through Unhuntable: split positions, sealed stops, paid per call with x402 on NEAR",
+  "type": "module",
+  "license": "MIT",
+  "private": true,
+  "bin": {
+    "unhuntable-mcp": "dist/mcp.js"
+  },
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "start": "node dist/mcp.js"
+  },
+  "dependencies": {
+    "@fastnear/x402": "2.5.0",
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "unhuntable-client": "file:../client",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}

@@ -107,6 +107,17 @@ Aurora's Swap API takes a deposit on any chain and lands it straight on a piece'
 
 - 2 USDC from Arbitrum arrived as 1.6827 USDC on a piece's Hyperliquid account, under our Aurora key with the fee applied.
 
+### AI agents: a second door into the same pieces, paid per call with x402
+
+Agents get hunted more than people: their wallets are public, they trade on schedules, and a prompt injection can talk them into giving away their stop. Unhuntable gives an agent the same protection as a person, through an MCP server (`agent/`) and a paid HTTPS API.
+
+- **The owner sets the limits.** On the Agents screen the owner makes a key for each agent: the largest size it may open, which markets, and how many opens a day. The key is shown once and stored only as a hash. Each call the agent makes is listed with its payment.
+- **The stop is sealed on the agent's machine.** `unhuntable_set_stop` seals the price into one box per piece that only the guard's enclave can open. It never reaches Hyperliquid's book and no tool can read it back, so there is nothing for a hunter, or a hostile prompt, to get out of the agent.
+- **The agent cannot move money.** It opens and closes on pieces the owner already set up. Making pieces, moving money and trading stocks all need the owner's 12 words, which never leave the owner's browser.
+- **Every call is paid with x402 in USDC on NEAR.** The first request gets a `402` with an x402 v2 challenge; the agent signs a NEP-366 delegated `ft_transfer` of the price (0.002 USDC by default) to `unhuntable.near`, and the server settles it on NEAR before the call runs, with its own relayer paying the gas. Limits are checked before payment, so a refused call costs nothing. Built on FastNEAR's `@fastnear/x402` and the x402 Foundation's NEAR scheme.
+
+Switch it on with `X402=on` (the server's relayer settles payments) and connect any MCP client with the settings the Agents screen shows. Tests: `server/test/agents.test.ts` (keys, limits, refusals before payment, open → seal → status → close with each call paid and recorded), `server/test/x402.test.ts` (the real x402 library's challenge: 2000 units of Circle's USDC on NEAR to our account), and `agent/test/agent.test.ts` (a full MCP session in which no tool answer and no request ever carries the stop price).
+
 ### Hyperliquid builder fee: one basis point, capped by a NEAR contract
 
 The second revenue line is Hyperliquid's builder fee: a fee a front end may add to the orders it sends, once the account has approved it. Unhuntable's is **0.01% of the size, on opening orders only**, and the rules sit in code nobody at Unhuntable can change:
@@ -213,7 +224,7 @@ cd client && npm ci && npm test
 cd client && npm run build && cd ../server && npm ci && npm test
 ```
 
-→ `181 passed`. Sign-in with a NEP-413 signature, encrypted wallet keys, deposits, funding, policy batches and read-back, ticks, refills and going home, with fake clocks and recorded replies. `chainsig.test.ts` runs a position and a trip home on NEAR-controlled pieces against a fake contract and MPC network that check signatures the way the real ones do; it refuses another key's signature, a wrong counter, a send back to perps and any token but USDC, and its relay transactions match near-api-js byte for byte.
+→ `191 passed`. Sign-in with a NEP-413 signature, encrypted wallet keys, deposits, funding, policy batches and read-back, ticks, refills and going home, with fake clocks and recorded replies. `chainsig.test.ts` runs a position and a trip home on NEAR-controlled pieces against a fake contract and MPC network that check signatures the way the real ones do; it refuses another key's signature, a wrong counter, a send back to perps and any token but USDC, and its relay transactions match near-api-js byte for byte.
 
 **4. The records contract** (needs `cargo-near`, see `contract/README.md`):
 
@@ -237,7 +248,7 @@ cd signer && cargo test
 cd web && npm ci && npm test && npm run build && npx playwright test
 ```
 
-→ 44 unit tests, then every screen in headless Chromium at 360×780 and 1280×800, with all outside requests blocked. Screenshots land in `web/screenshots/`.
+→ 46 unit tests, then every screen in headless Chromium at 360×780 and 1280×800, with all outside requests blocked. Screenshots land in `web/screenshots/`.
 
 **7. The exit tool is exactly its source:**
 
@@ -411,10 +422,11 @@ While building this we found that OutLayer's public attestation records are list
 | --- | --- | --- |
 | `guard/` | The guard: a Rust WASI program for OutLayer. Decisions are pure functions in `src/lib.rs`. | 41 |
 | `client/` | TypeScript: sealed boxes, guard client, position planner, fill savings, pieces key, Hyperliquid signing, Chain Signatures pieces, NEAR relay, exit logic | 171 |
-| `server/` | API, SQLite, jobs, NEAR sign-in, OutLayer wallet client, Chain Signatures relay, money flows, Hunt Map collector, Hunter's View | 181 |
+| `server/` | API, SQLite, jobs, NEAR sign-in, OutLayer wallet client, Chain Signatures relay, money flows, Hunt Map collector, Hunter's View | 191 |
 | `signer/` | NEAR contract `unhuntable.near`: Hyperliquid accounts controlled by Chain Signatures, signing only what each piece key approved | 13 |
 | `contract/` | NEAR records contract: piece hashes, guard builds, fee ledger, treasury mirror | 18 |
-| `web/` | Phone-first static web app with a strict CSP | 44 unit + Playwright at two screen sizes |
+| `agent/` | MCP server for AI agents: open, sealed stop, status, close; pays each call with x402 in USDC on NEAR | 6 |
+| `web/` | Phone-first static web app with a strict CSP | 46 unit + Playwright at two screen sizes |
 | `exit/` | Leave-without-us tool: one HTML page or a CLI | in `client/` |
 | `attacks/` | Linking attacks with public data only | |
 | `tools/` | EAS proof check and its reference | |

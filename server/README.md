@@ -46,6 +46,9 @@ Settings come from the environment:
 | `GUARD_PROJECT` | none | Name of the guard project |
 | `POLICY_CONTRACT` | `outlayer.near` | Contract that stores wallet policies |
 | `APP_FEE_ACCOUNT` | none | Account in INTENTS that receives our fee on Aurora deposits |
+| `X402` | `off` | `on`: agent calls are paid per call in USDC on NEAR with x402, settled by `RELAY_ACCOUNT` (needs `relayKey`) |
+| `X402_PAY_TO` | `CHAINSIG_CONTRACT` | NEAR account that receives agent payments; it must be registered for USDC |
+| `X402_PRICE` | `0.002` | Price of one agent call in USDC |
 | `BUILDER_FEE` | `off` | `on`: new NEAR-controlled pieces approve the builder fee and their crypto opens carry it, while the signer contract and the guard name the same builder |
 | `HUNTMAP_DB` | none | Path of the Hunt Map collector's SQLite file; without it `/api/hunt-map` answers `{ "map": null }` |
 
@@ -196,6 +199,17 @@ starts with `home_from_xyz`, the same move in the other direction. Both are rows
 in `chainsig_requests` (migration 004). Balances, fills and liquidation distance
 for these markets are read from Hyperliquid with `dex: "xyz"`.
 
+### AI agents and x402
+
+`agents.ts` holds agent keys (stored as sha256 only, migration 006), their limits and
+the agent routes; `x402.ts` is the paywall. It runs FastNEAR's x402 facilitator in this
+process with `RELAY_ACCOUNT` as its relayer, so a payment is a NEP-366 delegated
+`ft_transfer` of Circle's USDC that our relayer submits, and the server settles it
+before the call runs. An agent opens with `createPosition(..., { reuseOnly: true })`,
+which refuses before anything is saved if the plan needs a piece that is not ready;
+if the owner has something to approve first, the position is marked failed and the
+agent is told so. Every call is a row in `agent_calls` with its payment transaction.
+
 ### The builder fee
 
 With `BUILDER_FEE=on`, `builder.ts` asks the signer contract (`builder` view) and
@@ -247,6 +261,16 @@ cookie.
 - `POST /api/session` signs in (below) and sets the session cookie.
 - `POST /api/logout` ends the session.
 - `GET /api/evidence` → `{ "counts": { "<kind>": n } }` from the evidence table.
+- `POST /api/agents` `{ name, maxNotionalUsd, coins, dailyOpens }` → `{ id, key, name }`:
+  a new agent key, shown in this answer only. `GET /api/agents` lists keys with their
+  calls and the price; `POST /api/agents/:id/revoke` revokes one.
+- Agent routes take `Authorization: Bearer uak_...` instead of the cookie. The key and
+  its limits are checked first; then, with `X402=on`, the call is paid with x402 (an
+  unpaid call gets `402` and a `PAYMENT-REQUIRED` challenge) and settled before it
+  runs: `GET /api/agent/positions` (its own positions, with shard ids and sizes but no
+  addresses or levels), `POST /api/agent/positions` (open on ready pieces only,
+  crypto only), `POST /api/agent/positions/:id/stop` `{ boxes }` and
+  `POST /api/agent/positions/:id/close` `{ now? }`. `GET /api/agent/box-pub` is free.
 - `GET /api/whale` → `{ whale }`: the largest public position right now, or
   `null`. No session needed.
 - `GET /api/hunt-map` → `{ map }`: the Hunt Map, or `null` when no collector

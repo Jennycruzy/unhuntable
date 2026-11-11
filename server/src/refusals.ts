@@ -27,6 +27,12 @@ export const REFUSALS = {
   chainsig_refused: "NEAR's signer contract refused this step: {reason}. Nothing moved.",
   chainsig_sign_again: "This piece's approval is too old for Hyperliquid. Open the app and continue the position to sign it again.",
   stocks_need_near: "Stocks on trade.xyz are traded only from pieces controlled by NEAR Chain Signatures, and they are switched off on this server.",
+  agent_needs_pieces: "This trade needs {need} ready pieces and the account has {have}. The owner sets up more pieces in the app first.",
+  agent_needs_app: "This trade needs the owner's approval in the app first. Nothing was opened.",
+  agent_limit: "This agent key does not allow that: {reason}.",
+  agent_stocks: "Agents trade crypto only. Stocks need the owner's pieces key, which never leaves the owner's browser.",
+  payment_required: "This call costs {price} USDC on NEAR, paid with x402. Pay and send it again.",
+  payment_failed: "The payment did not go through: {reason}. Nothing was done.",
 } as const;
 
 /** Errors of the API itself: sign-in, bad requests, unknown routes. */
@@ -51,6 +57,8 @@ export const API_ERRORS = {
   shard_not_yours: "That piece is not part of this position. Seal the box for one of its own pieces.",
   wrong_state: "This can't be done in the position's current state. Reload and try again.",
   route_unavailable: "This deposit route is not available right now. Try the other route.",
+  agent_key_missing: "Send this agent's key as Authorization: Bearer <key>.",
+  agent_key_refused: "That agent key is not known or was revoked.",
 } as const;
 
 export type RefusalCode = keyof typeof REFUSALS;
@@ -83,6 +91,14 @@ export const HTTP_STATUS: Record<ErrorCode, number> = {
   chainsig_refused: 409,
   chainsig_sign_again: 409,
   stocks_need_near: 409,
+  agent_needs_pieces: 409,
+  agent_needs_app: 409,
+  agent_limit: 403,
+  agent_stocks: 422,
+  payment_required: 402,
+  payment_failed: 402,
+  agent_key_missing: 401,
+  agent_key_refused: 401,
   bad_request: 400,
   not_found: 404,
   not_signed_in: 401,

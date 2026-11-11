@@ -225,6 +225,34 @@ function api(method, path, body, c) {
   if (method === "GET" && path.startsWith("/api/home/"))
     return ok({ homeId: "home1", state: home.state, steps: home.steps, relockBatch: home.state === "relock_wait" ? policyBatch("lock") : null, ...(home.arrivedUsdc ? { arrivedUsdc: home.arrivedUsdc } : {}) });
   if (method === "GET" && path === "/api/alerts") return ok({ alerts: [] });
+  if (method === "GET" && path === "/api/agents")
+    return ok({
+      price: scenario === "agents_free" ? null : "0.002",
+      payTo: scenario === "agents_free" ? null : "unhuntable.near",
+      network: scenario === "agents_free" ? null : "near:mainnet",
+      keys: [
+        {
+          id: "aaaaaaaa-1111-4111-8111-111111111111",
+          name: "trend bot",
+          maxNotionalUsd: 100,
+          coins: ["ETH", "BTC"],
+          dailyOpens: 5,
+          createdMs: 1767225600000,
+          revoked: false,
+          calls: 2,
+          paidCalls: 2,
+          recent: [
+            { op: "close", result: "ok", paidTx: "PayTx2", ms: 1767226200000 },
+            { op: "open", result: "ok", paidTx: "PayTx1", ms: 1767225900000 },
+          ],
+        },
+      ],
+    });
+  if (method === "POST" && path === "/api/agents") {
+    if (!body.coins?.length) return fail(400, "bad_request", "That request is not in the shape we expect.");
+    return ok({ id: "bbbbbbbb-2222-4222-8222-222222222222", key: "uak_" + "c3".repeat(32), name: body.name });
+  }
+  if (method === "POST" && /^\/api\/agents\/[^/]+\/revoke$/.test(path)) return ok({ ok: true });
   return fail(404, "not_found", "There is nothing here.");
 }
 

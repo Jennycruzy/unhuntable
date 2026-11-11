@@ -25,6 +25,12 @@ const CODES = [
   "chainsig_refused",
   "chainsig_sign_again",
   "stocks_need_near",
+  "agent_needs_pieces",
+  "agent_needs_app",
+  "agent_limit",
+  "agent_stocks",
+  "payment_required",
+  "payment_failed",
 ];
 
 describe("refusal map complete", () => {

@@ -48,14 +48,19 @@ function Overview({ accountId, needsSetup }: { accountId: string; needsSetup: bo
           Set up my pieces key
         </Link>
       ) : (
-        <div className="row-buttons">
-          <Link className="button" href="/trade/">
-            Trade
-          </Link>
-          <Link className="button secondary" href="/deposit/">
-            Deposit
-          </Link>
-        </div>
+        <>
+          <div className="row-buttons">
+            <Link className="button" href="/trade/">
+              Trade
+            </Link>
+            <Link className="button secondary" href="/deposit/">
+              Deposit
+            </Link>
+          </div>
+          <p className="small">
+            <Link href="/agents/">AI agents</Link>: let an agent trade through your pieces, with its own key and limits.
+          </p>
+        </>
       )}
     </main>
   );

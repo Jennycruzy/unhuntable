@@ -45,6 +45,12 @@ export interface Config {
   huntmapDb?: string;
   /** BUILDER_FEE=on: new NEAR-controlled pieces approve the builder fee and their opens carry it. */
   builderFee: boolean;
+  /** X402=on: agent calls are paid per call in USDC on NEAR, settled by RELAY_ACCOUNT. */
+  x402: boolean;
+  /** NEAR account that receives agent payments (registered for USDC). */
+  x402PayTo: string;
+  /** Price of one agent call in USDC. */
+  x402Price: string;
   secrets: Secrets;
 }
 
@@ -127,6 +133,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     relayAccount: env.RELAY_ACCOUNT ?? "",
     huntmapDb: env.HUNTMAP_DB || undefined,
     builderFee: onOff("BUILDER_FEE", env.BUILDER_FEE),
+    x402: onOff("X402", env.X402),
+    x402PayTo: env.X402_PAY_TO || env.CHAINSIG_CONTRACT || "",
+    x402Price: env.X402_PRICE || "0.002",
     secrets: readSecrets(env.SECRETS_FILE),
   };
 }

@@ -5,6 +5,8 @@ import type {
   Whale,
   HuntMap,
   HunterView,
+  AgentKeys,
+  NewAgentKey,
   Balance,
   DepositState,
   HomeStart,
@@ -158,6 +160,15 @@ export class Api {
   }
   homeState(id: string) {
     return this.call<HomeState>("GET", `/api/home/${encodeURIComponent(id)}`);
+  }
+  agents() {
+    return this.call<AgentKeys>("GET", "/api/agents");
+  }
+  newAgent(body: { name: string; maxNotionalUsd: number; coins: string[]; dailyOpens: number }) {
+    return this.call<NewAgentKey>("POST", "/api/agents", body);
+  }
+  revokeAgent(id: string) {
+    return this.call<{ ok: true }>("POST", `/api/agents/${encodeURIComponent(id)}/revoke`, {});
   }
   alerts() {
     return this.call<{ alerts: Alert[] }>("GET", "/api/alerts");
