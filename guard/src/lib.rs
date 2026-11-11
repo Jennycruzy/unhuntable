@@ -537,6 +537,12 @@ pub fn valid_vrf_label(s: &str) -> bool {
     !s.is_empty() && s.len() <= 64 && s.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
 }
 
+/// The seed of a random draw for one shard and market. OutLayer refuses a seed with ":" in
+/// it, and trade.xyz markets are named like "xyz:NVDA", so every ":" becomes "-".
+pub fn vrf_seed(kind: &str, shard: &str, coin: &str, now_ms: u64) -> String {
+    format!("{kind}-{shard}-{coin}-{now_ms}").replace(':', "-")
+}
+
 // ---------------------------------------------------------------- one decision per shard
 
 #[derive(Clone, Copy, Debug, PartialEq)]

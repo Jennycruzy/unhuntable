@@ -183,6 +183,18 @@ piece, at VRF-staggered times inside 0-90 s, or at once with `now`.
 
 Guard calls cost about $0.001 each.
 
+### US stocks on trade.xyz
+
+A stock market (`xyz:NVDA` and the like) is traded only from a piece controlled
+by NEAR Chain Signatures; without `CHAINSIG_CONTRACT` the plan is refused with
+`stocks_need_near`. After the guard's agent is approved, the browser's piece key
+signs one more request, `xyz_in`: a `sendAsset` from the piece to itself that
+moves its funding, less 1 USDC kept on the main balance, onto trade.xyz. The
+server relays it to the signer contract and posts the signed action. Going home
+starts with `home_from_xyz`, the same move in the other direction. Both are rows
+in `chainsig_requests` (migration 004). Balances, fills and liquidation distance
+for these markets are read from Hyperliquid with `dex: "xyz"`.
+
 ### Watching and refills
 
 Every open piece is ticked through the guard once per coin every 120 s, and at

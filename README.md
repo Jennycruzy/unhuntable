@@ -14,6 +14,8 @@
 
 Together: **no key to steal, no stop to read, no accounts to link.**
 
+**US stocks too.** The same pieces trade NVDA, TSLA, AAPL and nine more markets on [trade.xyz](https://trade.xyz), Hyperliquid's stock market list. NEAR Chain Signatures move the money there and back, and the sealed stop fires only when prices from outside the order book agree. Live on mainnet: [an NVDA short opened](https://app.hyperliquid.xyz/explorer/tx/0xdfdd58cd4df862ffe15704488de26802050700b2e8fb81d183a604200cfc3cea) with an empty public order list, and [the sealed stop closed it](https://app.hyperliquid.xyz/explorer/tx/0xe3658df9d0c075c3e4df04488de8bc02021800df6bc39495872e394c8fc44fae).
+
 **See the problem live:** the [Hunt Map](https://tryunhuntable.site/hunt-map/) lists the liquidation price of every large position held by Hyperliquid's biggest accounts, read from Hyperliquid's public API every 5 minutes. **See the answer on your own trade:** Hunter's View puts each of your positions beside what the same public API shows for it.
 
 Tracks: **Privacy & Private AI** · **Unstoppable DeFi** · **AI Security & Defense**
@@ -24,6 +26,7 @@ Tracks: **Privacy & Private AI** · **Unstoppable DeFi** · **AI Security & Defe
 | --- | --- | --- |
 | **NEAR Chain Signatures** | `unhuntable.near` asks `v1.signer` to sign Hyperliquid actions for a piece, so the piece's Hyperliquid account has no private key anywhere | [`unhuntable.near`](https://nearblocks.io/address/unhuntable.near) · [approve-agent tx](https://nearblocks.io/txns/86qJbTWkiXwXsKfCCWqK63yLanzvkbxikMj1R4HfufVd) · [the account it controls](https://app.hyperliquid.xyz/explorer/address/0x35c99eff31255e9ac3fc2a3c6e4dd70cb026b02a) |
 | **OutLayer TEE (Intel TDX)** | Runs the guard: sealed stops, one agent key per piece, seven price sources, the defence ladder | Sealed-stop trade: public order list `[]` while open, then a reduce-only close |
+| **trade.xyz (US stocks on Hyperliquid)** | 12 stock and index markets, isolated margin, money moved onto trade.xyz and back by Chain Signatures, stops that need two prices from outside the book | [move in](https://nearblocks.io/txns/8LzpGyN9kKpDwMmYKihG1MXXbgHFbs9H3E9Ci7w1jL6Z) · [stop fired](https://nearblocks.io/txns/6ewnHXXtwTjBvqdEqYdDkoVc3oE3ew2b6prZ5MAVCz4c) · [move back](https://nearblocks.io/txns/CALA24Gya1fLd8No2wzukUSM8cQ29eaBAUActpFLVGvc) |
 | **NEAR Intents (Confidential)** | Holds your private balance and funds each piece with no public link between pieces | 2.5 USDC sent privately to a piece, arriving as 2.178894 USDC |
 | **1Click** | Deposits from any chain, and pays out to Hyperliquid through a shared payer used by thousands of accounts | [15 USDT in from BNB Chain](#what-ran-on-mainnet-with-real-money); ~2,000 shared-payer sends to 991 accounts in 12 hours |
 | **Aurora Intents** | A second private way in, straight to a piece's Hyperliquid account, with our 6 basis point integrator fee | 2 USDC from Arbitrum landed as 1.6827 USDC, fee applied |
@@ -65,6 +68,32 @@ The guard ([`guard/`](guard/)) is a Rust program that runs inside OutLayer's tru
 - A sealed-stop trade on a Chain Signatures piece: the public order list stayed empty (`[]`) while the position was open, and the stop fired as a reduce-only close.
 - Policy changes approved by the owner's NEAR wallet and read back from chain before any money moved.
 - We found and reported a privacy flaw in OutLayer's public call record ([out-layer/outlayer#35](https://github.com/out-layer/outlayer/issues/35)).
+
+### US stocks on trade.xyz: the same pieces, the same sealed stop
+
+[trade.xyz](https://trade.xyz) is a market list on Hyperliquid for US stocks and indexes. A position there is as public as any other: the account, the size, the liquidation price and every resting stop. Unhuntable trades it the same way it trades crypto, with three things done differently because stocks are different.
+
+**Markets.** NVDA, TSLA, AAPL, MSFT, GOOGL, AMZN, META, AMD, MU, INTC, and the indexes XYZ100 and SP500. Pick "US stocks" on the Trade screen.
+
+**Money moves by Chain Signatures.** trade.xyz keeps its own balance, apart from Hyperliquid's main one. A piece's USDC is moved onto trade.xyz with a `sendAsset` action from the piece to itself, and moved back the same way before going home. The piece key approves that exact action, `unhuntable.near` builds the Hyperliquid message itself, and NEAR's MPC network signs. The app only ever builds this action from a piece to itself, and nothing can be signed that the piece key did not approve. This is why stocks are traded only from NEAR-controlled pieces.
+
+**Stops need prices from outside the book.** A stock stop fires only when at least 3 sources agree within 0.5%, and at least 2 of those are not the trade.xyz order book: trade.xyz's oracle, Yahoo Finance and Nasdaq. Outside prices count only when they are under 5 minutes old. So pushing the trade.xyz book alone can never fire your stop, and when US prices are not live (outside 04:00 to 20:00 New York time on trading days) the guard holds instead of guessing.
+
+**Isolated margin.** trade.xyz markets use isolated margin, so each piece's risk is its own. The planner picks the leverage that keeps liquidation at least 18% away and tells you before you confirm.
+
+**Leaving.** Going home and the [exit tool](#leave-without-us) both close stock positions and move the money back from trade.xyz first.
+
+**Proof on mainnet** (one piece, about $10.70 of NVDA, total cost under one cent):
+
+| Step | Result |
+| --- | --- |
+| Piece moved 2.16 USDC onto trade.xyz | [NEAR signed in 8.8 s](https://nearblocks.io/txns/8LzpGyN9kKpDwMmYKihG1MXXbgHFbs9H3E9Ci7w1jL6Z); Hyperliquid answered `ok` |
+| Guard set 6x isolated leverage and opened a short of 0.06 NVDA | [guard run](https://nearblocks.io/txns/HofQYerGRb1BgdThuEAgzyVfA7LwEA9pzAv4mj6oixLj): 4 of 4 price sources agreed; [filled at 178.10](https://app.hyperliquid.xyz/explorer/tx/0xdfdd58cd4df862ffe15704488de26802050700b2e8fb81d183a604200cfc3cea) |
+| Stop sealed at 190, then one guard tick | Hyperliquid's public order list for the account was `[]` on both market lists; the [tick](https://nearblocks.io/txns/9vnaLswaPtZB6kfWt88jvwakxgScCPZ8FBU2964kuPV6) fired nothing |
+| Stop sealed again at a price already crossed, then one guard tick | [The stop fired](https://nearblocks.io/txns/6ewnHXXtwTjBvqdEqYdDkoVc3oE3ew2b6prZ5MAVCz4c): a [reduce-only close at 178.22](https://app.hyperliquid.xyz/explorer/tx/0xe3658df9d0c075c3e4df04488de8bc02021800df6bc39495872e394c8fc44fae). A [second tick](https://nearblocks.io/txns/FxAXyJ5hnt15Xc5ukxH8GT4DebBEvALSYiDLtGyU3hMc) fired nothing |
+| Piece moved its 2.150877 USDC back to the main balance | [NEAR signed in 8.7 s](https://nearblocks.io/txns/CALA24Gya1fLd8No2wzukUSM8cQ29eaBAUActpFLVGvc); Hyperliquid answered `ok` |
+
+The account is [`0x35c9…b02a`](https://app.hyperliquid.xyz/explorer/address/0x35c99eff31255e9ac3fc2a3c6e4dd70cb026b02a): no private key for it exists, and both fills are on its public page.
 
 ### NEAR Intents and Confidential Intents: money in, between pieces and home, with no trail
 
@@ -112,6 +141,9 @@ All of these are observed results on NEAR, NEAR Intents, OutLayer and Hyperliqui
 | The piece key approved the guard's agent; the contract asked NEAR to sign | NEAR's MPC network signed in 6.5 seconds for 0.0086 NEAR. Hyperliquid answered `ok` and lists the guard's key as that account's agent. |
 | The guard opened a 5x long of 0.0047 ETH on that piece and sealed a stop | Filled at 2244.0. Hyperliquid's public order list for the account was empty (`[]`) while the position was open. |
 | The sealed stop was moved above the price and the guard ticked | The stop fired as a reduce-only close at 2243.6, with 7 of 7 price sources agreeing. A second tick fired nothing. The whole trade cost about one cent. |
+| Moved a NEAR-controlled piece's 2.16 USDC onto trade.xyz | `unhuntable.near` asked NEAR to sign a `sendAsset` from the piece to itself; [signed in 8.8 seconds](https://nearblocks.io/txns/8LzpGyN9kKpDwMmYKihG1MXXbgHFbs9H3E9Ci7w1jL6Z), Hyperliquid answered `ok`. |
+| The guard opened a 6x isolated short of 0.06 NVDA on trade.xyz and sealed a stop | Filled at 178.10 with 4 of 4 stock price sources agreeing. The account's public order list was empty (`[]`) while the position was open. |
+| The sealed stop was moved below the price and the guard ticked | [The stop fired](https://nearblocks.io/txns/6ewnHXXtwTjBvqdEqYdDkoVc3oE3ew2b6prZ5MAVCz4c) as a reduce-only close at 178.22. A second tick fired nothing. The piece then moved its money back from trade.xyz through NEAR. The whole trade cost under one cent. |
 | Asked the contract to sign the same request twice (NEAR testnet) | Refused: "the piece key did not sign this action". |
 | Deposited 15 USDT from BNB Chain into an OutLayer wallet | Arrived as 14.978224 USDC in the wallet's NEAR Intents balance, then moved into its confidential balance. |
 | Moved 3 USDC from a confidential balance to a piece's own Hyperliquid account | Arrived as 2.678831 USDC in the piece's perp account in under 3 minutes, sent by 1Click's shared payer, which made about 2,000 sends to 991 different accounts in the same 12 hours. |
@@ -154,7 +186,7 @@ No keys, no wallet, no money, no network. Each step is "do this → you see that
 cd guard && cargo test --lib --test guard_tests
 ```
 
-→ `test result: ok. 31 passed`. These include `one_bad_feed_cannot_fire`, `real_crash_fires_once`, `stop_level_never_in_output`, `guard_has_no_transfer_path`, `defence_ladder_steps`, and signature tests that match Hyperliquid's official Python SDK byte for byte (`order_signatures_match_reference_sdk`, `usd_send_digest_matches_reference_sdk`) and EAS's official SDK (`eas_offchain_attestation_matches_sdk`).
+→ `test result: ok. 41 passed`. These include `moving_the_xyz_book_alone_cannot_fire_a_stock_stop`, `stocks_need_two_outside_sources`, `trade_xyz_leverage_and_open_match_reference_sdk`, `one_bad_feed_cannot_fire`, `real_crash_fires_once`, `stop_level_never_in_output`, `guard_has_no_transfer_path`, `defence_ladder_steps`, and signature tests that match Hyperliquid's official Python SDK byte for byte (`order_signatures_match_reference_sdk`, `usd_send_digest_matches_reference_sdk`) and EAS's official SDK (`eas_offchain_attestation_matches_sdk`).
 
 **2. The client library, the planner and the exit tool** (Node 20+):
 
@@ -162,7 +194,7 @@ cd guard && cargo test --lib --test guard_tests
 cd client && npm ci && npm test
 ```
 
-→ `160 passed`. The sealed-box tests open a box made by the Rust guard's reference and make one the guard opens (`sealed_call_from_ts_client_opens` on the Rust side). The planner's property tests check hundreds of random positions: sizes add up exactly, every piece is above Hyperliquid's $10 minimum, and no piece needs money from another. The exit tests check that the 12 words and the private key are never sent anywhere. The Chain Signatures tests (`chainsig.test.ts`) match the signer contract's hashes, rebuild the exact message piece C signed on mainnet, and recover NEAR's real MPC signature for it to piece C's Hyperliquid account.
+→ `165 passed`. The sealed-box tests open a box made by the Rust guard's reference and make one the guard opens (`sealed_call_from_ts_client_opens` on the Rust side). The planner's property tests check hundreds of random positions: sizes add up exactly, every piece is above Hyperliquid's $10 minimum, and no piece needs money from another. The exit tests check that the 12 words and the private key are never sent anywhere. The Chain Signatures tests (`chainsig.test.ts`) match the signer contract's hashes, rebuild the exact message piece C signed on mainnet, and recover NEAR's real MPC signature for it to piece C's Hyperliquid account.
 
 **3. The server and its money flows:**
 
@@ -366,8 +398,8 @@ While building this we found that OutLayer's public attestation records are list
 
 | Folder | What it is | Tests |
 | --- | --- | --- |
-| `guard/` | The guard: a Rust WASI program for OutLayer. Decisions are pure functions in `src/lib.rs`. | 31 |
-| `client/` | TypeScript: sealed boxes, guard client, position planner, fill savings, pieces key, Hyperliquid signing, Chain Signatures pieces, NEAR relay, exit logic | 160 |
+| `guard/` | The guard: a Rust WASI program for OutLayer. Decisions are pure functions in `src/lib.rs`. | 41 |
+| `client/` | TypeScript: sealed boxes, guard client, position planner, fill savings, pieces key, Hyperliquid signing, Chain Signatures pieces, NEAR relay, exit logic | 165 |
 | `server/` | API, SQLite, jobs, NEAR sign-in, OutLayer wallet client, Chain Signatures relay, money flows, Hunt Map collector, Hunter's View | 176 |
 | `signer/` | NEAR contract `unhuntable.near`: Hyperliquid accounts controlled by Chain Signatures, signing only what each piece key approved | 12 |
 | `contract/` | NEAR records contract: piece hashes, guard builds, fee ledger, treasury mirror | 18 |

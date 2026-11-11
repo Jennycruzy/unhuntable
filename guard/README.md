@@ -61,6 +61,21 @@ three sources agree within 0.5% of their median; the median of the agreeing
 prices is the mid. With no agreement nothing fires, nothing is cut and nothing
 is closed.
 
+Stocks and indexes on trade.xyz (`xyz:NVDA`, `xyz:TSLA`, `xyz:AAPL`,
+`xyz:MSFT`, `xyz:GOOGL`, `xyz:AMZN`, `xyz:META`, `xyz:AMD`, `xyz:MU`,
+`xyz:INTC`, `xyz:XYZ100`, `xyz:SP500`) use four sources instead: the trade.xyz
+order book, trade.xyz's oracle, Yahoo Finance and Nasdaq. At least three must
+agree within 0.5%, and at least two of the agreeing ones must be outside the
+order book, so moving the book alone can never fire a stop. Yahoo and Nasdaq
+prices count only when under 5 minutes old; when US prices are not live there is
+no agreement and the guard holds. Orders on trade.xyz use asset id 110000 plus
+the market's index, and leverage there is set as isolated margin. Order and
+leverage signatures are checked against Hyperliquid's official SDK in
+`trade_xyz_leverage_and_open_match_reference_sdk`.
+
+Random draws are seeded with the shard, the market and the time. OutLayer does
+not take a seed with `:` in it, so `vrf_seed` writes `xyz:NVDA` as `xyz-NVDA`.
+
 ## Stops and take-profits
 
 A stop fires when every agreeing price is at or past the trigger against the

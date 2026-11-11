@@ -670,3 +670,13 @@ fn xyz_positions_read_by_full_name() {
     let st = json!({ "assetPositions": [{ "position": { "coin": "xyz:NVDA", "szi": "-0.112", "liquidationPx": "205.1" } }] });
     assert_eq!(position_of(&st, "xyz:NVDA"), Some(Position { szi: -0.112, liquidation_px: Some(205.1) }));
 }
+
+#[test]
+fn vrf_seed_has_no_colon_for_stock_markets() {
+    assert_eq!(vrf_seed("band", "c", "ETH", 1700), "band-c-ETH-1700");
+    assert_eq!(vrf_seed("band", "c", "xyz:NVDA", 1700), "band-c-xyz-NVDA-1700");
+    assert_eq!(vrf_seed("jitter", "0123456789abcdef", "xyz:SP500", 5), "jitter-0123456789abcdef-xyz-SP500-5");
+    for a in ASSETS {
+        assert!(!vrf_seed("band", "c", a.coin, 1).contains(':'), "{}", a.coin);
+    }
+}

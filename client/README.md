@@ -92,6 +92,10 @@ else for (const piece of p.pieces) console.log(piece.size, piece.fundingUsd, pie
   covers its margin, a reserve that keeps liquidation at least 18% away at
   open, trading fees and the $0.33 funding route fee. A piece never needs money
   from another piece.
+- trade.xyz markets (`xyz:NVDA` and the like, listed in `ASSETS`) are isolated
+  margin. `isolatedLeverage` lowers the asked leverage until liquidation is at
+  least 18% away, the plan's `openLeverage` carries it, and `xyzMoveUsd` says
+  how much of each piece's funding moves onto trade.xyz (all but 1 USDC).
 - Refusals come back as `{ code, message }` with a plain sentence:
   `shard_min_notional`, `max_leverage`, `over_cap` or `bad_input`.
 

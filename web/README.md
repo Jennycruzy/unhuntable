@@ -38,7 +38,8 @@ HTTP API, or is a plain sentence the API sent back.
   checks every 5 seconds and tells you when the money is in your private
   balance.
 - `/trade` Market, side, size, leverage and hiding level (Normal: 1 piece,
-  Whale: several). Review shows every piece, the fees, the exit fee and the
+  Whale: several). Markets are Crypto or US stocks (trade.xyz); for stocks the
+  review shows the isolated-margin leverage and says when stops can fire. Review shows every piece, the fees, the exit fee and the
   accounts as the world sees them. Confirm makes any new piece wallets in your
   browser, asks your wallet once to approve the new pieces' policies, and seals
   your stop and take-profit if you gave them.

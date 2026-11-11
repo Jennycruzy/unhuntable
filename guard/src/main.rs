@@ -260,7 +260,7 @@ mod guest {
     fn tick_shard(shard: &str, coin: &str, agree: Option<&[f64]>, mid: Option<f64>, dry: bool, defend: bool, builder: Option<(&str, u64)>) -> Result<Value, String> {
         let (stop_rec, stop) = read_trigger(&stop_name(shard, coin))?;
         let (tp_rec, tp) = read_trigger(&tp_name(shard, coin))?;
-        let (rnd, _, _) = vrf::random_bytes(&format!("band-{shard}-{coin}-{}", now_ms()))?;
+        let (rnd, _, _) = vrf::random_bytes(&vrf_seed("band", shard, coin, now_ms()))?;
         let d = decide_shard(stop.as_ref(), tp.as_ref(), agree, mid, u01(&rnd[0..8]), u01(&rnd[8..16]));
         let mut done = d.done(dry);
         let mut order = Value::Null;
@@ -389,7 +389,7 @@ mod guest {
                 let mut st = check_trigger(&input["stop"], "stop")?;
                 let bps = check_jitter_bps(&input["jitter_bps"])?;
                 if bps > 0 {
-                    let (rnd, _, _) = vrf::random_bytes(&format!("jitter-{shard}-{}-{}", st.coin, now_ms()))?;
+                    let (rnd, _, _) = vrf::random_bytes(&vrf_seed("jitter", &shard, &st.coin, now_ms()))?;
                     st.trigger = jitter_trigger(st.trigger, bps, u01(&rnd[0..8]));
                 }
                 sealed::set(ENC, None, &stop_name(&shard, &st.coin), &serde_json::to_vec(&st).unwrap()).map_err(e)?;

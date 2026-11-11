@@ -30,6 +30,8 @@ them and sends only those signatures. It talks to three places only:
 3. For each piece wallet, reads its Hyperliquid account.
 4. Closes any open position with a reduce-only order 3% through the market
    price.
+   Stock positions on trade.xyz are closed the same way, and their USDC is
+   moved back from trade.xyz to the main balance first.
 5. Moves all USDC from perps to spot.
 6. Sends the spot USDC to a deposit address that lands in your private
    balance, and waits until it arrives.

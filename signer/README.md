@@ -36,7 +36,8 @@ how money comes home.
 Addresses are `0x` and 40 lowercase hex characters. Amounts are plain decimals such
 as `12.5`. Market list names (`source_dex`, `destination_dex`) are empty for the
 main list or up to 16 lowercase letters and digits, such as `xyz`. Anything else is
-refused with a plain sentence. The hashes match Hyperliquid's own Python SDK for
+refused with a plain sentence. `SendAsset` is how a piece moves its USDC onto
+trade.xyz and back; the app only ever sends it from a piece to itself. The hashes match Hyperliquid's own Python SDK for
 every action type (`src/hl_vectors.json`, test `typed_data_hash_matches_hyperliquid_sdk`).
 
 ## Methods
