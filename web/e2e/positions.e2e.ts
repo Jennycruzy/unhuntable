@@ -29,6 +29,8 @@ test("hunter's view puts what you see beside what Hyperliquid shows anyone", asy
   // two accessibility scans; on a small build box under full load they need more time
   test.slow();
   await signedIn();
+  // no fade-ins while the contrast is measured
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/positions/");
   const view = page.getByTestId("hunter-view");
   await expect(view.getByTestId("hunter-you")).toContainText("Long $300.00 ETH");
@@ -48,7 +50,7 @@ test("hunter's view puts what you see beside what Hyperliquid shows anyone", asy
   for (const colorScheme of ["dark", "light"] as const) {
     await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
     const bad = (await new AxeBuilder({ page }).include('[data-testid="hunter-view"]').analyze()).violations.filter((v) => v.impact === "serious" || v.impact === "critical");
-    expect(bad.map((v) => `${colorScheme} ${v.id}`)).toEqual([]);
+    expect(bad.map((v) => `${colorScheme} ${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`)).toEqual([]);
   }
 });
 
