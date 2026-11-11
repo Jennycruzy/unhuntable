@@ -2,13 +2,45 @@
 
 **Private perps for DeFi traders and AI agents, on Hyperliquid and trade.xyz. Built on nine parts of the NEAR stack, all live on mainnet.**
 
-On Hyperliquid, anyone can see the price that wipes you out: every account's size, its liquidation price and every stop-loss resting on the book. near.com hides your name, not that price. **Unhuntable hides the price, for people and for their agents.** Your position is split across accounts nobody can link, your stop is sealed where nobody can read it, and each piece's account is controlled by NEAR Chain Signatures, with no private key anywhere. Hunters have nothing to push the price to.
+**Unhuntable hides the price that wipes you out, for people and for their agents.** Your position is split across accounts nobody can link, your stop is sealed where nobody can read it, and each piece's account is controlled by NEAR Chain Signatures, with no private key anywhere. Hunters have nothing to push the price to.
 
 **Live app:** [tryunhuntable.site](https://tryunhuntable.site) · **Hunt Map:** [tryunhuntable.site/hunt-map](https://tryunhuntable.site/hunt-map/) (no sign-in) · **Agents:** [`agent/`](agent/) (MCP server)
 
 Tracks: **Privacy & Private AI** · **Unstoppable DeFi** · **AI Security & Defense**
 
-[Two doors](#two-doors-one-protection) · [NEAR stack](#nine-parts-of-the-near-stack-each-doing-real-work) · [Mainnet proof](#what-ran-on-mainnet-with-real-money) · [How it works](#how-it-works-in-short) · [Judge it in 90 seconds](#judge-it-in-90-seconds) · [Go deeper](#go-deeper)
+### Why it matters
+
+- **Every Hyperliquid account is public.** Its size, the exact price that liquidates it and every stop resting on the book. Big positions are tracked by bots and dashboards, and the price is pushed to the levels everyone can see. The [Hunt Map](https://tryunhuntable.site/hunt-map/) shows them live.
+- **near.com hides your name, not that price.** Hunters do not need your name. Unhuntable removes the level itself: no big position to find, no stop on the book.
+- **Agents have it worse.** Their wallets are public, they trade on schedules, and a prompt injection can talk them into giving away their stop. Here the stop is sealed on the agent's own machine and no tool can read it back.
+- **Proven on mainnet with real money:** [a sealed stop firing on an NVDA short](https://app.hyperliquid.xyz/explorer/tx/0xe3658df9d0c075c3e4df04488de8bc02021800df6bc39495872e394c8fc44fae), [NEAR's MPC network signing for a Hyperliquid account with no private key](https://nearblocks.io/txns/86qJbTWkiXwXsKfCCWqK63yLanzvkbxikMj1R4HfufVd), and [an AI agent paying for a call with x402](https://nearblocks.io/txns/7VcZWHJzgrauZaY6irWh1BiHGcr7kDch92UG69MFvMBD).
+- **The answer NEAR's founder pointed to.** In [NEP discussion #531](https://github.com/near/NEPs/issues/531), Illia Polosukhin notes that users spread their activity over many separate accounts to keep it apart, and that the answer lives in the application layer. Unhuntable is that answer for perps: the separate accounts are made and funded for you, from your one NEAR account.
+
+[For judges](#for-judges-start-here) · [How it works](#how-it-works-in-short) · [Two doors](#two-doors-one-protection) · [NEAR stack](#nine-parts-of-the-near-stack-each-doing-real-work) · [Mainnet proof](#what-ran-on-mainnet-with-real-money) · [Go deeper](#go-deeper)
+
+---
+
+## For judges, start here
+
+Ninety seconds, no wallet and no money needed:
+
+1. **Open the [Hunt Map](https://tryunhuntable.site/hunt-map/).** Real Hyperliquid accounts and the exact prices that liquidate them, read from Hyperliquid's public API every 5 minutes. This is what every trader is exposed to today.
+2. **Open three mainnet transactions.** [A sealed stop firing on an NVDA short](https://app.hyperliquid.xyz/explorer/tx/0xe3658df9d0c075c3e4df04488de8bc02021800df6bc39495872e394c8fc44fae), [NEAR's MPC network signing for a Hyperliquid account with no private key](https://nearblocks.io/txns/86qJbTWkiXwXsKfCCWqK63yLanzvkbxikMj1R4HfufVd), and [an AI agent paying for a call with x402](https://nearblocks.io/txns/7VcZWHJzgrauZaY6irWh1BiHGcr7kDch92UG69MFvMBD).
+3. **Run the tests.** 470 tests across the guard, the signer contract, the client, the server, the MCP server and the app, plus browser tests at phone and desktop size, all in CI: [Check it yourself](docs/check-it-yourself.md).
+
+---
+
+## How it works, in short
+
+1. **Sign in with your NEAR wallet.** Your browser makes 12 words that only you hold. Every key Unhuntable uses for you comes from them.
+2. **Deposit from any chain.** The money lands in your private balance on NEAR Intents.
+3. **Open a trade.** Pick BTC, ETH, SOL or a US stock on trade.xyz, then size and leverage. A big position is split into 2 to 12 separate Hyperliquid accounts, each funded on its own from your private balance, so nobody can tie them together.
+4. **Set your stop.** Your browser seals it into a box only the guard can open. It never goes on Hyperliquid's book, so there is no level for anyone to hunt.
+5. **The guard watches.** It runs inside an OutLayer TEE, checks prices every 2 minutes, fires your stop only when independent prices agree, and cuts size before liquidation. It can trade, but Hyperliquid refuses it if it tries to move money.
+6. **Go home.** Your own keys sign the money back to your private balance through NEAR Chain Signatures. If we ever disappear, the exit tool brings it home from your 12 words alone.
+7. **Or hand it to your agent.** Give an AI agent its own key with limits on the Agents screen. It trades through the same pieces with the same sealed stops, and pays for each call itself.
+
+[Every step in detail](docs/how-it-works.md)
 
 ---
 
@@ -81,38 +113,6 @@ All of these are observed results on NEAR, NEAR Intents, OutLayer and Hyperliqui
 | The guard's agent key tried to send 1 USDC out of the piece | Hyperliquid refused it: an agent's transfer counts as the agent's own empty account. The piece's balance did not change. |
 | The guard signed a track-record proof | An EAS off-chain attestation with totals only (2 pieces, equity, net deposits, PnL). It verifies with the official EAS SDK and recovers the guard's key as signer. No address leaves the guard. |
 | We attacked our own piece with public data only | Funding origin, amount fingerprint, agent reuse and the private withdraw's public status: **not linked**. Input recovery from OutLayer's public call record: **linked**, before we sealed every call. **Not linked** after. ([details](docs/security.md#attacks-we-ran-on-our-own-pieces)) |
-
----
-
-## How it works, in short
-
-1. **Sign in with your NEAR wallet.** Your browser makes 12 words that only you hold. Every key Unhuntable uses for you comes from them.
-2. **Deposit from any chain.** The money lands in your private balance on NEAR Intents.
-3. **Open a trade.** Pick BTC, ETH, SOL or a US stock on trade.xyz, then size and leverage. A big position is split into 2 to 12 separate Hyperliquid accounts, each funded on its own from your private balance, so nobody can tie them together.
-4. **Set your stop.** Your browser seals it into a box only the guard can open. It never goes on Hyperliquid's book, so there is no level for anyone to hunt.
-5. **The guard watches.** It runs inside an OutLayer TEE, checks prices every 2 minutes, fires your stop only when independent prices agree, and cuts size before liquidation. It can trade, but Hyperliquid refuses it if it tries to move money.
-6. **Go home.** Your own keys sign the money back to your private balance through NEAR Chain Signatures. If we ever disappear, the exit tool brings it home from your 12 words alone.
-7. **Or hand it to your agent.** Give an AI agent its own key with limits on the Agents screen. It trades through the same pieces with the same sealed stops, and pays for each call itself.
-
-[Every step in detail](docs/how-it-works.md)
-
----
-
-## Why it matters
-
-**The problem.** Hyperliquid is the biggest onchain perps exchange, and it is fully transparent. A public account page shows a position, its liquidation price and its resting stop and take-profit orders to anyone. Stop hunting is not a theory there: big positions are tracked by bots and public dashboards, and the price is pushed to the levels everyone can see.
-
-The same problem shows up across all public chains. In [NEP discussion #531](https://github.com/near/NEPs/issues/531), Illia Polosukhin notes that users end up spreading their activity over many separate accounts to keep it apart, and that the answer lives in the application layer. Unhuntable is that answer for perps: the separate accounts are made and funded for you, from your one NEAR account.
-
----
-
-## Judge it in 90 seconds
-
-No wallet and no money needed:
-
-1. **Open the [Hunt Map](https://tryunhuntable.site/hunt-map/).** Real Hyperliquid accounts and the exact prices that liquidate them, read from Hyperliquid's public API every 5 minutes. This is what every trader is exposed to today.
-2. **Open three mainnet transactions.** [A sealed stop firing on an NVDA short](https://app.hyperliquid.xyz/explorer/tx/0xe3658df9d0c075c3e4df04488de8bc02021800df6bc39495872e394c8fc44fae), [NEAR's MPC network signing for a Hyperliquid account with no private key](https://nearblocks.io/txns/86qJbTWkiXwXsKfCCWqK63yLanzvkbxikMj1R4HfufVd), and [an AI agent paying for a call with x402](https://nearblocks.io/txns/7VcZWHJzgrauZaY6irWh1BiHGcr7kDch92UG69MFvMBD).
-3. **Run the tests.** 470 tests across the guard, the signer contract, the client, the server, the MCP server and the app, plus browser tests at phone and desktop size, all in CI: [Check it yourself](docs/check-it-yourself.md).
 
 ---
 
