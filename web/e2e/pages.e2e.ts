@@ -78,6 +78,14 @@ test("the Hunt Map is open to visitors and shows the levels the server read, eac
   await expect(btc.getByRole("link", { name: "0x8eff…bd5e" })).toHaveAttribute("href", "https://app.hyperliquid.xyz/explorer/address/0x8eff8ff863c1a54ec6697b7ad98fe30aa344bd5e");
   await expect(btc).toContainText("72,473");
   await expect(btc).toContainText("1.5% below");
+  const replays = page.getByTestId("replays");
+  await expect(replays.getByRole("heading", { name: "14 of 23 came straight back." })).toBeVisible();
+  await expect(replays.getByTestId("replay")).toHaveCount(1);
+  await expect(replays.getByTestId("replay")).toContainText("Long $200K HOOD");
+  await expect(replays.getByTestId("replay")).toContainText("Liquidated at 89.83");
+  await expect(replays.getByTestId("replay")).toContainText("went to 89.53");
+  await expect(replays.getByTestId("replay")).toContainText("Back above the level an hour later");
+  await expect(replays.getByRole("link", { name: "0x0423…55bb" })).toHaveAttribute("href", "https://app.hyperliquid.xyz/explorer/address/0x0423b4b2acb4f219ae4a270abd5dde2360e455bb");
   await expect(page.getByTestId("followed")).toContainText("visible levels followed");
   await expect(page.getByTestId("followed")).toContainText("then back");
   // a visitor never asks who is signed in

@@ -151,6 +151,27 @@ function api(method, path, body, c) {
                   nearest: [{ account: "0x60468ba27448f88b19f52ed02f1a8c52f7a0b21d", side: "long", valueUsd: 26255038.94, liqPx: 1958.18, awayPct: -4.9797, leverage: 6 }],
                 },
               ],
+              replays: {
+                days: 17,
+                minUsd: 100000,
+                events: 23,
+                cameBack: 14,
+                items: [
+                  {
+                    account: "0x0423b4b2acb4f219ae4a270abd5dde2360e455bb",
+                    coin: "xyz:HOOD",
+                    side: "long",
+                    valueUsd: 200000,
+                    px: 89.83,
+                    ms: 1793131664774,
+                    beforePx: 92,
+                    afterPx: 91.9,
+                    extremePx: 89.53,
+                    cameBack: true,
+                    candles: Array.from({ length: 25 }, (_, i) => ({ t: 1793128064774 + i * 300000, h: 92.3 - Math.abs(12 - i) * 0.01, l: i === 12 ? 89.53 : 91.2, c: i === 12 ? 91.26 : 91.6 })),
+                  },
+                ],
+              },
               followed: { levels: 41, reached: 9, mirrorReached: 4, cameBack: 6 },
               touches: [
                 {

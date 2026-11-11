@@ -59,6 +59,21 @@ export interface HuntTouch {
   cameBack: boolean;
 }
 
+/** A real liquidation of a tracked account, with five-minute candles around it. */
+export interface Replay {
+  account: string;
+  coin: string;
+  side: "long" | "short";
+  valueUsd: number;
+  px: number;
+  ms: number;
+  beforePx: number;
+  afterPx: number;
+  extremePx: number;
+  cameBack: boolean;
+  candles: { t: number; h: number; l: number; c: number }[];
+}
+
 export interface HuntMap {
   asOfMs: number;
   sinceMs: number;
@@ -70,6 +85,7 @@ export interface HuntMap {
   coins: MapCoin[];
   followed: { levels: number; reached: number; mirrorReached: number; cameBack: number };
   touches: HuntTouch[];
+  replays?: { days: number; minUsd: number; events: number; cameBack: number; items: Replay[] };
 }
 
 /** GET /api/whale: a public Hyperliquid position, read from Hyperliquid's own API. */

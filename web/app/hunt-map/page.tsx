@@ -5,10 +5,11 @@ import { Mark } from "../../components/icons";
 import { Notice } from "../../components/ui";
 import { sentence } from "../../lib/api";
 import { time } from "../../lib/format";
-import { awayText, bandRows, money, px, short } from "../../lib/huntmap";
+import { awayText, bandRows, money, px, replayPath, replayVerdict, short } from "../../lib/huntmap";
+import { ticker } from "unhuntable-client/hyperliquid";
 import { hyperliquidPage } from "../../lib/links";
 import { api, useInterval } from "../../lib/session";
-import type { HuntMap, MapCoin } from "../../lib/types";
+import type { HuntMap, MapCoin, Replay } from "../../lib/types";
 
 /** The money that is liquidated at each step away from the price, as bars on one scale. */
 function Ladder({ coin }: { coin: MapCoin }) {
@@ -81,6 +82,57 @@ function Coin({ coin }: { coin: MapCoin }) {
         </tbody>
       </table>
     </article>
+  );
+}
+
+function ReplayCard({ r }: { r: Replay }) {
+  const d = replayPath(r);
+  return (
+    <article className="hm-coin hr-card" data-testid="replay">
+      <header>
+        <h3>
+          {r.side === "long" ? "Long" : "Short"} {money(r.valueUsd)} {ticker(r.coin)}
+        </h3>
+        <a href={hyperliquidPage(r.account)} target="_blank" rel="noopener noreferrer" className="hu-addr">
+          {short(r.account)}
+        </a>
+      </header>
+      <svg viewBox="0 0 100 40" preserveAspectRatio="none" className="hr-chart" role="img" aria-label={`${ticker(r.coin)} around the liquidation at ${px(r.px)}`}>
+        <line className="hr-level" x1="0" x2="100" y1={d.levelY} y2={d.levelY} />
+        <line className="hr-mark" x1={d.markX} x2={d.markX} y1="0" y2="40" />
+        <path className="hr-line" d={d.line} />
+        <circle className="hr-dot" cx={d.markX} cy={d.extremeY} r="1.6" />
+      </svg>
+      <p className="small">
+        Liquidated at <b className="num">{px(r.px)}</b>, {time(r.ms)}. The price went to <span className="num">{px(r.extremePx)}</span>; an hour later it was{" "}
+        <span className="num">{px(r.afterPx)}</span>.
+      </p>
+      <span className="badge">{replayVerdict(r)}</span>
+    </article>
+  );
+}
+
+function Replays({ map }: { map: HuntMap }) {
+  const r = map.replays;
+  if (!r || r.items.length === 0) return null;
+  return (
+    <section className="section" data-testid="replays">
+      <div className="wrap">
+        <span className="kicker">Real liquidations, replayed</span>
+        <h2>
+          {r.cameBack} of {r.events} came straight back.
+        </h2>
+        <p className="lede">
+          Of {r.events} liquidations of {money(r.minUsd)} or more among these accounts in the last {r.days} days, the price was back past the liquidation price
+          an hour later {r.cameBack} times. Each one is in Hyperliquid&apos;s public fill history; open the account to check it.
+        </p>
+        <div className="hu-rows">
+          {r.items.map((x) => (
+            <ReplayCard key={`${x.account}-${x.coin}-${x.ms}`} r={x} />
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -227,6 +279,8 @@ export default function HuntMapPage() {
             ))}
           </section>
         )}
+
+        {map && <Replays map={map} />}
 
         {map && <Followed map={map} />}
 

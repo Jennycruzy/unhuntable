@@ -30,6 +30,16 @@ export const LEADERS_EVERY_MS = 24 * 60 * 60_000;
 export const IDLE_AFTER_MS = 24 * 60 * 60_000;
 /** Hyperliquid allows 1200 request weight a minute per address; the collector stays well under. */
 export const WEIGHT_PER_MINUTE = 500;
+/** Accounts whose fill history is read each round, in turn, for liquidations. */
+export const FILLS_PER_ROUND = 6;
+/** How far back liquidations are kept: Hyperliquid's 5-minute candles reach about this far. */
+export const REPLAY_DAYS = 17;
+/** A liquidation this large or larger gets candles around it, for its replay. */
+export const REPLAY_MIN_USD = 100_000;
+/** The replay window: this long before and after the liquidation. */
+export const REPLAY_WINDOW_MS = 60 * 60_000;
+/** Replays given candles each round. */
+export const REPLAY_CANDLES_PER_ROUND = 6;
 /** Rounds are skipped when the disk has less free space than this. */
 export const MIN_FREE_BYTES = 400 * 1024 * 1024;
 
@@ -75,6 +85,32 @@ CREATE TABLE IF NOT EXISTS stops (
   PRIMARY KEY (ms, oid)
 ) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS stops_coin ON stops(coin, ms);
+CREATE TABLE IF NOT EXISTS liquidations (
+  account TEXT NOT NULL,
+  coin TEXT NOT NULL,
+  ms INTEGER NOT NULL,
+  side TEXT NOT NULL CHECK (side IN ('long', 'short')),
+  px REAL NOT NULL,
+  size REAL NOT NULL,
+  value_usd REAL NOT NULL,
+  mark_px REAL,
+  method TEXT,
+  PRIMARY KEY (account, coin, ms)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS liquidations_ms ON liquidations(ms);
+CREATE TABLE IF NOT EXISTS fills_read (
+  account TEXT PRIMARY KEY,
+  read_ms INTEGER NOT NULL
+) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS replay_candles (
+  coin TEXT NOT NULL,
+  t INTEGER NOT NULL,
+  o REAL NOT NULL,
+  h REAL NOT NULL,
+  l REAL NOT NULL,
+  c REAL NOT NULL,
+  PRIMARY KEY (coin, t)
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS candles (
   coin TEXT NOT NULL,
   t INTEGER NOT NULL,
@@ -194,6 +230,48 @@ export function biggestAccounts(levels: Level[], n = Infinity): string[] {
   return [...top.entries()].sort((a, b) => b[1] - a[1]).slice(0, n).map(([a]) => a);
 }
 
+export interface Liquidation {
+  account: string;
+  coin: string;
+  ms: number;
+  /** The side of the position that was liquidated. */
+  side: "long" | "short";
+  /** Average price of the liquidation fills. */
+  px: number;
+  size: number;
+  valueUsd: number;
+  markPx: number | null;
+  method: string | null;
+}
+
+/**
+ * The liquidations of this account in its fill history: fills that Hyperliquid marks with
+ * the account as the liquidated user, grouped per coin when they come within a minute.
+ */
+export function liquidationsOf(account: string, fills: any[]): Liquidation[] {
+  const me = account.toLowerCase();
+  const mine = (Array.isArray(fills) ? fills : [])
+    .filter((f) => String(f?.liquidation?.liquidatedUser ?? "").toLowerCase() === me && num(f?.px) !== null && num(f?.sz) !== null && num(f?.time) !== null)
+    .sort((a, b) => num(a.time)! - num(b.time)!);
+  const out: Liquidation[] = [];
+  for (const f of mine) {
+    const px = num(f.px)!;
+    const sz = num(f.sz)!;
+    const t = num(f.time)!;
+    // a sell closes a long, a buy closes a short
+    const side = f.side === "A" ? "long" : "short";
+    const last = out.find((l) => l.coin === f.coin && l.side === side && t - l.ms <= 60_000);
+    if (last) {
+      last.valueUsd += px * sz;
+      last.size += sz;
+      last.px = last.valueUsd / last.size;
+    } else {
+      out.push({ account: me, coin: String(f.coin), ms: t, side, px, size: sz, valueUsd: px * sz, markPx: num(f.liquidation?.markPx), method: f.liquidation?.method ? String(f.liquidation.method) : null });
+    }
+  }
+  return out;
+}
+
 /** Spaces requests out so the request weight per minute stays under a limit. */
 export class Pacer {
   private next = 0;
@@ -238,6 +316,8 @@ export interface CollectorOptions {
   accountsPerRound?: number;
   stopAccounts?: number;
   minUsd?: number;
+  fillsPerRound?: number;
+  replayCandlesPerRound?: number;
 }
 
 export class HuntCollector {
@@ -332,10 +412,70 @@ export class HuntCollector {
       for (const s of stops) putStop.run(ms, s.account, s.coin, s.side, s.kind, s.triggerPx, s.size, s.oid);
     })();
     errors += await this.candles(candleCoins(levels), ms);
+    errors += await this.liquidationScan(ms);
     this.db
       .prepare("INSERT OR REPLACE INTO rounds (ms, accounts, levels, stops, errors, took_ms) VALUES (?, ?, ?, ?, ?, ?)")
       .run(ms, accounts.length, levels.length, stops.length, errors, this.now() - ms);
     return { ms, accounts: accounts.length, levels: levels.length, stops: stops.length, errors };
+  }
+
+  /**
+   * Read the fill history of the next few known accounts for liquidations, then give the
+   * largest liquidations without candles their five-minute candles. Returns how many reads failed.
+   */
+  private async liquidationScan(ms: number): Promise<number> {
+    let errors = 0;
+    const since = ms - REPLAY_DAYS * 24 * 60 * 60_000;
+    const next = this.db
+      .prepare(
+        `SELECT a.address AS account, f.read_ms AS read FROM accounts a LEFT JOIN fills_read f ON f.account = a.address
+         ORDER BY COALESCE(f.read_ms, 0), a.first_ms LIMIT ?`,
+      )
+      .all(this.opts.fillsPerRound ?? FILLS_PER_ROUND) as { account: string; read: number | null }[];
+    const put = this.db.prepare(
+      "INSERT OR REPLACE INTO liquidations (account, coin, ms, side, px, size, value_usd, mark_px, method) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    );
+    const read = this.db.prepare("INSERT INTO fills_read (account, read_ms) VALUES (?, ?) ON CONFLICT(account) DO UPDATE SET read_ms = excluded.read_ms");
+    for (const { account, read: last } of next) {
+      try {
+        await this.pacer.take(40);
+        // a little overlap, so a liquidation in the last minute before a read is not missed
+        const startTime = Math.max(since, (last ?? 0) - 60_000);
+        const fills = await this.hl.info({ type: "userFillsByTime", user: account, startTime, endTime: ms });
+        const found = liquidationsOf(account, fills);
+        this.db.transaction(() => {
+          for (const l of found) put.run(l.account, l.coin, l.ms, l.side, l.px, l.size, l.valueUsd, l.markPx, l.method);
+          read.run(account, ms);
+        })();
+      } catch {
+        errors++;
+      }
+    }
+    const want = this.db
+      .prepare(
+        `SELECT l.coin, l.ms FROM liquidations l
+         WHERE l.ms >= ? AND l.value_usd >= ? AND l.ms <= ?
+           AND NOT EXISTS (SELECT 1 FROM replay_candles k WHERE k.coin = l.coin AND k.t BETWEEN l.ms - ? AND l.ms + ?)
+         ORDER BY l.value_usd DESC LIMIT ?`,
+      )
+      .all(since, REPLAY_MIN_USD, ms - REPLAY_WINDOW_MS, REPLAY_WINDOW_MS, REPLAY_WINDOW_MS, this.opts.replayCandlesPerRound ?? REPLAY_CANDLES_PER_ROUND) as { coin: string; ms: number }[];
+    const putCandle = this.db.prepare("INSERT OR REPLACE INTO replay_candles (coin, t, o, h, l, c) VALUES (?, ?, ?, ?, ?, ?)");
+    for (const w of want) {
+      try {
+        await this.pacer.take(20);
+        const rows = await this.hl.info({ type: "candleSnapshot", req: { coin: w.coin, interval: "5m", startTime: w.ms - REPLAY_WINDOW_MS, endTime: w.ms + REPLAY_WINDOW_MS } });
+        this.db.transaction(() => {
+          for (const r of Array.isArray(rows) ? rows : []) {
+            const [t, o, h, l, c] = [num(r?.t), num(r?.o), num(r?.h), num(r?.l), num(r?.c)];
+            if (t === null || o === null || h === null || l === null || c === null) continue;
+            putCandle.run(w.coin, t, o, h, l, c);
+          }
+        })();
+      } catch {
+        errors++;
+      }
+    }
+    return errors;
   }
 
   /** Store the one-minute candles of each coin since the last one stored. Returns how many coins failed. */

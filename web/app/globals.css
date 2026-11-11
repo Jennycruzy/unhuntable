@@ -514,6 +514,12 @@ html[data-session] .cover:not(.open) { visibility: hidden; }
 .hu-facts > div { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-top: 1px solid var(--line); }
 .hu-facts dt { color: var(--fg-3); }
 .hu-facts dd { margin: 0; color: var(--fg); }
+.hr-card .badge { margin-top: 4px; }
+.hr-chart { display: block; width: 100%; height: 88px; margin: 4px 0 10px; overflow: visible; }
+.hr-line { fill: none; stroke: var(--fg); stroke-width: 1.4; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.hr-level { stroke: var(--danger); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+.hr-mark { stroke: var(--line-2); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.hr-dot { fill: var(--danger); }
 .hm-table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
 .hm-table th { padding: 8px 0; text-align: left; font-weight: 500; color: var(--fg-3); }
 .hm-table td { padding: 9px 12px 9px 0; border-top: 1px solid var(--line); color: var(--fg-2); vertical-align: top; }

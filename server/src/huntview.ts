@@ -1,7 +1,10 @@
 // The Hunt Map as the site shows it, worked out from what the collector stored: where the
 // visible liquidation prices sit right now, and how often the price went on to reach a
 // level that everyone could read. Nothing here is estimated: every row is a public account.
-import type { HuntDb } from "./huntmap.js";
+import { REPLAY_DAYS, REPLAY_MIN_USD, REPLAY_WINDOW_MS, type HuntDb } from "./huntmap.js";
+
+/** Replays shown on the page, largest first. */
+export const REPLAYS = 6;
 
 /** A level counts as near when it is within this share of the price. */
 export const NEAR = 0.05;
@@ -70,6 +73,82 @@ export interface HuntMap {
     cameBack: number;
   };
   touches: Touch[];
+  replays: Replays;
+}
+
+/** A real liquidation of a tracked account, with the price around it. */
+export interface Replay {
+  account: string;
+  coin: string;
+  side: "long" | "short";
+  valueUsd: number;
+  /** Average price of the liquidation fills. */
+  px: number;
+  ms: number;
+  /** Price an hour before, and an hour after. */
+  beforePx: number;
+  afterPx: number;
+  /** The furthest the price went past the level around the liquidation. */
+  extremePx: number;
+  /** The price an hour later was back on the other side of the liquidation price. */
+  cameBack: boolean;
+  /** Five-minute candles from an hour before to an hour after. */
+  candles: { t: number; h: number; l: number; c: number }[];
+}
+
+export interface Replays {
+  days: number;
+  minUsd: number;
+  /** Liquidations of at least minUsd with their candles. */
+  events: number;
+  cameBack: number;
+  items: Replay[];
+}
+
+interface LiquidationRow {
+  account: string;
+  coin: string;
+  ms: number;
+  side: "long" | "short";
+  px: number;
+  value_usd: number;
+}
+
+/** What the price did around one liquidation, from five-minute candles. Null without enough candles. */
+export function replayOf(l: LiquidationRow, candles: { t: number; o: number; h: number; l: number; c: number }[]): Replay | null {
+  const w = candles.filter((k) => k.t >= l.ms - REPLAY_WINDOW_MS && k.t <= l.ms + REPLAY_WINDOW_MS).sort((a, b) => a.t - b.t);
+  // the hour after must be there to say where the price went
+  if (w.length < 10 || w[w.length - 1].t < l.ms + REPLAY_WINDOW_MS - 10 * 60_000) return null;
+  const near = w.filter((k) => k.t >= l.ms - 5 * 60_000 && k.t <= l.ms + 15 * 60_000);
+  const long = l.side === "long";
+  const extremePx = long ? Math.min(...near.map((k) => k.l)) : Math.max(...near.map((k) => k.h));
+  const afterPx = w[w.length - 1].c;
+  return {
+    account: l.account,
+    coin: l.coin,
+    side: l.side,
+    valueUsd: l.value_usd,
+    px: l.px,
+    ms: l.ms,
+    beforePx: w[0].o,
+    afterPx,
+    extremePx,
+    cameBack: long ? afterPx > l.px : afterPx < l.px,
+    candles: w.map((k) => ({ t: k.t, h: k.h, l: k.l, c: k.c })),
+  };
+}
+
+function replays(db: HuntDb, now: number): Replays {
+  const rows = db
+    .prepare("SELECT account, coin, ms, side, px, value_usd FROM liquidations WHERE ms >= ? AND value_usd >= ? ORDER BY value_usd DESC")
+    .all(now - REPLAY_DAYS * 24 * 60 * 60_000, REPLAY_MIN_USD) as LiquidationRow[];
+  const read = db.prepare("SELECT t, o, h, l, c FROM replay_candles WHERE coin = ? AND t BETWEEN ? AND ? ORDER BY t");
+  const all: Replay[] = [];
+  for (const r of rows) {
+    const out = replayOf(r, read.all(r.coin, r.ms - REPLAY_WINDOW_MS, r.ms + REPLAY_WINDOW_MS) as { t: number; o: number; h: number; l: number; c: number }[]);
+    if (out) all.push(out);
+  }
+  return { days: REPLAY_DAYS, minUsd: REPLAY_MIN_USD, events: all.length, cameBack: all.filter((r) => r.cameBack).length, items: all.slice(0, REPLAYS) };
 }
 
 interface LevelRow {
@@ -204,6 +283,7 @@ export function huntMap(db: HuntDb): HuntMap | null {
     coins: mapCoins(latest),
     followed,
     touches: touches.slice(0, TOUCHES),
+    replays: replays(db, span.latest),
   };
 }
 
