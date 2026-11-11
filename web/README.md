@@ -45,7 +45,13 @@ HTTP API, or is a plain sentence the API sent back.
 - `/positions` Your positions, checked every 10 seconds: each piece's size,
   entry, liquidation distance, guard status and whether a stop or take-profit is
   set. Move a stop or take-profit, close, close now, or send home. If the guard
-  is not answering, it says so and offers Close now.
+  is not answering, it says so and offers Close now. Each open position
+  also shows Hunter's view: what you see beside what Hyperliquid's public API
+  shows for each piece (address, side, size, liquidation price, resting orders),
+  read again every 15 seconds.
+- `/hunt-map` The Hunt Map, open to everyone: the visible liquidation prices of
+  Hyperliquid's largest accounts by market, the accounts nearest the price, and
+  how often the price went on to reach a level everyone could read.
 - `/home` Send home. It tells you the exit fee first, then asks your wallet
   twice: once to unlock the pieces and once to lock them again. A banner, "Lock
   your pieces again", stays on every screen until the second approval is

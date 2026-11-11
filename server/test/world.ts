@@ -60,6 +60,8 @@ export class World {
   policyOwner = "alice.near";
   accessKeys = new Set<string>();
   perp = new Map<string, any>();
+  /** Hyperliquid: an account's resting orders, as its public list shows them. */
+  openOrders = new Map<string, any[]>();
   spot = new Map<string, string>();
   mids: Record<string, string> = reply("hl-all-mids");
   guardOpen: string[] = [];
@@ -235,6 +237,7 @@ export class World {
     if (b.type === "allMids") return json(b.dex === "xyz" ? { ...this.xyzMids } : { ...this.mids });
     if (b.type === "meta") return json(b.dex === "xyz" ? this.xyzMeta : reply("hl-meta"));
     if (b.type === "clearinghouseState") return json(this.perpOf(b.user, b.dex ?? ""));
+    if (b.type === "frontendOpenOrders") return json(this.openOrders.get(String(b.user).toLowerCase()) ?? []);
     if (b.type === "spotClearinghouseState") {
       const s = reply("hl-spot");
       s.balances[0].total = this.spot.get(String(b.user).toLowerCase()) ?? "0.0";

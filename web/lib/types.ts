@@ -28,6 +28,50 @@ export interface WalletConfirmed {
   address: string;
 }
 
+/** GET /api/hunt-map: the visible liquidation prices of the largest Hyperliquid accounts. */
+export interface MapLevel {
+  account: string;
+  side: "long" | "short";
+  valueUsd: number;
+  liqPx: number;
+  /** Distance from the price as a signed percent: below the price is negative. */
+  awayPct: number;
+  leverage: number | null;
+}
+
+export interface MapCoin {
+  coin: string;
+  markPx: number;
+  usd: number;
+  bands: { pct: number; usd: number; count: number }[];
+  nearest: MapLevel[];
+}
+
+export interface HuntTouch {
+  account: string;
+  coin: string;
+  side: "long" | "short";
+  valueUsd: number;
+  liqPx: number;
+  seenPx: number;
+  seenMs: number;
+  touchedMs: number;
+  cameBack: boolean;
+}
+
+export interface HuntMap {
+  asOfMs: number;
+  sinceMs: number;
+  rounds: number;
+  accounts: number;
+  positions: number;
+  usd: number;
+  stops: number;
+  coins: MapCoin[];
+  followed: { levels: number; reached: number; mirrorReached: number; cameBack: number };
+  touches: HuntTouch[];
+}
+
 /** GET /api/whale: a public Hyperliquid position, read from Hyperliquid's own API. */
 export interface Whale {
   address: string;
@@ -39,6 +83,27 @@ export interface Whale {
   markPx: number;
   stopPx: number | null;
   asOfMs: number;
+}
+
+/** GET /api/positions/{id}/hunter: one piece's account as Hyperliquid's public API shows it. */
+export interface PublicAccount {
+  address: string;
+  /** Null when the account holds nothing in this market. */
+  side: Side | null;
+  size: number | null;
+  valueUsd: number | null;
+  entryPx: number | null;
+  liqPx: number | null;
+  leverage: number | null;
+  restingOrders: number;
+  triggerPxs: number[];
+}
+
+export interface HunterView {
+  asOfMs: number;
+  coin: Coin;
+  markPx: number | null;
+  accounts: PublicAccount[];
 }
 
 export interface Balance {

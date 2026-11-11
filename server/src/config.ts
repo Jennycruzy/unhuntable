@@ -41,6 +41,8 @@ export interface Config {
   chainsigContract: string;
   /** NEAR account that relays signer-contract calls (its key is secrets.relayKey). */
   relayAccount: string;
+  /** The Hunt Map collector's SQLite file, read for /api/hunt-map; unset = no map. */
+  huntmapDb?: string;
   secrets: Secrets;
 }
 
@@ -115,6 +117,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     appFeeAccount: env.APP_FEE_ACCOUNT ?? "",
     chainsigContract: env.CHAINSIG_CONTRACT ?? "",
     relayAccount: env.RELAY_ACCOUNT ?? "",
+    huntmapDb: env.HUNTMAP_DB || undefined,
     secrets: readSecrets(env.SECRETS_FILE),
   };
 }

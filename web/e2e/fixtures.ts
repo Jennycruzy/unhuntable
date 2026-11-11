@@ -91,10 +91,12 @@ export async function shot(page: Page, name: string, projectName: string) {
   if (projectName !== "phone") return;
   // The nav is fixed to the bottom; in a full-page shot it goes to the end of the page instead.
   // (Playwright's own screenshot style option is blocked by our CSP, so this sets it in the DOM.)
+  // The Hunt Map keeps the cover's frame and has no nav.
   const nav = page.locator("nav.nav");
-  await nav.evaluate((n) => ((n as HTMLElement).style.position = "static"));
+  const hasNav = (await nav.count()) > 0;
+  if (hasNav) await nav.evaluate((n) => ((n as HTMLElement).style.position = "static"));
   await page.screenshot({ path: `screenshots/${name}.png`, fullPage: true });
-  await nav.evaluate((n) => ((n as HTMLElement).style.position = ""));
+  if (hasNav) await nav.evaluate((n) => ((n as HTMLElement).style.position = ""));
 }
 
 /** Put the throwaway pieces key on this device through the restore screen. */

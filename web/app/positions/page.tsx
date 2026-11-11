@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useState } from "react";
+import { HunterView } from "../../components/HunterView";
 import { Notice, Screen, SignedIn } from "../../components/ui";
 import { sentence } from "../../lib/api";
 import { num, pct, time, usd } from "../../lib/format";
@@ -119,6 +120,7 @@ function PositionCard({ p, account, record, onRecord }: { p: Position; account: 
           </div>
         );
       })}
+      {(p.state === "open" || p.state === "closing") && <HunterView p={p} levels={levels} />}
       {hiddenLevels(p, levels) && <p className="small muted">Levels show only in the browser that set them.</p>}
       {p.alerts.length > 0 && (
         <>

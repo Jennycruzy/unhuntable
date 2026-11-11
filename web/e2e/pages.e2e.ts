@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { ORIGIN, expect, shot, test } from "./fixtures";
 
-const PAGES = ["/", "/signin/", "/setup/", "/deposit/", "/trade/", "/positions/", "/home/"];
+const PAGES = ["/", "/signin/", "/setup/", "/deposit/", "/trade/", "/positions/", "/home/", "/hunt-map/"];
 
 test("every page loads scripts only from our own origin, under a strict CSP", async ({ page, apiRequests, signedIn, outside }, info) => {
   void apiRequests;
@@ -65,6 +65,31 @@ test("visitors get the cover, with one way in, no app nav and no call that fails
   // a visitor never asks who is signed in
   expect(apiRequests.map((r) => new URL(r.url).pathname)).not.toContain("/api/me");
   expect(failed).toEqual([]);
+});
+
+test("the Hunt Map is open to visitors and shows the levels the server read, each with a link to check it", async ({ page, apiRequests }) => {
+  await page.goto("/hunt-map/");
+  await expect(page.locator("h1")).toHaveText("The Hunt Map");
+  await expect(page.locator("nav.nav")).toHaveCount(0);
+  await expect(page.getByTestId("totals")).toContainText("$4.1B");
+  await expect(page.getByTestId("totals")).toContainText("832");
+  const btc = page.getByTestId("coin-BTC");
+  await expect(btc.getByRole("list", { name: "BTC: $85M is liquidated within 10% of the price 73,564." })).toBeVisible();
+  await expect(btc.getByRole("link", { name: "0x8eff…bd5e" })).toHaveAttribute("href", "https://app.hyperliquid.xyz/explorer/address/0x8eff8ff863c1a54ec6697b7ad98fe30aa344bd5e");
+  await expect(btc).toContainText("72,473");
+  await expect(btc).toContainText("1.5% below");
+  await expect(page.getByTestId("followed")).toContainText("visible levels followed");
+  await expect(page.getByTestId("followed")).toContainText("then back");
+  // a visitor never asks who is signed in
+  expect(apiRequests.map((r) => new URL(r.url).pathname)).not.toContain("/api/me");
+});
+
+test("before the first read the Hunt Map says so and shows no numbers", async ({ page, apiRequests, context }) => {
+  void apiRequests;
+  await context.addCookies([{ name: "scenario", value: "no_map", url: "http://127.0.0.1:4173" }]);
+  await page.goto("/hunt-map/");
+  await expect(page.getByText("The first read of Hyperliquid is still running.")).toBeVisible();
+  await expect(page.getByTestId("totals")).toHaveCount(0);
 });
 
 test("without a live read the film shows levels and no numbers", async ({ page, apiRequests, context }) => {

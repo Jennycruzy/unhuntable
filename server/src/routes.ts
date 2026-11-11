@@ -8,6 +8,7 @@ import { QuoteBody, depositStatus, pollDeposit, quote } from "./deposits.js";
 import { GuardUnreachable } from "./guard.js";
 import { HomeBody, advanceHome, confirmHomePolicies, homeStatus, startHome, takeHomeChainSig } from "./home.js";
 import { ApproveBody, HomeSigsBody, RegisterBody, approvePiece, registerPiece } from "./chainsig.js";
+import { hunterView } from "./hunter.js";
 import type { JobRunner } from "./jobs.js";
 import {
   CloseBody,
@@ -83,6 +84,9 @@ export function registerMoneyRoutes(app: FastifyInstance, ctx: Ctx): void {
     const u = user(req);
     return closePosition(ctx, u, id(req), parse(CloseBody, req.body).now);
   });
+
+  // What Hyperliquid shows anyone about this position's pieces: public data, for the owner only.
+  app.get("/api/positions/:id/hunter", async (req) => hunterView(ctx, user(req), id(req)));
 
   app.post("/api/home", async (req) => startHome(ctx, user(req), parse(HomeBody, req.body)));
   app.get("/api/home/:id", async (req) => homeStatus(ctx, user(req), id(req)));

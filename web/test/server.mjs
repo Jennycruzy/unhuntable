@@ -106,6 +106,59 @@ function api(method, path, body, c) {
           ? null
           : { address: "0x5b5d51203a0f9079f8aeb098a6523a13f298c060", coin: "ETH", side: "short", sizeUsd: 213452000, entryPx: 2322.71, liqPx: 3893.16, markPx: 3401.2, stopPx: null, asOfMs: Date.now() - 120_000 },
     });
+  if (method === "GET" && path === "/api/hunt-map")
+    return ok({
+      map:
+        scenario === "no_map"
+          ? null
+          : {
+              asOfMs: Date.now() - 120_000,
+              sinceMs: Date.now() - 86_400_000,
+              rounds: 288,
+              accounts: 295,
+              positions: 832,
+              usd: 4110994722.66,
+              stops: 12,
+              coins: [
+                {
+                  coin: "BTC",
+                  markPx: 73564,
+                  usd: 85425527,
+                  bands: [
+                    { pct: -6, usd: 37_000_000, count: 2 },
+                    { pct: -4, usd: 41_000_000, count: 3 },
+                    { pct: -2, usd: 1_061_261, count: 1 },
+                    { pct: 3, usd: 6_364_266, count: 1 },
+                  ],
+                  nearest: [
+                    { account: "0x8eff8ff863c1a54ec6697b7ad98fe30aa344bd5e", side: "long", valueUsd: 1061261.35, liqPx: 72473.12, awayPct: -1.4829, leverage: 40 },
+                    { account: "0xe2823659be02e0f48a4660e4da008b5e1abfdf29", side: "short", valueUsd: 6364266, liqPx: 75400.5, awayPct: 2.4964, leverage: 20 },
+                  ],
+                },
+                {
+                  coin: "ETH",
+                  markPx: 2060.8,
+                  usd: 51640901,
+                  bands: [{ pct: -5, usd: 26_255_038, count: 1 }],
+                  nearest: [{ account: "0x60468ba27448f88b19f52ed02f1a8c52f7a0b21d", side: "long", valueUsd: 26255038.94, liqPx: 1958.18, awayPct: -4.9797, leverage: 6 }],
+                },
+              ],
+              followed: { levels: 41, reached: 9, mirrorReached: 4, cameBack: 6 },
+              touches: [
+                {
+                  account: "0x7c4b71c1d8a11ed426f301c372a72e06f528e00b",
+                  coin: "BTC",
+                  side: "long",
+                  valueUsd: 36921500,
+                  liqPx: 69339.77,
+                  seenPx: 71100,
+                  seenMs: Date.now() - 20 * 3_600_000,
+                  touchedMs: Date.now() - 14 * 3_600_000,
+                  cameBack: true,
+                },
+              ],
+            },
+    });
   if (!signedIn) return fail(401, "not_signed_in", "Sign in first.");
   const home = homes.get(c.sid) ?? { state: "unlock_wait", steps: [] };
   homes.set(c.sid, home);
@@ -154,6 +207,16 @@ function api(method, path, body, c) {
     return ok({ ok: true, locked: ["piece:0", "piece:1"], unlocked: [] });
   }
   if (method === "GET" && path === "/api/positions") return ok(positions(scenario));
+  if (method === "GET" && /^\/api\/positions\/[^/]+\/hunter$/.test(path)) {
+    if (scenario === "hunter_down") return fail(500, "internal", "Something went wrong on our side. Try again.");
+    const account = (address, valueUsd, liqPx) => ({ address, side: "long", size: 0.0456, valueUsd, entryPx: 3290.5, liqPx, leverage: 3, restingOrders: 0, triggerPxs: [] });
+    return ok({
+      asOfMs: 1767225900000,
+      coin: "ETH",
+      markPx: 3301.2,
+      accounts: [account("0x" + "a1".repeat(20), 150.53, 2501.4), account("0x" + "b2".repeat(20), 150.53, 2502.0)],
+    });
+  }
   if (method === "GET" && path === "/api/guard/box-pub") return ok({ boxPub: TEST_BOX_PUB });
   if (method === "POST" && /^\/api\/positions\/[^/]+\/stop$/.test(path)) return ok({ ok: true, sealed: body.boxes.length });
   if (method === "POST" && /^\/api\/positions\/[^/]+\/close$/.test(path)) return ok({ ok: true, state: "closing" });

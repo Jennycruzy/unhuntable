@@ -179,6 +179,9 @@ function Cover() {
           <a href="#how" className="hide-s">
             How it works
           </a>
+          <Link href="/hunt-map/" className="hide-s">
+            Hunt Map
+          </Link>
           <a href="/exit/index.html" className="hide-s">
             Exit tool
           </a>
@@ -323,6 +326,7 @@ function Cover() {
           Unhuntable
         </span>
         <nav aria-label="Footer">
+          <Link href="/hunt-map/">Hunt Map</Link>
           <a href="/exit/index.html">Exit tool</a>
           <a href="/llms.txt">llms.txt</a>
         </nav>

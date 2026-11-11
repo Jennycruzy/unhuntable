@@ -321,6 +321,68 @@ describe("policies and refusals", () => {
   });
 });
 
+describe("hunter's view", () => {
+  const get = (s: S, url: string, cookie = s.cookie) => s.app.inject({ method: "GET", url, headers: { cookie } });
+  const held = (szi: string, value: string, liq: string) => ({
+    type: "oneWay",
+    position: { coin: "ETH", szi, leverage: { type: "cross", value: 3 }, entryPx: "2500.5", positionValue: value, liquidationPx: liq },
+  });
+
+  it("shows each piece as Hyperliquid shows it to anyone: its own account, and no resting orders", async () => {
+    const s = setup();
+    const { id, wallets } = await openPosition(s, WHALE);
+    const addrs = wallets.map((w) => s.h.world.wallets.get(w)!.evm);
+    addrs.forEach((a, i) => s.h.world.setPerp(a, 20, 5, [held(`0.0${i + 1}`, `${25 * (i + 1)}`, `${1700 + i}`)]));
+    const before = s.h.world.calls.length;
+    const r = await get(s, `/api/positions/${id}/hunter`);
+    expect(r.statusCode, r.body).toBe(200);
+    const v = r.json();
+    expect(v.coin).toBe("ETH");
+    expect(v.markPx).toBeGreaterThan(0);
+    expect(v.accounts).toHaveLength(3);
+    expect(v.accounts.map((a: any) => a.address)).toEqual(addrs);
+    expect(v.accounts[1]).toEqual({ address: addrs[1], side: "long", size: 0.02, valueUsd: 50, entryPx: 2500.5, liqPx: 1701, leverage: 3, restingOrders: 0, triggerPxs: [] });
+    // read the way a tracker reads: account state and resting orders, per account
+    const asked = s.h.world.calls.slice(before).filter((c) => c.host === "hl.test").map((c) => c.body.type);
+    expect(asked.filter((t) => t === "clearinghouseState")).toHaveLength(3);
+    expect(asked.filter((t) => t === "frontendOpenOrders")).toHaveLength(3);
+    // a second look inside the keeping time asks Hyperliquid for nothing
+    const again = s.h.world.calls.length;
+    expect((await get(s, `/api/positions/${id}/hunter`)).json()).toEqual(v);
+    expect(s.h.world.calls.length).toBe(again);
+  });
+
+  it("an order left on the book is counted, with its trigger price, and other markets are left out", async () => {
+    const s = setup();
+    const { id, wallets } = await openPosition(s, ETH);
+    const addr = s.h.world.wallets.get(wallets[0])!.evm;
+    s.h.world.setPerp(addr, 20, 5, [held("-0.012", "30", "3100")]);
+    s.h.world.openOrders.set(addr, [
+      { coin: "ETH", side: "B", isTrigger: true, triggerPx: "2700.0", orderType: "Stop Market" },
+      { coin: "ETH", side: "B", isTrigger: false, triggerPx: "0.0", orderType: "Limit" },
+      { coin: "BTC", side: "A", isTrigger: true, triggerPx: "90000.0", orderType: "Stop Market" },
+    ]);
+    const v = (await get(s, `/api/positions/${id}/hunter`)).json();
+    expect(v.accounts[0]).toMatchObject({ side: "short", size: 0.012, liqPx: 3100, restingOrders: 2, triggerPxs: [2700] });
+  });
+
+  it("an account that holds nothing in the market shows no position", async () => {
+    const s = setup();
+    const { id, wallets } = await openPosition(s, ETH);
+    s.h.world.setPerp(s.h.world.wallets.get(wallets[0])!.evm, 20, 20, []);
+    const v = (await get(s, `/api/positions/${id}/hunter`)).json();
+    expect(v.accounts[0]).toMatchObject({ side: null, size: null, valueUsd: null, liqPx: null, restingOrders: 0 });
+  });
+
+  it("is only for the position's owner", async () => {
+    const s = setup();
+    const { id } = await openPosition(s, ETH);
+    const bob = addUser(s.h, "bob.near");
+    expect((await get(s, `/api/positions/${id}/hunter`, bob.cookie)).statusCode).toBe(404);
+    expect((await get(s, `/api/positions/${id}/hunter`, "")).statusCode).toBe(401);
+  });
+});
+
 describe("close", () => {
   it("closes each piece at VRF-staggered times inside 0-90 s", async () => {
     const s = setup();

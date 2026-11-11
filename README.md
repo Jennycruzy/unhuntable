@@ -14,6 +14,8 @@
 
 Together: **no key to steal, no stop to read, no accounts to link.**
 
+**See the problem live:** the [Hunt Map](https://tryunhuntable.site/hunt-map/) lists the liquidation price of every large position held by Hyperliquid's biggest accounts, read from Hyperliquid's public API every 5 minutes. **See the answer on your own trade:** Hunter's View puts each of your positions beside what the same public API shows for it.
+
 Tracks: **Privacy & Private AI** · **Unstoppable DeFi** · **AI Security & Defense**
 
 ### The NEAR stack, all on mainnet
@@ -120,6 +122,26 @@ All of these are observed results on NEAR, NEAR Intents, OutLayer and Hyperliqui
 | The guard signed a track-record proof | An EAS off-chain attestation with totals only (2 pieces, equity, net deposits, PnL). It verifies with the official EAS SDK and recovers the guard's key as signer. No address leaves the guard. |
 | We attacked our own piece with public data only | Funding origin, amount fingerprint, agent reuse and the private withdraw's public status: **not linked**. Input recovery from OutLayer's public call record: **linked**, before we sealed every call. **Not linked** after. ([details](#attacks-we-ran-on-our-own-pieces)) |
 
+## The Hunt Map and Hunter's View
+
+Two screens show the same fact from both sides, and both read only what Hyperliquid gives to anyone.
+
+### The Hunt Map: the levels everyone can read
+
+**Open [tryunhuntable.site/hunt-map](https://tryunhuntable.site/hunt-map/)** (no sign-in). You see, for each market, how many dollars are closed out at each percent from the price, and under it the accounts themselves: address, side, leverage, size and the exact price that liquidates them. Every address opens its public page on Hyperliquid, so each row can be checked by hand.
+
+Where it comes from: a collector (`server/src/huntmap.ts`) runs beside the app with its own SQLite file and no secrets. Every 5 minutes it reads the 2,000 largest accounts on Hyperliquid's leaderboard in turn, keeps every position of $250,000 or more with its liquidation price, reads the resting stop orders of 40 holders per round, and stores one-minute candles for the 12 markets with the most money on visible levels.
+
+The page then asks one question of that data: **when a level sits within 5% of the price, does the price go and reach it?** Each such level is followed for 24 hours. The page counts how many were reached, how many times the price went the same distance the other way (the fair comparison: a level with nobody on it), and how often the price was halfway back within the hour after a touch. The counts are shown as they are, starting from zero, and grow as the collector runs.
+
+### Hunter's View: your own position, as the public sees it
+
+**Open a position → look at "Hunter's view" on the Positions screen.** On the left is what you know: one position, your stop, your take-profit. On the right is what Hyperliquid's public API answers for each of your pieces: a separate account, its side, its size, its own liquidation price and the number of orders it has resting on the book. Each address opens its public page.
+
+The sentence under the public side is built from Hyperliquid's answer and nothing else. With a sealed stop it reads "Hyperliquid shows 3 separate accounts and no stop or take-profit on the book." If an order of yours ever rests on the book, the same sentence counts it and says anyone can read it. If Hyperliquid cannot be read, the panel says so and shows no rows.
+
+The server reads the same two public endpoints a tracker would (`clearinghouseState` and `frontendOpenOrders`), once per piece, and only for the signed-in owner of the position (`server/src/hunter.ts`).
+
 ---
 
 ## Check it yourself
@@ -148,7 +170,7 @@ cd client && npm ci && npm test
 cd client && npm run build && cd ../server && npm ci && npm test
 ```
 
-→ `142 passed`. Sign-in with a NEP-413 signature, encrypted wallet keys, deposits, funding, policy batches and read-back, ticks, refills and going home, with fake clocks and recorded replies. `chainsig.test.ts` runs a position and a trip home on NEAR-controlled pieces against a fake contract and MPC network that check signatures the way the real ones do; it refuses another key's signature, a wrong counter, a send back to perps and any token but USDC, and its relay transactions match near-api-js byte for byte.
+→ `176 passed`. Sign-in with a NEP-413 signature, encrypted wallet keys, deposits, funding, policy batches and read-back, ticks, refills and going home, with fake clocks and recorded replies. `chainsig.test.ts` runs a position and a trip home on NEAR-controlled pieces against a fake contract and MPC network that check signatures the way the real ones do; it refuses another key's signature, a wrong counter, a send back to perps and any token but USDC, and its relay transactions match near-api-js byte for byte.
 
 **4. The records contract** (needs `cargo-near`, see `contract/README.md`):
 
@@ -172,7 +194,7 @@ cd signer && cargo test
 cd web && npm ci && npm test && npm run build && npx playwright test
 ```
 
-→ 30 unit tests, then every screen in headless Chromium at 360×780 and 1280×800, with all outside requests blocked. Screenshots land in `web/screenshots/`.
+→ 41 unit tests, then every screen in headless Chromium at 360×780 and 1280×800, with all outside requests blocked. Screenshots land in `web/screenshots/`.
 
 **7. The exit tool is exactly its source:**
 
@@ -346,10 +368,10 @@ While building this we found that OutLayer's public attestation records are list
 | --- | --- | --- |
 | `guard/` | The guard: a Rust WASI program for OutLayer. Decisions are pure functions in `src/lib.rs`. | 31 |
 | `client/` | TypeScript: sealed boxes, guard client, position planner, fill savings, pieces key, Hyperliquid signing, Chain Signatures pieces, NEAR relay, exit logic | 160 |
-| `server/` | API, SQLite, jobs, NEAR sign-in, OutLayer wallet client, Chain Signatures relay, money flows | 142 |
+| `server/` | API, SQLite, jobs, NEAR sign-in, OutLayer wallet client, Chain Signatures relay, money flows, Hunt Map collector, Hunter's View | 176 |
 | `signer/` | NEAR contract `unhuntable.near`: Hyperliquid accounts controlled by Chain Signatures, signing only what each piece key approved | 12 |
 | `contract/` | NEAR records contract: piece hashes, guard builds, fee ledger, treasury mirror | 18 |
-| `web/` | Phone-first static web app with a strict CSP | 30 unit + Playwright at two screen sizes |
+| `web/` | Phone-first static web app with a strict CSP | 41 unit + Playwright at two screen sizes |
 | `exit/` | Leave-without-us tool: one HTML page or a CLI | in `client/` |
 | `attacks/` | Linking attacks with public data only | |
 | `tools/` | EAS proof check and its reference | |

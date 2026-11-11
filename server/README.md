@@ -46,6 +46,7 @@ Settings come from the environment:
 | `GUARD_PROJECT` | none | Name of the guard project |
 | `POLICY_CONTRACT` | `outlayer.near` | Contract that stores wallet policies |
 | `APP_FEE_ACCOUNT` | none | Account in INTENTS that receives our fee on Aurora deposits |
+| `HUNTMAP_DB` | none | Path of the Hunt Map collector's SQLite file; without it `/api/hunt-map` answers `{ "map": null }` |
 
 Secrets are read only from `SECRETS_FILE`, never from the environment or
 anywhere else:
@@ -100,6 +101,21 @@ wallet key file. Run `chmod 600` on both.
 - `oneclick.ts` asks Aurora Swap (1Click) for quotes and status.
 - `policy.ts` builds wallet policies and the batch the user signs, and reads
   policies back.
+- `whale.ts` keeps the largest public position on Hyperliquid for the start
+  page, read from the leaderboard and the public account state.
+- `huntmap.ts` is the Hunt Map collector and `huntmap-run.ts` runs it as its own
+  process (`HUNTMAP_DB=/path/huntmap.sqlite node dist/huntmap-run.js`). Every 5
+  minutes it reads the 2,000 largest leaderboard accounts in turn, stores each
+  position of $250,000 or more with its liquidation price, reads the resting
+  stops of 40 holders, and stores one-minute candles for 12 markets. It needs no
+  secrets, paces itself under Hyperliquid's request limit, and skips a round
+  when the disk has under 400 MB free.
+- `huntview.ts` turns that store into the map the site shows: money per percent
+  from the price, the nearest accounts, and the count of visible levels the
+  price went on to reach, beside the same distance on the other side.
+- `hunter.ts` is Hunter's View: for one of the user's own positions it asks
+  Hyperliquid's public API what it shows for each piece (account state and
+  resting orders) and passes that on unchanged, kept for 15 seconds.
 - `wallets.ts`, `deposits.ts`, `positions.ts`, `home.ts` and `watch.ts` are the
   money flows below; `routes.ts` puts them on the HTTP API and registers their
   jobs.
@@ -198,12 +214,17 @@ step is listed by `/api/home/:id`.
 ## HTTP API
 
 All JSON. Amounts are decimal strings in USDC, times are unix milliseconds.
-Every route except health, session and logout needs the `sid` cookie.
+Every route except health, session, logout, whale and hunt-map needs the `sid`
+cookie.
 
 - `GET /api/health` → `{ "ok": true, "version": "<git sha or dev>" }`
 - `POST /api/session` signs in (below) and sets the session cookie.
 - `POST /api/logout` ends the session.
 - `GET /api/evidence` → `{ "counts": { "<kind>": n } }` from the evidence table.
+- `GET /api/whale` → `{ whale }`: the largest public position right now, or
+  `null`. No session needed.
+- `GET /api/hunt-map` → `{ map }`: the Hunt Map, or `null` when no collector
+  store is set. No session needed.
 - `GET /api/me` → the account, whether the pieces key is on it, and its wallets.
 - `POST /api/pieces-key` `{ publicKey }` stores the pieces key's public key once
   NEAR shows it on the account.
@@ -220,6 +241,9 @@ Every route except health, session and logout needs the `sid` cookie.
 - `POST /api/policy/confirm` `{ positionId | homeId, txHashes }` reads the
   policies back → `{ ok, locked, unlocked }`.
 - `GET /api/positions` → every position with its pieces and alerts.
+- `GET /api/positions/:id/hunter` → `{ asOfMs, coin, markPx, accounts }`: each
+  piece as Hyperliquid's public API shows it (address, side, size, value,
+  liquidation price, resting orders, trigger prices). Owner only.
 - `GET /api/guard/box-pub` → `{ boxPub }`.
 - `POST /api/positions/:id/stop` `{ boxes: [{ shard, box }] }` forwards each
   box sealed in the browser to the guard, unchanged, with the shard outside.

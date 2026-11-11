@@ -30,6 +30,8 @@ import { walletClient } from "./outlayer.js";
 import { registerMoneyJobs, registerMoneyRoutes } from "./routes.js";
 import { HEARTBEAT_MS, MIDS_POLL_MS, heartbeat, watchMids } from "./watch.js";
 import { WHALE_EVERY_MS, WhaleWatch } from "./whale.js";
+import { openHuntDbReadOnly } from "./huntmap.js";
+import { HuntMapView } from "./huntview.js";
 
 export interface ServerDeps {
   config: Config;
@@ -41,6 +43,8 @@ export interface ServerDeps {
   money?: Ctx;
   /** The largest public position on Hyperliquid, for the start page. */
   whale?: WhaleWatch;
+  /** The Hunt Map, read from the collector's store. */
+  huntMap?: HuntMapView;
 }
 
 const SECURITY_HEADERS: Record<string, string> = {
@@ -116,6 +120,9 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
   // Public data only, and never an error: the page draws its film without numbers until one is read.
   app.get("/api/whale", async () => ({ whale: deps.whale?.latest ?? null }));
 
+  // Public data only: the visible liquidation prices of the largest Hyperliquid accounts.
+  app.get("/api/hunt-map", async () => ({ map: deps.huntMap?.read() ?? null }));
+
   if (deps.money) registerMoneyRoutes(app, deps.money);
 
   return app;
@@ -171,7 +178,15 @@ export async function main(): Promise<void> {
   registerMoneyJobs(jobs, money);
   jobs.start();
   const whale = new WhaleWatch(money.hl);
-  const app = buildServer({ config, db, log, money, whale });
+  let huntMap: HuntMapView | undefined;
+  if (config.huntmapDb) {
+    try {
+      huntMap = new HuntMapView(openHuntDbReadOnly(config.huntmapDb));
+    } catch {
+      log.warn({ path: config.huntmapDb }, "hunt map store cannot be opened; /api/hunt-map serves no map");
+    }
+  }
+  const app = buildServer({ config, db, log, money, whale, huntMap });
   let watching = false;
   const watch = (fn: () => Promise<unknown>) => () => {
     if (watching) return;

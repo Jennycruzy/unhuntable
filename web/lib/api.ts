@@ -3,6 +3,8 @@
 import { API_URL } from "./config";
 import type {
   Whale,
+  HuntMap,
+  HunterView,
   Balance,
   DepositState,
   HomeStart,
@@ -94,6 +96,10 @@ export class Api {
   whale() {
     return this.call<{ whale: Whale | null }>("GET", "/api/whale");
   }
+  /** The Hunt Map; null until the server has read Hyperliquid once. */
+  huntMap() {
+    return this.call<{ map: HuntMap | null }>("GET", "/api/hunt-map");
+  }
   quote(q: QuoteRequest) {
     return this.call<Quote>("POST", "/api/deposit/quote", q);
   }
@@ -114,6 +120,10 @@ export class Api {
   }
   positions() {
     return this.call<{ positions: Position[] }>("GET", "/api/positions");
+  }
+  /** What Hyperliquid's public API shows for each piece of this position. */
+  hunter(id: string) {
+    return this.call<HunterView>("GET", `/api/positions/${encodeURIComponent(id)}/hunter`);
   }
   boxPub() {
     return this.call<{ boxPub: string }>("GET", "/api/guard/box-pub");
