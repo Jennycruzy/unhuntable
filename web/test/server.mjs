@@ -16,6 +16,38 @@ export const TEST_BOX_PUB = "7b0d47d93427f8311160781c7c733fd89f88970aef490d8aa0e
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".txt": "text/plain", ".svg": "image/svg+xml", ".json": "application/json", ".ico": "image/x-icon", ".woff2": "font/woff2" };
 
 const homes = new Map();
+/** NEAR AI hunts per session: how many times its state was read since it started. */
+const aiHunts = new Map();
+
+const AI_LINEUP = Array.from({ length: 15 }, (_, i) => ({ label: `L${i + 1}`, address: "0x" + (i + 1).toString(16).padStart(2, "0").repeat(20), yours: i === 3 || i === 10 }));
+
+function aiHunt(state) {
+  const base = { id: "11111111-2222-4333-8444-555555555555", createdMs: 1767226000000, truth: { side: "long", usd: 300 }, hunts: { today: 1, perDay: 3 } };
+  if (state === "running") return { ...base, state, doneMs: null, error: null, lineup: null, answer: null, score: null, proof: null };
+  return {
+    ...base,
+    state: "done",
+    doneMs: 1767226180000,
+    error: null,
+    lineup: AI_LINEUP,
+    answer: {
+      picks: [{ label: "L4", confidence: 85, why: "Same payer, same $10 ETH open and close loops as T." }],
+      combined: { side: null, usd: 0 },
+      stopGuess: null,
+      stopWhy: "No open orders to read.",
+      summary: "Only L4 matches T's trading pattern. No stop can be inferred.",
+    },
+    score: { verdict: "partly", found: 1, pieces: 2, wrong: 0, lineup: 15, chanceHits: 0.13 },
+    proof: {
+      model: "Qwen/Qwen3.6-35B-A3B-FP8",
+      chatId: "87d076fef7ef497c962261e3ca59e77d",
+      requestSha256: "aa".repeat(32),
+      responseSha256: "bb".repeat(32),
+      signed: { text: "Qwen/Qwen3.6-35B-A3B-FP8:" + "aa".repeat(32) + ":" + "bb".repeat(32), signature: "0x" + "cd".repeat(65), signingAddress: "0x" + "fd".repeat(20) },
+      checks: { hashesMatch: true, signatureValid: true, inAttestation: true },
+    },
+  };
+}
 
 function cookies(req) {
   const out = {};
@@ -246,6 +278,22 @@ function api(method, path, body, c) {
       markPx: 3301.2,
       accounts: [account("0x" + "a1".repeat(20), 150.53, 2501.4), account("0x" + "b2".repeat(20), 150.53, 2502.0)],
     });
+  }
+  if (/^\/api\/positions\/[^/]+\/ai-hunt/.test(path) && scenario === "ai_off") return fail(404, "not_found", "There is nothing here.");
+  if (method === "GET" && /^\/api\/positions\/[^/]+\/ai-hunt$/.test(path)) {
+    if (!aiHunts.has(c.sid)) return ok({ hunt: scenario === "ai_done" ? aiHunt("done") : null });
+    const reads = aiHunts.get(c.sid) + 1;
+    aiHunts.set(c.sid, reads);
+    return ok({ hunt: aiHunt(reads < 3 ? "running" : "done") });
+  }
+  if (method === "POST" && /^\/api\/positions\/[^/]+\/ai-hunt$/.test(path)) {
+    if (scenario === "ai_limit") return fail(429, "ai_hunt_limit", "You have used today's 3 AI hunts. More open in 24 hours.");
+    aiHunts.set(c.sid, 0);
+    return ok({ id: "11111111-2222-4333-8444-555555555555" });
+  }
+  if (method === "GET" && /^\/api\/positions\/[^/]+\/ai-hunt\/[^/]+\/receipt$/.test(path)) {
+    const h = aiHunt("done");
+    return ok({ request: '{"model":"Qwen/Qwen3.6-35B-A3B-FP8"}', response: '{"id":"87d076fef7ef497c962261e3ca59e77d"}', proof: h.proof });
   }
   if (method === "GET" && path === "/api/guard/box-pub") return ok({ boxPub: TEST_BOX_PUB });
   if (method === "POST" && /^\/api\/positions\/[^/]+\/stop$/.test(path)) return ok({ ok: true, sealed: body.boxes.length });

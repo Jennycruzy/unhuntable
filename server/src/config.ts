@@ -2,6 +2,7 @@
 // SECRETS_FILE, which must not be readable by group or others.
 import { readFileSync, statSync } from "node:fs";
 import { z } from "zod";
+import { NEARAI_MODEL, NEARAI_URL } from "./nearai.js";
 
 export interface Secrets {
   paymentKey: string;
@@ -13,6 +14,8 @@ export interface Secrets {
   auroraKey?: string;
   /** "ed25519:<base58>" key of the NEAR account that relays signer-contract calls and pays their gas. */
   relayKey?: string;
+  /** NEAR AI Cloud API key for the AI hunter; without it the hunter is off. */
+  nearaiKey?: string;
 }
 
 export interface Config {
@@ -53,6 +56,9 @@ export interface Config {
   x402PayTo: string;
   /** Price of one agent call in USDC. */
   x402Price: string;
+  /** NEAR AI Cloud base URL and the model the AI hunter runs in. */
+  nearaiUrl: string;
+  nearaiModel: string;
   secrets: Secrets;
 }
 
@@ -69,6 +75,7 @@ const SecretsFile = z.object({
   keystoreKey: z.string().regex(/^[0-9a-fA-F]{64}$/).optional(),
   auroraKey: z.string().min(1).optional(),
   relayKey: z.string().regex(/^ed25519:[1-9A-HJ-NP-Za-km-z]{43,90}$/).optional(),
+  nearaiKey: z.string().min(1).optional(),
 });
 
 /** Read and check the secrets file. Error messages never include file contents. */
@@ -139,6 +146,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     x402: onOff("X402", env.X402),
     x402PayTo: env.X402_PAY_TO || env.CHAINSIG_CONTRACT || "",
     x402Price: env.X402_PRICE || "0.002",
+    nearaiUrl: (env.NEARAI_URL || NEARAI_URL).replace(/\/+$/, ""),
+    nearaiModel: env.NEARAI_MODEL || NEARAI_MODEL,
     secrets: readSecrets(env.SECRETS_FILE),
   };
 }

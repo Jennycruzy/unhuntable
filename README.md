@@ -1,6 +1,6 @@
 # Unhuntable
 
-**Private perps for DeFi traders and AI agents, on Hyperliquid and trade.xyz. Built on ten parts of the NEAR stack.**
+**Private perps for DeFi traders and AI agents, on Hyperliquid and trade.xyz. Built on eleven parts of the NEAR stack.**
 
 **Unhuntable hides the price that wipes you out, for people and for their agents.** Your position is split across accounts nobody can link, your stop is sealed where nobody can read it, and each piece's account is controlled by NEAR Chain Signatures, with no private key anywhere. Hunters have nothing to push the price to.
 
@@ -16,7 +16,7 @@ Tracks: **Privacy & Private AI** · **Unstoppable DeFi** · **AI Security & Defe
 - **Proven on mainnet with real money:** [a sealed stop firing on an NVDA short](https://app.hyperliquid.xyz/explorer/tx/0xe3658df9d0c075c3e4df04488de8bc02021800df6bc39495872e394c8fc44fae), [NEAR's MPC network signing for a Hyperliquid account with no private key](https://nearblocks.io/txns/86qJbTWkiXwXsKfCCWqK63yLanzvkbxikMj1R4HfufVd), and [an AI agent paying for a call with x402](https://nearblocks.io/txns/7VcZWHJzgrauZaY6irWh1BiHGcr7kDch92UG69MFvMBD).
 - **The answer NEAR's founder pointed to.** In [NEP discussion #531](https://github.com/near/NEPs/issues/531), Illia Polosukhin notes that users spread their activity over many separate accounts to keep it apart, and that the answer lives in the application layer. Unhuntable is that answer for perps: the separate accounts are made and funded for you, from your one NEAR account.
 
-[For judges](#for-judges-start-here) · [How it works](#how-it-works-in-short) · [Two doors](#two-doors-one-protection) · [NEAR stack](#ten-parts-of-the-near-stack-each-doing-real-work) · [Mainnet proof](#what-ran-on-mainnet-with-real-money) · [Go deeper](#go-deeper)
+[For judges](#for-judges-start-here) · [How it works](#how-it-works-in-short) · [Two doors](#two-doors-one-protection) · [NEAR stack](#eleven-parts-of-the-near-stack-each-doing-real-work) · [Mainnet proof](#what-ran-on-mainnet-with-real-money) · [Go deeper](#go-deeper)
 
 ---
 
@@ -26,16 +26,17 @@ Ninety seconds, no wallet and no money needed:
 
 1. **Open the [Hunt Map](https://tryunhuntable.site/hunt-map/).** Real Hyperliquid accounts and the exact prices that liquidate them, read from Hyperliquid's public API every 5 minutes. This is what every trader is exposed to today.
 2. **Open three mainnet transactions.** [A sealed stop firing on an NVDA short](https://app.hyperliquid.xyz/explorer/tx/0xe3658df9d0c075c3e4df04488de8bc02021800df6bc39495872e394c8fc44fae), [NEAR's MPC network signing for a Hyperliquid account with no private key](https://nearblocks.io/txns/86qJbTWkiXwXsKfCCWqK63yLanzvkbxikMj1R4HfufVd), and [an AI agent paying for a call with x402](https://nearblocks.io/txns/7VcZWHJzgrauZaY6irWh1BiHGcr7kDch92UG69MFvMBD).
-3. **Run the tests.** 491 tests across the guard, the signer contract, the client, the server, the MCP server and the app, plus browser tests at phone and desktop size, all in CI: [Check it yourself](docs/check-it-yourself.md).
+3. **Run the tests.** 515 tests across the guard, the signer contract, the client, the server, the MCP server and the app, plus browser tests at phone and desktop size, all in CI: [Check it yourself](docs/check-it-yourself.md).
 
 ---
 
-## Ten parts of the NEAR stack, each doing real work
+## Eleven parts of the NEAR stack, each doing real work
 
 | | What it does in Unhuntable | Proof on mainnet |
 | --- | --- | --- |
 | **NEAR Chain Signatures** | `unhuntable.near` asks `v1.signer` to sign Hyperliquid actions for a piece, so the piece's Hyperliquid account has no private key anywhere | [`unhuntable.near`](https://nearblocks.io/address/unhuntable.near) · [approve-agent tx](https://nearblocks.io/txns/86qJbTWkiXwXsKfCCWqK63yLanzvkbxikMj1R4HfufVd) · [the account it controls](https://app.hyperliquid.xyz/explorer/address/0x35c99eff31255e9ac3fc2a3c6e4dd70cb026b02a) |
 | **OutLayer TEE (Intel TDX)** | Runs the guard: sealed stops, one agent key per piece, up to seven price sources, the defence ladder | Sealed-stop trade: public order list `[]` while open, then a reduce-only close |
+| **NEAR AI Cloud (TEE inference)** | Runs the NEAR AI Hunter: an attacker AI that starts from one of your pieces and tries to find the others in Hyperliquid's public data, with the enclave's signature over the exact question and answer | [Mainnet hunt on three real pieces](docs/ai-hunter.md#proof-run-on-mainnet): 1 named, 0 strangers; the signed receipt checks with one command |
 | **trade.xyz (US stocks on Hyperliquid)** | 12 stock and index markets, isolated margin, money moved onto trade.xyz and back by Chain Signatures, stops that need two prices from outside the book | [move in](https://nearblocks.io/txns/8LzpGyN9kKpDwMmYKihG1MXXbgHFbs9H3E9Ci7w1jL6Z) · [stop fired](https://nearblocks.io/txns/6ewnHXXtwTjBvqdEqYdDkoVc3oE3ew2b6prZ5MAVCz4c) · [move back](https://nearblocks.io/txns/CALA24Gya1fLd8No2wzukUSM8cQ29eaBAUActpFLVGvc) |
 | **x402 on NEAR (AI agents)** | Each agent call is paid in USDC on NEAR with a NEP-366 delegated `ft_transfer`, settled by our relayer before the call runs | [paid agent call](https://nearblocks.io/txns/7VcZWHJzgrauZaY6irWh1BiHGcr7kDch92UG69MFvMBD) |
 | **NEAR Intents (Confidential)** | Holds your private balance and funds each piece with no public link between pieces | 2.5 USDC sent privately to a piece, arriving as 2.178894 USDC |
@@ -114,6 +115,7 @@ All of these are observed results on NEAR, NEAR Intents, OutLayer and Hyperliqui
 | A sealed stop was set, then one guard tick ran | The stop fired once: a reduce-only close filled at 2266.6. A second tick reported nothing left to fire. No stop order ever sat on the book. |
 | The guard's agent key tried to send 1 USDC out of the piece | Hyperliquid refused it: an agent's transfer counts as the agent's own empty account. The piece's balance did not change. |
 | The guard signed a track-record proof | An EAS off-chain attestation with totals only (2 pieces, equity, net deposits, PnL). It verifies with the official EAS SDK and recovers the guard's key as signer. No address leaves the guard. |
+| We sent the NEAR AI Hunter after three of our own pieces | Starting from one, among 15 accounts the same 1Click payer funded, the model in NEAR AI's TEE named 1 account: ours, the piece that ran the same $10 test loops. It missed the NEAR-controlled piece and named no stranger. Its enclave signed the question and answer; [the receipt checks](docs/ai-hunter.md#proof-run-on-mainnet). |
 | We attacked our own piece with public data only | Funding origin, amount fingerprint, agent reuse and the private withdraw's public status: **not linked**. Input recovery from OutLayer's public call record: **linked**, before we sealed every call. **Not linked** after. ([details](docs/security.md#attacks-we-ran-on-our-own-pieces)) |
 
 ---
@@ -126,6 +128,7 @@ All of these are observed results on NEAR, NEAR Intents, OutLayer and Hyperliqui
 | [US stocks on trade.xyz](docs/us-stocks.md) | Markets, money moved by Chain Signatures, stops that need prices from outside the book, the NVDA run step by step |
 | [AI agents](docs/ai-agents.md) | Agent keys and limits, the MCP server, x402 payments in USDC on NEAR |
 | [The Hunt Map and Hunter's View](docs/hunt-map.md) | How the map is collected and what it counts; your position as the public sees it |
+| [NEAR AI Hunter](docs/ai-hunter.md) | An attacker AI in a NEAR AI TEE hunts your pieces; what it sees, how it is scored, the signed proof |
 | [How it works](docs/how-it-works.md) | The life of one position, the architecture, prices and stops, the defence ladder, engineering decisions |
 | [Security and privacy](docs/security.md) | Who could cheat and why they cannot, who sees what, the attacks we ran on our own pieces, the flaw we found for OutLayer |
 | [Treasury mode](docs/treasury.md) | Pieces handed to a DAO: money moves only on a passed Sputnik DAO vote |
@@ -141,13 +144,13 @@ All of these are observed results on NEAR, NEAR Intents, OutLayer and Hyperliqui
 | --- | --- | --- |
 | `guard/` | The guard: a Rust WASI program for OutLayer. Decisions are pure functions in `src/lib.rs`. | 41 |
 | `client/` | TypeScript: sealed boxes, guard client, position planner, fill savings, pieces key, Hyperliquid signing, Chain Signatures pieces, NEAR relay, exit logic | 174 |
-| `server/` | API, SQLite, jobs, NEAR sign-in, OutLayer wallet client, Chain Signatures relay, money flows, Hunt Map collector, Hunter's View | 203 |
+| `server/` | API, SQLite, jobs, NEAR sign-in, OutLayer wallet client, Chain Signatures relay, money flows, Hunt Map collector, Hunter's View, NEAR AI Hunter | 223 |
 | `signer/` | NEAR contract `unhuntable.near`: Hyperliquid accounts controlled by Chain Signatures, signing only what each piece key approved | 16 |
 | `agent/` | MCP server for AI agents: open, sealed stop, status, close; pays each call with x402 in USDC on NEAR | 6 |
-| `web/` | Phone-first static web app with a strict CSP | 51 unit + Playwright at two screen sizes |
+| `web/` | Phone-first static web app with a strict CSP | 55 unit + Playwright at two screen sizes |
 | `exit/` | Leave-without-us tool: one HTML page or a CLI | in `client/` |
 | `attacks/` | Linking attacks with public data only | |
-| `tools/` | EAS proof check and its reference | |
+| `tools/` | EAS proof check and its reference, NEAR AI Hunter receipt check | |
 | `scripts/` | Repo checks run in CI | |
 
 CI runs every folder's tests, rebuilds the exit page and checks it matches, checks the signer stays under 100 KB, and checks the repo for secrets.

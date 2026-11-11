@@ -8,6 +8,7 @@ import { QuoteBody, depositStatus, pollDeposit, quote } from "./deposits.js";
 import { GuardUnreachable } from "./guard.js";
 import { HomeBody, advanceHome, confirmHomePolicies, homeStatus, startHome, takeHomeChainSig } from "./home.js";
 import { ApproveBody, HomeSigsBody, RegisterBody, approvePiece, registerPiece } from "./chainsig.js";
+import type { AiHunter } from "./aihunt.js";
 import { hunterView } from "./hunter.js";
 import type { JobRunner } from "./jobs.js";
 import {
@@ -39,7 +40,7 @@ function parse<S extends z.ZodTypeAny>(schema: S, v: unknown): z.output<S> {
 
 const Id = z.string().uuid();
 
-export function registerMoneyRoutes(app: FastifyInstance, ctx: Ctx): void {
+export function registerMoneyRoutes(app: FastifyInstance, ctx: Ctx, aiHunter?: AiHunter): void {
   const user = (req: FastifyRequest): string => {
     const u = sessionUser(ctx.db, readCookie(req.headers.cookie, SESSION_COOKIE), ctx.now());
     if (!u) throw new ApiError("not_signed_in");
@@ -87,6 +88,15 @@ export function registerMoneyRoutes(app: FastifyInstance, ctx: Ctx): void {
 
   // What Hyperliquid shows anyone about this position's pieces: public data, for the owner only.
   app.get("/api/positions/:id/hunter", async (req) => hunterView(ctx, user(req), id(req)));
+  if (aiHunter) {
+    app.post("/api/positions/:id/ai-hunt", async (req) => aiHunter.start(user(req), id(req)));
+    app.get("/api/positions/:id/ai-hunt", async (req) => ({ hunt: aiHunter.latest(user(req), id(req)) }));
+    app.get("/api/positions/:id/ai-hunt/:huntId/receipt", async (req, reply) => {
+      const huntId = parse(Id, (req.params as { huntId?: string }).huntId);
+      reply.header("Content-Disposition", `attachment; filename="ai-hunt-${huntId}.json"`);
+      return aiHunter.receipt(user(req), id(req), huntId);
+    });
+  }
 
   app.post("/api/home", async (req) => startHome(ctx, user(req), parse(HomeBody, req.body)));
   app.get("/api/home/:id", async (req) => homeStatus(ctx, user(req), id(req)));

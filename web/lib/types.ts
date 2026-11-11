@@ -122,6 +122,54 @@ export interface HunterView {
   accounts: PublicAccount[];
 }
 
+/** GET /api/positions/{id}/ai-hunt: the NEAR AI hunter's latest try at this position. */
+export interface AiHuntLineupEntry {
+  label: string;
+  address: string;
+  /** One of the owner's own pieces. The model was never told. */
+  yours: boolean;
+}
+
+export interface AiHuntAnswer {
+  picks: { label: string; confidence: number | null; why: string }[];
+  combined: { side: string | null; usd: number | null };
+  stopGuess: number | null;
+  stopWhy: string;
+  summary: string;
+}
+
+export interface AiHuntScore {
+  verdict: "held" | "partly" | "caught";
+  found: number;
+  pieces: number;
+  wrong: number;
+  lineup: number;
+  chanceHits: number;
+}
+
+export interface AiHuntProof {
+  model: string;
+  chatId: string;
+  requestSha256: string;
+  responseSha256: string;
+  signed: { text: string; signature: string; signingAddress: string } | null;
+  checks: { hashesMatch: boolean; signatureValid: boolean; inAttestation: boolean };
+}
+
+export interface AiHunt {
+  id: string;
+  state: "running" | "done" | "failed";
+  createdMs: number;
+  doneMs: number | null;
+  error: string | null;
+  lineup: AiHuntLineupEntry[] | null;
+  answer: AiHuntAnswer | null;
+  score: AiHuntScore | null;
+  proof: AiHuntProof | null;
+  truth: { side: Side; usd: number };
+  hunts: { today: number; perDay: number };
+}
+
 /** GET /api/hunt-us */
 export interface HuntUsChallenge {
   coin: string;

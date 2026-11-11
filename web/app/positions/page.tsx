@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useState } from "react";
+import { AiHunter } from "../../components/AiHunter";
 import { HunterView } from "../../components/HunterView";
 import { Refills } from "../../components/Refills";
 import { Notice, Screen, SignedIn } from "../../components/ui";
@@ -122,6 +123,7 @@ function PositionCard({ p, account, record, onRecord }: { p: Position; account: 
         );
       })}
       {(p.state === "open" || p.state === "closing") && <HunterView p={p} levels={levels} />}
+      {(p.state === "open" || p.state === "closing" || p.state === "closed") && <AiHunter p={p} levels={levels} />}
       {hiddenLevels(p, levels) && <p className="small muted">Levels show only in the browser that set them.</p>}
       {p.alerts.length > 0 && (
         <>

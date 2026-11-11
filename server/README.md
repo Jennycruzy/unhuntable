@@ -52,17 +52,21 @@ Settings come from the environment:
 | `HUNT_US_FILE` | none | JSON `{ coin, pieces: [2-12 Hyperliquid addresses] }`: the live position the Hunt us page challenges visitors to find |
 | `BUILDER_FEE` | `off` | `on`: new NEAR-controlled pieces approve the builder fee and their crypto opens carry it, while the signer contract and the guard name the same builder |
 | `HUNTMAP_DB` | none | Path of the Hunt Map collector's SQLite file; without it `/api/hunt-map` answers `{ "map": null }` |
+| `NEARAI_URL` | `https://cloud-api.near.ai/v1` | NEAR AI Cloud, for the NEAR AI Hunter (needs `nearaiKey`) |
+| `NEARAI_MODEL` | `Qwen/Qwen3.6-35B-A3B-FP8` | The model the hunter runs in; it must sign its answers inside a TEE |
 
 Secrets are read only from `SECRETS_FILE`, never from the environment or
 anywhere else:
 
 ```json
 { "paymentKey": "...", "walletKeys": { "<wallet id>": "<wallet API key>" },
-  "keystoreKey": "<32 bytes as 64 hex characters>", "auroraKey": "..." }
+  "keystoreKey": "<32 bytes as 64 hex characters>", "auroraKey": "...",
+  "nearaiKey": "..." }
 ```
 
 `keystoreKey` encrypts the wallet key file. `auroraKey` is the Aurora Swap API
-key; without it the aurora deposit route answers `route_unavailable`.
+key; without it the aurora deposit route answers `route_unavailable`. `nearaiKey`
+is the NEAR AI Cloud API key; without it the NEAR AI Hunter's routes are not served.
 
 The server refuses to start if group or others can read the secrets file or the
 wallet key file. Run `chmod 600` on both.

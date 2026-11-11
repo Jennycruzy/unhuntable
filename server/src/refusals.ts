@@ -60,6 +60,9 @@ export const API_ERRORS = {
   agent_key_missing: "Send this agent's key as Authorization: Bearer <key>.",
   hunt_wait: "Keep hunting: the answer opens in {seconds} seconds.",
   agent_key_refused: "That agent key is not known or was revoked.",
+  ai_hunt_needs_pieces: "The AI hunter needs a position split across at least two pieces.",
+  ai_hunt_busy: "Another AI hunt is running right now. Try again in a minute.",
+  ai_hunt_limit: "You have used today's {perDay} AI hunts. More open in 24 hours.",
 } as const;
 
 export type RefusalCode = keyof typeof REFUSALS;
@@ -101,6 +104,9 @@ export const HTTP_STATUS: Record<ErrorCode, number> = {
   agent_key_missing: 401,
   hunt_wait: 409,
   agent_key_refused: 401,
+  ai_hunt_needs_pieces: 409,
+  ai_hunt_busy: 409,
+  ai_hunt_limit: 429,
   bad_request: 400,
   not_found: 404,
   not_signed_in: 401,

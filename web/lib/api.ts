@@ -5,6 +5,7 @@ import type {
   Whale,
   HuntMap,
   HunterView,
+  AiHunt,
   AgentKeys,
   Settings,
   HuntUsChallenge,
@@ -129,6 +130,17 @@ export class Api {
   /** What Hyperliquid's public API shows for each piece of this position. */
   hunter(id: string) {
     return this.call<HunterView>("GET", `/api/positions/${encodeURIComponent(id)}/hunter`);
+  }
+  /** The NEAR AI hunter's latest try at this position, or null. */
+  aiHunt(id: string) {
+    return this.call<{ hunt: AiHunt | null }>("GET", `/api/positions/${encodeURIComponent(id)}/ai-hunt`);
+  }
+  startAiHunt(id: string) {
+    return this.call<{ id: string }>("POST", `/api/positions/${encodeURIComponent(id)}/ai-hunt`, {});
+  }
+  /** The exact question and answer the enclave signed, for anyone redoing the check. */
+  aiHuntReceipt(id: string, huntId: string) {
+    return this.call<{ request: string; response: string; proof: AiHunt["proof"] }>("GET", `/api/positions/${encodeURIComponent(id)}/ai-hunt/${encodeURIComponent(huntId)}/receipt`);
   }
   boxPub() {
     return this.call<{ boxPub: string }>("GET", "/api/guard/box-pub");

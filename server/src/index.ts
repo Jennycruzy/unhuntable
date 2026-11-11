@@ -34,6 +34,8 @@ import { openHuntDbReadOnly } from "./huntmap.js";
 import { HuntMapView } from "./huntview.js";
 import { registerAgentRoutes } from "./agents.js";
 import { HuntUs } from "./huntus.js";
+import { AiHunter } from "./aihunt.js";
+import { NearAi } from "./nearai.js";
 import { nearPaywall, type Paywall } from "./x402.js";
 
 export interface ServerDeps {
@@ -52,6 +54,8 @@ export interface ServerDeps {
   paywall?: Paywall;
   /** The Hunt us challenge; without it the page says there is none running. */
   huntUs?: HuntUs;
+  /** NEAR AI Hunter; without it its routes are not served. */
+  aiHunter?: AiHunter;
 }
 
 const SECURITY_HEADERS: Record<string, string> = {
@@ -144,7 +148,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
   });
 
   if (deps.money) {
-    registerMoneyRoutes(app, deps.money);
+    registerMoneyRoutes(app, deps.money, deps.aiHunter);
     registerAgentRoutes(app, deps.money, deps.paywall);
   }
 
@@ -230,7 +234,10 @@ export async function main(): Promise<void> {
       log.warn({ error: e instanceof Error ? e.message : String(e) }, "hunt us file cannot be read; the page shows no challenge");
     }
   }
-  const app = buildServer({ config, db, log, money, whale, huntMap, paywall, huntUs });
+  const aiHunter = config.secrets.nearaiKey
+    ? new AiHunter(db, money.hl, new NearAi(config.secrets.nearaiKey, config.nearaiUrl, undefined, config.nearaiModel), config.network, Date.now, money.random)
+    : undefined;
+  const app = buildServer({ config, db, log, money, whale, huntMap, paywall, huntUs, aiHunter });
   let watching = false;
   const watch = (fn: () => Promise<unknown>) => () => {
     if (watching) return;
