@@ -1,6 +1,10 @@
 # Unhuntable
 
-**Private perps on Hyperliquid and trade.xyz.** Your position is split across accounts nobody can link, and your stop-loss is sealed where nobody can read it, so hunters have no level to push the price to. Built on NEAR.
+**On Hyperliquid, anyone can see the price that wipes you out. near.com hides your name, not that price. Unhuntable hides the price.**
+
+> Every Hyperliquid account is public: its size, its entry, the exact price that liquidates it, and every stop-loss resting on the book. NEAR's own near.com already makes perps confidential, so nobody can tie a position back to you. But hunters do not need your name. They push the price to the level they can read on the book, take the liquidation, and the market watches.
+
+**Unhuntable removes the level itself.** Your position is split across separate Hyperliquid accounts ("pieces") that nobody can tie together, so there is no big position to find. Your stop-loss is sealed inside a TEE on OutLayer and is not on the book until the moment it fires. A guard watches every piece and cuts size before liquidation, and Hyperliquid itself refuses it when it tries to move money. Every new piece's Hyperliquid account is controlled by **NEAR Chain Signatures**, under a contract that signs only what that piece's own key approved: no private key for the account exists anywhere, and our server cannot sign a thing.
 
 ## What is built and live
 
@@ -14,8 +18,6 @@ Each part below has run on mainnet with real money, with a link to check it. The
 - **AI agents trade through the same pieces.** An MCP server with its own key and limits, stops sealed on the agent's machine, every call paid with x402 in USDC on NEAR. [A paid agent call on mainnet](https://nearblocks.io/txns/7VcZWHJzgrauZaY6irWh1BiHGcr7kDch92UG69MFvMBD).
 - **See the problem, and your answer to it.** The public [Hunt Map](https://tryunhuntable.site/hunt-map/) lists the liquidation price of every large position held by Hyperliquid's biggest accounts. Hunter's View puts each of your positions beside what Hyperliquid's public API shows for it: separate accounts, no stop on the book.
 - **Leave without us.** The exit tool brings your money home from your 12 words alone, even if our servers are gone.
-
-**Why it matters.** On Hyperliquid, anyone can see the price that wipes you out: every account's size, entry, liquidation price and resting stops are public. near.com hides your name, not that price. Hunters do not need your name; they push the price to the level they can read, take the liquidation, and the market watches. Unhuntable removes the level itself.
 
 Tracks: **Privacy & Private AI** · **Unstoppable DeFi** · **AI Security & Defense**
 
