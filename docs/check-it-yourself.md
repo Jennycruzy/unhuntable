@@ -68,4 +68,17 @@ python3 attacks/linking_attacks.py 0x<any Hyperliquid address>
 
 → for each attack, `LINKED`, `NOT LINKED` or `PARTIAL`, with the evidence, written to `linking-report.json`.
 
+**9. The guard build OutLayer runs** (network, read-only):
+
+```bash
+# the build our guard project runs now, as recorded on outlayer.near
+curl -s https://free.rpc.fastnear.com -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"query","params":{"request_type":"call_function","finality":"final","account_id":"outlayer.near","method_name":"get_project","args_base64":"'$(printf '{"project_id":"4399fffd59abe3f29284d29936bf83d41e1344e82c971394660217cf6e8046f7/guard"}' | base64 -w0)'"}}' \
+  | python3 -c "import sys,json; print(json.loads(bytes(json.load(sys.stdin)['result']['result']))['active_version'])"
+
+# the exact file OutLayer runs, and its hash
+curl -s https://main.fastfs.io/4399fffd59abe3f29284d29936bf83d41e1344e82c971394660217cf6e8046f7/outlayer.near/9fcd15a786ae017bc180e1d968f3ddaa8aee81627c532ce7ca04a89a5c2687ce.wasm | sha256sum
+```
+
+→ both print `9fcd15a786ae017bc180e1d968f3ddaa8aee81627c532ce7ca04a89a5c2687ce`. `list_versions` with the same argument lists every guard build we have published, each with its hash and file address. The active build is [`guard/`](../guard/) at commit `045d307`.
+
 [Back to the README](../README.md)
