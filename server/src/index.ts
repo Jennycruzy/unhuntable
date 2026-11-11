@@ -163,6 +163,7 @@ export function moneyContext(config: Config, db: Db, jobs: JobRunner, log: Logge
     policyContract: config.policyContract,
     appFeeAccount: config.appFeeAccount,
     chainsig,
+    builderFee: config.builderFee,
     random: (n) => randomBytes(n),
     log,
   };

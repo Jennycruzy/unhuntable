@@ -185,6 +185,7 @@ function api(method, path, body, c) {
   }
   if (method === "POST" && path === "/api/plan") {
     if (scenario === "prices_disagree") return fail(503, "prices_disagree", "Price sources disagree right now, so we held off. Your stop is still set.");
+    if (scenario === "builder_fee") return ok({ ...PLAN_ANSWER, builderFee: { rate: "0.01%", usd: "0.0300" } });
     return ok(PLAN_ANSWER);
   }
   if (method === "POST" && path === "/api/positions") return ok({ positionId: "pos1", state: "policy_wait", needWallets: [], policyBatch: policyBatch("lock") });

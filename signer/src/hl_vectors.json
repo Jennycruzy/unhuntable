@@ -93,6 +93,17 @@
      }
     },
     "hash": "4f77b28aa123449325ed00c47e5ed078fe85f73590d122b49216ddd7f486dca6"
+   },
+   {
+    "name": "approve_builder_fee",
+    "action": {
+     "ApproveBuilderFee": {
+      "max_fee_rate": "0.01%",
+      "builder": "0x2222222222222222222222222222222222222222",
+      "nonce": 1762500000009
+     }
+    },
+    "hash": "855cac16d6fc47c3337e620d239c0aee015fd143ac558b54b8a0d4d1cf4a7d48"
    }
   ]
  },
@@ -109,6 +120,17 @@
      }
     },
     "hash": "c69a01eeaa63a2ec308df8346ed0c0773b0579bb82f20cca28b811c67a5601d0"
+   },
+   {
+    "name": "approve_builder_fee",
+    "action": {
+     "ApproveBuilderFee": {
+      "max_fee_rate": "0.01%",
+      "builder": "0x2222222222222222222222222222222222222222",
+      "nonce": 1762500000009
+     }
+    },
+    "hash": "0fad646800e128663719e766aefeeb1f5fb51e1a9858ad1170b71eb439cd91f3"
    }
   ]
  }

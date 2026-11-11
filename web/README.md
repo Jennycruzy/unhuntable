@@ -39,7 +39,9 @@ HTTP API, or is a plain sentence the API sent back.
   balance.
 - `/trade` Market, side, size, leverage and hiding level (Normal: 1 piece,
   Whale: several). Markets are Crypto or US stocks (trade.xyz); for stocks the
-  review shows the isolated-margin leverage and says when stops can fire. Review shows every piece, the fees, the exit fee and the
+  review shows the isolated-margin leverage and says when stops can fire. When
+  the builder fee is on, the review shows it ("0.01% when opening") and the most
+  it can be. Review shows every piece, the fees, the exit fee and the
   accounts as the world sees them. Confirm makes any new piece wallets in your
   browser, asks your wallet once to approve the new pieces' policies, and seals
   your stop and take-profit if you gave them.

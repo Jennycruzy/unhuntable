@@ -8,6 +8,8 @@ use near_sdk::{testing_env, NearToken};
 
 const VECTORS: &str = include_str!("hl_vectors.json");
 const A: &str = "0x1111111111111111111111111111111111111111";
+/// The builder address the test build approves (hl::BUILDER under cfg(test)).
+const B: &str = "0x2222222222222222222222222222222222222222";
 
 fn acc(s: &str) -> AccountId {
     s.parse().unwrap()
@@ -66,7 +68,7 @@ fn typed_data_hash_matches_hyperliquid_sdk() {
             n += 1;
         }
     }
-    assert_eq!(n, 9, "every action type has a vector");
+    assert_eq!(n, 11, "every action type has a vector");
 }
 
 #[test]
@@ -101,6 +103,10 @@ fn bad_fields_refused() {
             hl::ERR_DEX,
         ),
         (HlAction::SpotSend { destination: A.into(), token: "".into(), amount: "1".into(), time: 1 }, hl::ERR_TOKEN),
+        (HlAction::ApproveBuilderFee { max_fee_rate: "0.01%".into(), builder: A.into(), nonce: 1 }, hl::ERR_BUILDER),
+        (HlAction::ApproveBuilderFee { max_fee_rate: "0.1%".into(), builder: B.into(), nonce: 1 }, hl::ERR_FEE_RATE),
+        (HlAction::ApproveBuilderFee { max_fee_rate: "0.010%".into(), builder: B.into(), nonce: 1 }, hl::ERR_FEE_RATE),
+        (HlAction::ApproveBuilderFee { max_fee_rate: "0.01%".into(), builder: "0x2222".into(), nonce: 1 }, hl::ERR_ADDRESS),
     ];
     for (a, err) in cases {
         let dbg = format!("{a:?}");
@@ -292,6 +298,32 @@ fn borsh_tags_never_change() {
     assert_eq!(t(HlAction::Withdraw { destination: A.into(), amount: "1".into(), time: 1 }), 3);
     assert_eq!(t(HlAction::SpotSend { destination: A.into(), token: "T".into(), amount: "1".into(), time: 1 }), 4);
     assert_eq!(t(HlAction::UsdSend { destination: A.into(), amount: "1".into(), time: 1 }), 5);
+    assert_eq!(t(HlAction::ApproveBuilderFee { max_fee_rate: "0.01%".into(), builder: B.into(), nonce: 1 }), 6);
+}
+
+#[test]
+fn builder_fee_only_ours_only_one_basis_point() {
+    let mut c = setup(None);
+    assert_eq!(c.builder(), Some((B.to_string(), "0.01%".to_string())));
+    let (sk, pk) = key(9);
+    add(&mut c, &pk);
+    let a = HlAction::ApproveBuilderFee { max_fee_rate: "0.01%".into(), builder: B.into(), nonce: 7 };
+    let sig = sign_with(&c, &sk, &pk, &a);
+    ctx("relay.near", NearToken::from_yoctonear(1), 100);
+    let _ = c.sign(pk.clone(), a, sig);
+    assert_eq!(c.counter(pk.clone()), Some(1));
+    // the piece key itself cannot get a higher fee or another builder signed
+    for bad in [
+        HlAction::ApproveBuilderFee { max_fee_rate: "0.1%".into(), builder: B.into(), nonce: 8 },
+        HlAction::ApproveBuilderFee { max_fee_rate: "0.01%".into(), builder: A.into(), nonce: 8 },
+    ] {
+        // the contract will not even write the message for it, so there is nothing to sign
+        let msg = panics(std::panic::AssertUnwindSafe(|| {
+            sign_with(&c, &sk, &pk, &bad);
+        }));
+        assert!(msg.contains("builder"), "{msg}");
+    }
+    assert_eq!(c.counter(pk), Some(1));
 }
 
 #[test]

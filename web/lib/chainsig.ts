@@ -6,11 +6,13 @@
 //   - the piece's Hyperliquid account is the one NEAR's MPC network derives for that
 //     contract and key (asked from a public NEAR RPC, not from our server),
 //   - the action is what this step is for: approving an agent (which cannot move money),
+//     approving the builder fee (only the builder and the 0.01% rate the contract itself
+//     names, read from a public NEAR RPC),
 //     moving the piece's own USDC from its main balance onto trade.xyz (same account), or,
 //     going home, trade.xyz -> main balance (same account), perps -> spot and a USDC send to
 //     a deposit address of the user's own private balance that this page asked OutLayer for
 //     itself.
-import { MPC_SIGNER, addressFromDerivedKey, chainSigPieceKey, mpcPath, signPieceAction, type ChainSigAction } from "unhuntable-client/chainsig";
+import { BUILDER_FEE_RATE, MPC_SIGNER, addressFromDerivedKey, chainSigPieceKey, mpcPath, readBuilder, signPieceAction, type ChainSigAction } from "unhuntable-client/chainsig";
 import { LADDER } from "unhuntable-client/planner";
 import { USDC_SPOT_TOKEN, XYZ_DEX } from "unhuntable-client/hyperliquid";
 import { OutLayerDeterministic, seedFor, type PiecesKey } from "unhuntable-client/keys";
@@ -53,6 +55,24 @@ export async function derivedAccount(f: Fetch, publicKey: Uint8Array, contract =
   return addressFromDerivedKey(JSON.parse(new TextDecoder().decode(Uint8Array.from(bytes))) as string);
 }
 
+/** The builder and rate the signer contract approves, asked from a public NEAR RPC; null when its fees are off. */
+export async function contractBuilder(f: Fetch, contract = CHAINSIG_CONTRACT): Promise<{ builder: string; rate: string } | null> {
+  const res = await f(NEAR_VIEW_RPC, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: "unhuntable",
+      method: "query",
+      params: { request_type: "call_function", finality: "final", account_id: contract, method_name: "builder", args_base64: "" },
+    }),
+  });
+  const j = (await res.json()) as { result?: { result?: number[] } };
+  const bytes = j.result?.result;
+  if (!Array.isArray(bytes)) return null;
+  return readBuilder(Uint8Array.from(bytes));
+}
+
 /** Register one chain-signature piece and sign the guard's agent approval with its key. Returns its account. */
 export async function setupChainSigPiece(d: ChainSigDeps, label: string): Promise<string> {
   const piece = chainSigPieceKey(d.key, pieceNumber(label));
@@ -81,7 +101,24 @@ export async function setupChainSigPiece(d: ChainSigDeps, label: string): Promis
     if (!ok) throw new Error("That is not a move of this piece's own USDC onto trade.xyz. Nothing was signed.");
     moveSig = bytesToHex(signPieceAction(piece, CHAINSIG_CONTRACT, r.move.counter, m));
   }
-  if (approveSig || moveSig) await d.api.chainSigApprove(label, approveSig, moveSig);
+  let builderSig: string | null = null;
+  if (r.builder) {
+    const b = r.builder.action;
+    const ours = await contractBuilder(d.outlayerFetch ?? ((...a) => fetch(...a)));
+    const last = r.move ?? r.approve;
+    const ok =
+      b.kind === "approveBuilderFee" &&
+      ours !== null &&
+      b.builder === ours.builder &&
+      b.maxFeeRate === BUILDER_FEE_RATE &&
+      ours.rate === BUILDER_FEE_RATE &&
+      last !== null &&
+      last !== undefined &&
+      r.builder.counter === last.counter + 1;
+    if (!ok) throw new Error("That is not the builder fee the signer contract allows. Nothing was signed.");
+    builderSig = bytesToHex(signPieceAction(piece, CHAINSIG_CONTRACT, r.builder.counter, b));
+  }
+  if (approveSig || moveSig || builderSig) await d.api.chainSigApprove(label, approveSig, moveSig, builderSig);
   return r.account;
 }
 

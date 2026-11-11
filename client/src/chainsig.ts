@@ -40,9 +40,15 @@ export type ChainSigAction =
   | { kind: "sendAsset"; destination: string; sourceDex: string; destinationDex: string; token: string; amount: string; nonce: number }
   | { kind: "withdraw"; destination: string; amount: string; time: number }
   | { kind: "spotSend"; destination: string; token: string; amount: string; time: number }
-  | { kind: "usdSend"; destination: string; amount: string; time: number };
+  | { kind: "usdSend"; destination: string; amount: string; time: number }
+  | { kind: "approveBuilderFee"; maxFeeRate: string; builder: string; nonce: number };
 
-const TAGS: Record<ChainSigAction["kind"], number> = { approveAgent: 0, usdClassTransfer: 1, sendAsset: 2, withdraw: 3, spotSend: 4, usdSend: 5 };
+/** The only builder fee the signer contract signs: one basis point (Hyperliquid allows up to 0.1% on perps). */
+export const BUILDER_FEE_RATE = "0.01%";
+/** The same fee in an order's builder field: tenths of a basis point. */
+export const BUILDER_FEE_TENTHS_BP = 10;
+
+const TAGS: Record<ChainSigAction["kind"], number> = { approveAgent: 0, usdClassTransfer: 1, sendAsset: 2, withdraw: 3, spotSend: 4, usdSend: 5, approveBuilderFee: 6 };
 
 // ------------------------------------------------------------ piece keys
 
@@ -112,6 +118,10 @@ export function checkAction(a: ChainSigAction): void {
       if (!a.token || a.token.length > 80 || !printable(a.token)) throw new Error("token must be 1 to 80 printable characters");
       amount(a.amount);
       return u64(a.time);
+    case "approveBuilderFee":
+      addr(a.builder);
+      if (a.maxFeeRate !== BUILDER_FEE_RATE) throw new Error("the builder fee must be exactly 0.01%");
+      return u64(a.nonce);
   }
 }
 
@@ -169,6 +179,8 @@ export function borshAction(a: ChainSigAction): Uint8Array {
       return cat([tag, str(a.destination), str(a.amount), u64(a.time)]);
     case "spotSend":
       return cat([tag, str(a.destination), str(a.token), str(a.amount), u64(a.time)]);
+    case "approveBuilderFee":
+      return cat([tag, str(a.maxFeeRate), str(a.builder), u64(a.nonce)]);
   }
 }
 
@@ -195,6 +207,23 @@ export function readCounter(answer: Uint8Array): number | null {
   const n = new DataView(answer.buffer, answer.byteOffset + 1, 8).getBigUint64(0, true);
   if (n > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error("counter is too large");
   return Number(n);
+}
+
+/** The signer contract's `builder` answer, a borsh Option<(String, String)>: the builder address and rate, or null when fees are off. */
+export function readBuilder(answer: Uint8Array): { builder: string; rate: string } | null {
+  if (answer.length === 1 && answer[0] === 0) return null;
+  if (answer[0] !== 1) throw new Error("answer is not a borsh Option");
+  const dv = new DataView(answer.buffer, answer.byteOffset, answer.byteLength);
+  const read = (at: number): [string, number] => {
+    if (at + 4 > answer.length) throw new Error("answer is not a builder pair");
+    const n = dv.getUint32(at, true);
+    if (at + 4 + n > answer.length) throw new Error("answer is not a builder pair");
+    return [new TextDecoder().decode(answer.subarray(at + 4, at + 4 + n)), at + 4 + n];
+  };
+  const [builder, next] = read(1);
+  const [rate, end] = read(next);
+  if (end !== answer.length || !ADDRESS.test(builder)) throw new Error("answer is not a builder pair");
+  return { builder, rate };
 }
 
 /** A borsh String answer (from `path` and `message`). */
@@ -253,6 +282,13 @@ function typedFor(a: ChainSigAction, chain: HlChain): TypedData {
       });
     case "usdSend":
       return t("UsdSend", [c, f("destination", "string"), f("amount", "string"), f("time", "uint64")], { hyperliquidChain: chain, destination: a.destination, amount: a.amount, time: a.time });
+    case "approveBuilderFee":
+      return t("ApproveBuilderFee", [c, f("maxFeeRate", "string"), f("builder", "address"), f("nonce", "uint64")], {
+        hyperliquidChain: chain,
+        maxFeeRate: a.maxFeeRate,
+        builder: a.builder,
+        nonce: a.nonce,
+      });
   }
 }
 
@@ -313,6 +349,8 @@ export function hlAction(a: ChainSigAction, chain: HlChain = "Mainnet"): { actio
       return { action: { type: "spotSend", ...head, destination: a.destination, token: a.token, amount: a.amount, time: a.time }, nonce: a.time };
     case "usdSend":
       return { action: { type: "usdSend", ...head, destination: a.destination, amount: a.amount, time: a.time }, nonce: a.time };
+    case "approveBuilderFee":
+      return { action: { type: "approveBuilderFee", ...head, maxFeeRate: a.maxFeeRate, builder: a.builder, nonce: a.nonce }, nonce: a.nonce };
   }
 }
 

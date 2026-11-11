@@ -64,11 +64,19 @@ export async function approveBatch(
 }
 
 /** The review numbers, exactly as the plan has them. */
-export function reviewRows(a: import("./types").PlanAnswer): { pieces: { n: number; size: string; notional: string; funding: string }[]; feesUsd: string; exitFeeUsd: string; count: number } {
+export function reviewRows(a: import("./types").PlanAnswer): {
+  pieces: { n: number; size: string; notional: string; funding: string }[];
+  feesUsd: string;
+  exitFeeUsd: string;
+  /** Only when the server says the builder fee is on for this trade. */
+  builderFee: { rate: string; usd: string } | null;
+  count: number;
+} {
   return {
     count: a.plan.pieces.length,
     pieces: a.plan.pieces.map((p, i) => ({ n: i + 1, size: String(p.size), notional: String(p.notionalUsd), funding: String(p.fundingUsd) })),
     feesUsd: String(a.feesUsd),
     exitFeeUsd: String(a.exitFeeUsd),
+    builderFee: a.builderFee ? { rate: String(a.builderFee.rate), usd: String(a.builderFee.usd) } : null,
   };
 }

@@ -22,6 +22,7 @@ test("review shows the plan, confirm sends the policy batch in one approval and 
   await expect(page.getByTestId("review-piece").nth(0)).toContainText("$75");
   await expect(page.getByTestId("fees")).toHaveText("$0.93");
   await expect(page.getByTestId("exit-fee")).toHaveText("$2.40");
+  await expect(page.getByTestId("builder-fee")).toHaveCount(0);
   await expect(page.getByTestId("world")).toContainText("Account 1");
   await expect(page.getByTestId("world")).toContainText("Account 2");
   await shot(page, "trade-review", info.project.name);
@@ -79,4 +80,15 @@ test("US stocks: pick a trade.xyz market and the plan is asked for it by its tra
   await page.getByRole("button", { name: "Change" }).click();
   await page.getByRole("radio", { name: "Crypto" }).check();
   await expect(page.getByRole("radio", { name: "BTC" })).toBeChecked();
+});
+
+test("when the builder fee is on, the review says so before you confirm", async ({ page, apiRequests, signedIn }) => {
+  void apiRequests;
+  await signedIn("builder_fee");
+  await restoreKey(page);
+  await page.goto("/trade/");
+  await page.getByRole("radio", { name: "ETH" }).check();
+  await page.getByLabel("Size", { exact: true }).fill("300");
+  await page.getByRole("button", { name: "Review" }).click();
+  await expect(page.getByTestId("builder-fee")).toHaveText("0.01% when opening, at most $0.0300");
 });

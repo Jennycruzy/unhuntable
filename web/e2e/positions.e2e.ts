@@ -26,6 +26,8 @@ test("positions show each piece and its alerts", async ({ page, apiRequests, sig
 });
 
 test("hunter's view puts what you see beside what Hyperliquid shows anyone", async ({ page, apiRequests, signedIn }, info) => {
+  // two accessibility scans; on a small build box under full load they need more time
+  test.slow();
   await signedIn();
   await page.goto("/positions/");
   const view = page.getByTestId("hunter-view");

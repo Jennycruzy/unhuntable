@@ -65,7 +65,9 @@ export interface GuardOps {
   agent(shard: string): Promise<string>;
   register(shard: string, master: string): Promise<void>;
   leverage(shard: string, coin: Coin, leverage: number): Promise<void>;
-  open(shard: string, coin: Coin, side: Side, size: number, ctx: OrderContext): Promise<Fill>;
+  open(shard: string, coin: Coin, side: Side, size: number, ctx: OrderContext, opts?: { builder?: boolean }): Promise<Fill>;
+  /** The builder address the guard was built with, or null. */
+  builder(): Promise<string | null>;
   close(shard: string, coin: Coin, ctx: OrderContext): Promise<Fill | null>;
   vrf(label: string): Promise<VrfDraw>;
   tickCoin(coin: Coin, shards: string[]): Promise<Record<string, TickShard>>;
@@ -201,6 +203,14 @@ export class GuardAdapter implements GuardOps {
       .run(newId(), ctx.positionId, ctx.pieceId, kind, f?.size ?? null, f?.px ?? null, f?.oid ?? null, f?.fee ?? null, this.now(), this.o.network);
   }
 
+  async builder(): Promise<string | null> {
+    const out = await this.run("addr", null, () => this.client.addr());
+    const b = out.builder;
+    if (b === null || b === undefined) return null;
+    if (typeof b !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(b)) throw new GuardUnreachable("guard addr answer has a builder that is not an address");
+    return b.toLowerCase();
+  }
+
   async agent(shard: string): Promise<string> {
     await this.boxPub();
     const out = await this.run("agent", shard, () => this.client.agent(shard));
@@ -225,10 +235,10 @@ export class GuardAdapter implements GuardOps {
     });
   }
 
-  async open(shard: string, coin: Coin, side: Side, size: number, ctx: OrderContext): Promise<Fill> {
+  async open(shard: string, coin: Coin, side: Side, size: number, ctx: OrderContext, opts: { builder?: boolean } = {}): Promise<Fill> {
     await this.boxPub();
     const fill = await this.run("open", shard, async () => {
-      const f = fillOf(await this.client.open({ shard, coin, side, size }));
+      const f = fillOf(await this.client.open({ shard, coin, side, size, ...(opts.builder ? { builder: true } : {}) }));
       if (!f || !(f.size > 0)) throw new GuardRefusal("venue_rejected", "the order did not fill");
       return f;
     });

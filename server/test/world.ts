@@ -68,6 +68,10 @@ export class World {
   guardClose: string[] = [];
   guardTick: any = null;
   guardDown = false;
+  /** The builder address the fake guard was built with (its addr answer). */
+  guardBuilder: string | null = null;
+  /** Hyperliquid refuses an exchange action with this reason when it returns one. */
+  exchangeRefuse?: (action: any) => string | undefined;
   vrfHex = "ab".repeat(32);
   ocStatus = "PENDING_DEPOSIT";
   ocQuote: any = reply("oc-quote");
@@ -208,6 +212,8 @@ export class World {
   private hl(call: Call, json: (b: unknown, s?: number) => Response): Response {
     if (call.path === "/exchange") {
       const a = call.body.action;
+      const refused = this.exchangeRefuse?.(a);
+      if (refused) return json({ status: "err", response: refused });
       const signer = this.exchangeSigner?.(call.body) ?? this.lastSigner;
       if (a.type === "usdClassTransfer") {
         const addr = signer ?? "";
@@ -259,6 +265,7 @@ export class World {
     if (this.guardDown) return new Response("bad gateway", { status: 502 });
     const input = call.body.input;
     if (input.op === "box_pub") return json({ output: { box_pub: BOX_PUB } });
+    if (input.op === "addr") return json({ output: { hl_address: "0x" + "77".repeat(20), vrf_public_key: null, builder: this.guardBuilder } });
     if (input.shard !== undefined) {
       call.outer = input;
       return json(reply("guard-sealed"));

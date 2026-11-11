@@ -297,6 +297,16 @@ function Review({ stage, onBack, onConfirm }: { stage: { req: TradeRequest; plan
           rows={[
             ["Fees", <span key="f" data-testid="fees">${r.feesUsd}</span>],
             ["Exit fee", <span key="x" data-testid="exit-fee">${r.exitFeeUsd}</span>],
+            ...(r.builderFee
+              ? [
+                  [
+                    "Builder fee",
+                    <span key="b" data-testid="builder-fee">
+                      {r.builderFee.rate} when opening, at most ${r.builderFee.usd}
+                    </span>,
+                  ] as [string, ReactNode],
+                ]
+              : []),
             ...(isolated
               ? ([["Margin", <span key="m" data-testid="isolated">Isolated, {stage.plan.plan.openLeverage}x on trade.xyz</span>]] as [string, ReactNode][])
               : []),

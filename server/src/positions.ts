@@ -32,7 +32,8 @@ import { addAlert, balanceWallet, userRow, usd, walletById, walletByLabel, type 
 import { newId, newShardId } from "./db.js";
 import { GuardRefusal, GuardUnreachable } from "./guard.js";
 import { approveAgent } from "./hl.js";
-import { approveAgentNow, isChainSig, moveToXyzNow, needsBrowser, xyzMoveDone } from "./chainsig.js";
+import { approveAgentNow, approveBuilderNow, isChainSig, moveToXyzNow, needsBrowser, xyzMoveDone } from "./chainsig.js";
+import { BUILDER_FEE_SHARE, activeBuilder } from "./builder.js";
 import { OutLayerWalletError } from "./outlayer.js";
 import { balancePolicy, balanceSentence, buildBatch, lockSentence, piecePolicy, readBack, walletAccount, type BatchItem, type PolicyBatch } from "./policy.js";
 import { ApiError, sentence, type RefusalCode } from "./refusals.js";
@@ -184,9 +185,12 @@ export async function previewPlan(ctx: Ctx, userId: string, body: PlanBody) {
   userRow(ctx, userId);
   const p = await makePlan(ctx, body, ctx.random(32));
   const free = freePieces(ctx, userId, dexOf(body.coin) !== "").length;
+  // The most the builder fee can be: one basis point of the size, once, when the pieces open.
+  const builder = dexOf(body.coin) === "" && (await activeBuilder(ctx)) !== null;
   return {
     plan: p,
     feesUsd: usd(p.estFeesUsd),
+    builderFee: builder ? { rate: "0.01%", usd: (body.notionalUsd * BUILDER_FEE_SHARE).toFixed(4) } : null,
     exitFeeUsd: usd(EXIT_FEE_PER_PIECE * p.pieces.length),
     world: world(p),
     newPiecesNeeded: Math.max(0, p.pieces.length - free),
@@ -450,7 +454,10 @@ async function approvePiece(ctx: Ctx, pos: PositionRow, pp: PieceRow): Promise<b
       }
       throw e;
     }
-  } else if (!piece.agent && !isChainSig(piece)) {
+  }
+  // The builder fee approval comes last; a piece it does not reach trades without the fee.
+  if (isChainSig(piece)) await approveBuilderNow(ctx, walletById(ctx, piece.id));
+  if (!piece.agent && !isChainSig(piece)) {
     const agent = await ctx.guard.agent(piece.shard_id!);
     const a = approveAgent(agent, `unhuntable ${piece.shard_id}`, ctx.now());
     const sig = await ctx.wallet.signTypedData(piece.wallet_id!, "arbitrum", typedDataJson(a.typed));
@@ -486,7 +493,9 @@ async function openPiece(ctx: Ctx, pos: PositionRow, pp: PieceRow): Promise<void
     // trade.xyz pieces are isolated: the plan's openLeverage keeps liquidation 18% away
     const planned = (JSON.parse(pos.plan_json) as { openLeverage?: number }).openLeverage;
     await ctx.guard.leverage(piece.shard_id!, pos.coin, planned ?? pos.leverage);
-    const fill = await ctx.guard.open(piece.shard_id!, pos.coin, pos.side, pp.size, ctxOrder);
+    // The builder fee: only on Hyperliquid's own list, only for a piece Hyperliquid took the approval from.
+    const fee = isChainSig(piece) && piece.builder_ok === 1 && dexOf(pos.coin) === "" && (await activeBuilder(ctx)) !== null;
+    const fill = await ctx.guard.open(piece.shard_id!, pos.coin, pos.side, pp.size, ctxOrder, fee ? { builder: true } : undefined);
     guardOk(ctx, pos.id);
     let liq: number | null = null;
     try {

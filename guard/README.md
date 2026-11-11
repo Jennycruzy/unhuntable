@@ -33,7 +33,7 @@ A side is `long` or `short` and always means the side of the position.
 
 | op | input | output |
 | --- | --- | --- |
-| `addr` | `{}` | `{hl_address, vrf_public_key}` |
+| `addr` | `{}` | `{hl_address, vrf_public_key, builder}`: `builder` is the address it was built with, or null |
 | `box_pub` | `{}` | `{box_pub}` |
 | `agent` | `{shard}` | `{shard, agent}`: the agent address to approve once on Hyperliquid |
 | `register` | `{shard, master}` | `{registered}`: stores the shard's master account, sealed |
@@ -41,8 +41,8 @@ A side is `long` or `short` and always means the side of the position.
 | `open` | `{shard, coin, side, size, builder?}` | `{mid, prices, action, hl}` |
 | `seal` | `{shard, stop: {coin, side, trigger, size}, jitter_bps?}` | `{sealed}` |
 | `seal_tp` | `{shard, tp: {coin, side, trigger, size}}` | `{sealed}` |
-| `tick` | `{shard, coin, dry?, defend?, builder?}` | `{done, band, has_stop, has_tp, defence, order, sources_ok, sources_agree, source_errors, price_ms}` |
-| `tick_coin` | `{coin, shards: [1-32 ids], dry?, defend?, builder?}` | `{shards: {id: {done, band, has_stop, has_tp, defence, order}}, sources_ok, sources_agree, source_errors, price_ms}` |
+| `tick` | `{shard, coin, dry?, defend?}` | `{done, band, has_stop, has_tp, defence, order, sources_ok, sources_agree, source_errors, price_ms}` |
+| `tick_coin` | `{coin, shards: [1-32 ids], dry?, defend?}` | `{shards: {id: {done, band, has_stop, has_tp, defence, order}}, sources_ok, sources_agree, source_errors, price_ms}` |
 | `defend` | `{shard, coin, dry?}` | `{action, rung, distance, size?, hl?}` plus the price summary |
 | `close` | `{shard, coin}` | `{done: "closed", size, hl}` or `{done: "nothing_open"}` |
 | `vrf` | `{label}` | `{output_hex, proof, alpha}` |
@@ -137,6 +137,10 @@ resets to 0.
 - Every order for close, take-profit, stop and defence is reduce-only and
   immediate-or-cancel, 3% through the agreed mid, signed by that shard's agent
   key. Reduce-only means it can only make the position smaller.
+- The builder fee is added only to an `open` on Hyperliquid's own market list,
+  only when the input asks for it, and only if the guard was built with
+  `UNHUNTABLE_BUILDER`; the rate is fixed at 1 bp (`f: 10`). Stops, take-profits,
+  defence cuts and closes never carry it.
 - The guard has no way to move funds. The only transfer it ever signs is the
   1 USDC send in `withdraw_probe`, which exists to show that Hyperliquid
   refuses it.

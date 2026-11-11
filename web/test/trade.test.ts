@@ -63,6 +63,8 @@ describe("trade", () => {
     ]);
     expect(r.feesUsd).toBe("0.93");
     expect(r.exitFeeUsd).toBe("2.40");
+    expect(r.builderFee).toBeNull();
+    expect(reviewRows({ ...PLAN, builderFee: { rate: "0.01%", usd: "0.0300" } }).builderFee).toEqual({ rate: "0.01%", usd: "0.0300" });
   });
 
   it("checks the form before asking the server", () => {

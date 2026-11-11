@@ -21,6 +21,20 @@ pub const ERR_NAME: &str = "agent name must be at most 64 printable characters";
 pub const ERR_TOKEN: &str = "token must be 1 to 80 printable characters";
 pub const ERR_DEX: &str = "market list name must be empty or up to 16 lowercase letters and digits";
 pub const ERR_CHAIN: &str = "hyperliquid chain must be Mainnet or Testnet";
+pub const ERR_BUILDER_OFF: &str = "builder fees are off in this contract";
+pub const ERR_BUILDER: &str = "that builder is not the one this contract approves";
+pub const ERR_FEE_RATE: &str = "the builder fee must be exactly 0.01%";
+
+/// The one builder fee a piece can approve: one basis point. Hyperliquid allows up to
+/// 0.1% on perps; this contract signs nothing higher than 0.01%, and no other builder.
+pub const BUILDER_FEE_RATE: &str = "0.01%";
+
+/// The builder address, fixed when the contract is built (env UNHUNTABLE_BUILDER, 0x and
+/// 40 lowercase hex). Without it the contract refuses every builder fee approval.
+#[cfg(not(test))]
+pub const BUILDER: Option<&str> = option_env!("UNHUNTABLE_BUILDER");
+#[cfg(test)]
+pub const BUILDER: Option<&str> = Some("0x2222222222222222222222222222222222222222");
 
 /// Every action the contract will sign for a piece. Borsh on the wire (keeps the
 /// contract small); the variant order below is the borsh tag and never changes.
@@ -40,6 +54,9 @@ pub enum HlAction {
     SpotSend { destination: String, token: String, amount: String, time: u64 },
     /// Send perp USDC to another Hyperliquid address.
     UsdSend { destination: String, amount: String, time: u64 },
+    /// Let our builder address take a fee on this piece's orders: only BUILDER, only at
+    /// BUILDER_FEE_RATE. The fee can never be raised and no one else can be approved.
+    ApproveBuilderFee { max_fee_rate: String, builder: String, nonce: u64 },
 }
 
 impl HlAction {
@@ -51,6 +68,7 @@ impl HlAction {
             HlAction::Withdraw { .. } => "withdraw",
             HlAction::SpotSend { .. } => "spot_send",
             HlAction::UsdSend { .. } => "usd_send",
+            HlAction::ApproveBuilderFee { .. } => "approve_builder_fee",
         }
     }
 }
@@ -138,6 +156,16 @@ pub fn validate(a: &HlAction) {
             check_token(token);
             check_amount(amount);
         }
+        HlAction::ApproveBuilderFee { max_fee_rate, builder, .. } => {
+            check_address(builder);
+            let ours = BUILDER.unwrap_or_else(|| env::panic_str(ERR_BUILDER_OFF));
+            if builder != ours {
+                env::panic_str(ERR_BUILDER);
+            }
+            if max_fee_rate != BUILDER_FEE_RATE {
+                env::panic_str(ERR_FEE_RATE);
+            }
+        }
     }
 }
 
@@ -215,6 +243,10 @@ pub fn digest(a: &HlAction, chain: &str) -> [u8; 32] {
         HlAction::UsdSend { destination, amount, time } => struct_hash(
             "HyperliquidTransaction:UsdSend(string hyperliquidChain,string destination,string amount,uint64 time)",
             &[Str(chain), Str(destination), Str(amount), U64(*time)],
+        ),
+        HlAction::ApproveBuilderFee { max_fee_rate, builder, nonce } => struct_hash(
+            "HyperliquidTransaction:ApproveBuilderFee(string hyperliquidChain,string maxFeeRate,address builder,uint64 nonce)",
+            &[Str(chain), Str(max_fee_rate), Addr(builder), U64(*nonce)],
         ),
     };
     let mut buf = Vec::with_capacity(66);

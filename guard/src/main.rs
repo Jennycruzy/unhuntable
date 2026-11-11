@@ -47,7 +47,9 @@ mod guest {
     const ENC: &str = "stops";
     const HL: &str = "https://api.hyperliquid.xyz";
     /// Builder fee: address fixed at build time (env UNHUNTABLE_BUILDER), rate fixed in code;
-    /// input can only switch it on. f = 10 → 1 bp (0.01%). No address set → no builder fee.
+    /// input can only switch it on, and only for opening an order on Hyperliquid's own market
+    /// list. Stops, take-profits, defence cuts and closes never carry it, so a fee can never
+    /// stand between a stop and its fill. f = 10 → 1 bp (0.01%). No address set → no fee.
     const BUILDER: Option<(&str, u64)> = match option_env!("UNHUNTABLE_BUILDER") {
         Some(a) => Some((a, 10)),
         None => None,
@@ -257,7 +259,7 @@ mod guest {
     }
 
     /// Stop and take-profit for one shard at the prices already fetched, then the defence step.
-    fn tick_shard(shard: &str, coin: &str, agree: Option<&[f64]>, mid: Option<f64>, dry: bool, defend: bool, builder: Option<(&str, u64)>) -> Result<Value, String> {
+    fn tick_shard(shard: &str, coin: &str, agree: Option<&[f64]>, mid: Option<f64>, dry: bool, defend: bool) -> Result<Value, String> {
         let (stop_rec, stop) = read_trigger(&stop_name(shard, coin))?;
         let (tp_rec, tp) = read_trigger(&tp_name(shard, coin))?;
         let (rnd, _, _) = vrf::random_bytes(&vrf_seed("band", shard, coin, now_ms()))?;
@@ -273,7 +275,7 @@ mod guest {
             };
             let (rec, t) = (rec.ok_or("record vanished")?, t.ok_or("record vanished")?);
             if mark_fired(&name, rec, t)? {
-                order = send(shard, &close_order(t, mid.ok_or("no mid")?, builder).ok_or("asset")?)?;
+                order = send(shard, &close_order(t, mid.ok_or("no mid")?, None).ok_or("asset")?)?;
             } else {
                 done = "already_fired_elsewhere";
             }
@@ -350,7 +352,7 @@ mod guest {
         let mut out = match op {
             "addr" => {
                 let pk = signing_keys::public_key(KEY, None).map_err(e)?;
-                json!({ "hl_address": evm_address(&pk), "vrf_public_key": vrf::public_key().ok() })
+                json!({ "hl_address": evm_address(&pk), "vrf_public_key": vrf::public_key().ok(), "builder": BUILDER.map(|b| b.0) })
             }
 
             "box_pub" => json!({ "box_pub": hex::encode(box_public(&secret("box")?)) }),
@@ -378,7 +380,8 @@ mod guest {
                 let size = input["size"].as_f64().filter(|x| *x > 0.0).ok_or("size")?;
                 let (mid, _, info) = agreed_mid(&coin)?;
                 check_open_cap(size, mid)?;
-                let order = open_order(asset(&coin).unwrap(), is_buy, mid, size, builder);
+                let a = asset(&coin).unwrap();
+                let order = open_order(a, is_buy, mid, size, if a.dex.is_empty() { builder } else { None });
                 json!({ "mid": mid, "prices": info, "action": to_json(&order), "hl": send(&shard, &order)? })
             }
 
@@ -409,7 +412,7 @@ mod guest {
                 let dry = input["dry"].as_bool().unwrap_or(false);
                 let defend = input["defend"].as_bool().unwrap_or(false);
                 let (agree, mid, info) = price_round(&coin);
-                tick_report(tick_shard(&shard, &coin, agree.as_deref(), mid, dry, defend, builder)?, &info)
+                tick_report(tick_shard(&shard, &coin, agree.as_deref(), mid, dry, defend)?, &info)
             }
 
             // One price fetch for a coin, then every listed shard's stop, take-profit and defence.
@@ -422,7 +425,7 @@ mod guest {
                 let reports = shards
                     .iter()
                     .map(|sh| {
-                        let r = tick_shard(sh, &coin, agree.as_deref(), mid, dry, defend, builder).unwrap_or_else(|err| json!({ "error": err }));
+                        let r = tick_shard(sh, &coin, agree.as_deref(), mid, dry, defend).unwrap_or_else(|err| json!({ "error": err }));
                         (sh.clone(), r)
                     })
                     .collect();

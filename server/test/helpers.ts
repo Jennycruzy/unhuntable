@@ -38,6 +38,7 @@ export function testConfig(over: Partial<Config> = {}): Config {
     guardProject: "guard",
     policyContract: "outlayer.near",
     appFeeAccount: "fees.near",
+    builderFee: false,
     secrets: readSecrets(secretsFile()),
     ...over,
   };

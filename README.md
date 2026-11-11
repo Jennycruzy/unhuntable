@@ -48,11 +48,11 @@ Every NEAR piece below does a job the product cannot do without, and each has ru
 
 `unhuntable.near` ([`signer/`](signer/)) controls a piece's Hyperliquid account. NEAR's MPC network (`v1.signer`) derives the piece's Hyperliquid account from this contract and the piece's own ed25519 key, so the account has no private key anywhere: not on our server, not in an enclave, not in a wallet.
 
-The contract builds each Hyperliquid action's EIP-712 hash itself from typed fields and asks the MPC network to sign it only when the piece key signed that exact action with its current counter. It can sign six account actions (approve an agent, move USDC between spot and perp, move between market lists, withdraw, and two kinds of send) and nothing else: no orders, no builder fees, no account changes. Anyone may relay the call; a relay cannot get a signature without the piece key, change an amount or a destination, or replay an old request. The contract has no owner and no admin methods.
+The contract builds each Hyperliquid action's EIP-712 hash itself from typed fields and asks the MPC network to sign it only when the piece key signed that exact action with its current counter. It can sign six account actions (approve an agent, move USDC between spot and perp, move between market lists, withdraw, and two kinds of send), plus a builder fee approval only for the builder it was built with and only at 0.01% (see [the builder fee](#hyperliquid-builder-fee-one-basis-point-capped-by-a-near-contract)), and nothing else: no orders, no account changes. Anyone may relay the call; a relay cannot get a signature without the piece key, change an amount or a destination, or replay an old request. The contract has no owner and no admin methods.
 
 - Live: [`unhuntable.near`](https://nearblocks.io/address/unhuntable.near) runs on `v1.signer` with Hyperliquid mainnet.
 - Approve the guard's agent for a piece through Chain Signatures: [NEAR tx `86qJbTWk…`](https://nearblocks.io/txns/86qJbTWkiXwXsKfCCWqK63yLanzvkbxikMj1R4HfufVd), signed by NEAR in 6.5 seconds for 0.0086 NEAR; Hyperliquid answered `ok`.
-- The hashes match Hyperliquid's Python SDK for all six action types (`signer/src/hl_vectors.json`).
+- The hashes match Hyperliquid's Python SDK for all seven action types (`signer/src/hl_vectors.json`).
 
 How the app uses it, end to end:
 
@@ -106,6 +106,17 @@ Your private balance lives in NEAR Intents' confidential mode. Deposits arrive f
 Aurora's Swap API takes a deposit on any chain and lands it straight on a piece's Hyperliquid account in confidential mode. Our Aurora key carries an integrator fee of 6 basis points to `jennycruzy.near`, shown in every quote.
 
 - 2 USDC from Arbitrum arrived as 1.6827 USDC on a piece's Hyperliquid account, under our Aurora key with the fee applied.
+
+### Hyperliquid builder fee: one basis point, capped by a NEAR contract
+
+The second revenue line is Hyperliquid's builder fee: a fee a front end may add to the orders it sends, once the account has approved it. Unhuntable's is **0.01% of the size, on opening orders only**, and the rules sit in code nobody at Unhuntable can change:
+
+- **The NEAR contract caps it.** The signer contract signs a builder fee approval only for the one builder address it was built with, and only at exactly 0.01%. Hyperliquid would allow up to 0.1%; the contract refuses anything above 0.01% and any other builder, so a higher fee can never be approved for your pieces, by us or by anyone with the server.
+- **Your pieces key approves it, once per piece.** It is one more action the browser signs when it sets up a new NEAR-controlled piece, after checking the builder and the rate against the contract itself through a public NEAR RPC. The review screen shows the fee and its most in dollars before you confirm.
+- **It never touches a stop.** The guard adds the fee only when it opens a position on Hyperliquid's own market list. Stops, take-profits, defence cuts and closes never carry it, so a fee can never stand between a stop and its fill. trade.xyz stock orders do not carry it.
+- **It never blocks a trade.** If Hyperliquid does not take the approval, the piece trades without the fee.
+
+The server uses it only when `BUILDER_FEE=on` and the signer contract and the guard both report the same builder address. Hyperliquid accepts a builder only while that account holds at least 100 USDC in perps, so switching it on is: hold 100 USDC on the builder account, build the guard and the signer contract with `UNHUNTABLE_BUILDER=<that address>`, publish both, and set `BUILDER_FEE=on`. The whole path is tested end to end against Hyperliquid's own SDK hashes (`approve_builder_fee` vectors in `signer/src/hl_vectors.json`, and `the builder fee` tests in `server/test/chainsig.test.ts` and `web/test/chainsig.test.ts`).
 
 ### NEAR accounts and wallets
 
@@ -194,7 +205,7 @@ cd guard && cargo test --lib --test guard_tests
 cd client && npm ci && npm test
 ```
 
-→ `165 passed`. The sealed-box tests open a box made by the Rust guard's reference and make one the guard opens (`sealed_call_from_ts_client_opens` on the Rust side). The planner's property tests check hundreds of random positions: sizes add up exactly, every piece is above Hyperliquid's $10 minimum, and no piece needs money from another. The exit tests check that the 12 words and the private key are never sent anywhere. The Chain Signatures tests (`chainsig.test.ts`) match the signer contract's hashes, rebuild the exact message piece C signed on mainnet, and recover NEAR's real MPC signature for it to piece C's Hyperliquid account.
+→ `171 passed`. The sealed-box tests open a box made by the Rust guard's reference and make one the guard opens (`sealed_call_from_ts_client_opens` on the Rust side). The planner's property tests check hundreds of random positions: sizes add up exactly, every piece is above Hyperliquid's $10 minimum, and no piece needs money from another. The exit tests check that the 12 words and the private key are never sent anywhere. The Chain Signatures tests (`chainsig.test.ts`) match the signer contract's hashes, rebuild the exact message piece C signed on mainnet, and recover NEAR's real MPC signature for it to piece C's Hyperliquid account.
 
 **3. The server and its money flows:**
 
@@ -202,7 +213,7 @@ cd client && npm ci && npm test
 cd client && npm run build && cd ../server && npm ci && npm test
 ```
 
-→ `176 passed`. Sign-in with a NEP-413 signature, encrypted wallet keys, deposits, funding, policy batches and read-back, ticks, refills and going home, with fake clocks and recorded replies. `chainsig.test.ts` runs a position and a trip home on NEAR-controlled pieces against a fake contract and MPC network that check signatures the way the real ones do; it refuses another key's signature, a wrong counter, a send back to perps and any token but USDC, and its relay transactions match near-api-js byte for byte.
+→ `181 passed`. Sign-in with a NEP-413 signature, encrypted wallet keys, deposits, funding, policy batches and read-back, ticks, refills and going home, with fake clocks and recorded replies. `chainsig.test.ts` runs a position and a trip home on NEAR-controlled pieces against a fake contract and MPC network that check signatures the way the real ones do; it refuses another key's signature, a wrong counter, a send back to perps and any token but USDC, and its relay transactions match near-api-js byte for byte.
 
 **4. The records contract** (needs `cargo-near`, see `contract/README.md`):
 
@@ -218,7 +229,7 @@ cd contract && cargo test
 cd signer && cargo test
 ```
 
-→ `test result: ok. 12 passed`. These include `typed_data_hash_matches_hyperliquid_sdk` (every action type against Hyperliquid's Python SDK), `signs_only_what_the_piece_key_signed`, `server_cannot_change_the_action`, `replay_refused` and `other_piece_key_refused`.
+→ `test result: ok. 13 passed`. These include `typed_data_hash_matches_hyperliquid_sdk` (every action type against Hyperliquid's Python SDK), `signs_only_what_the_piece_key_signed`, `server_cannot_change_the_action`, `replay_refused` and `other_piece_key_refused`.
 
 **6. The web app** (phone and desktop):
 
@@ -226,7 +237,7 @@ cd signer && cargo test
 cd web && npm ci && npm test && npm run build && npx playwright test
 ```
 
-→ 41 unit tests, then every screen in headless Chromium at 360×780 and 1280×800, with all outside requests blocked. Screenshots land in `web/screenshots/`.
+→ 44 unit tests, then every screen in headless Chromium at 360×780 and 1280×800, with all outside requests blocked. Screenshots land in `web/screenshots/`.
 
 **7. The exit tool is exactly its source:**
 
@@ -399,11 +410,11 @@ While building this we found that OutLayer's public attestation records are list
 | Folder | What it is | Tests |
 | --- | --- | --- |
 | `guard/` | The guard: a Rust WASI program for OutLayer. Decisions are pure functions in `src/lib.rs`. | 41 |
-| `client/` | TypeScript: sealed boxes, guard client, position planner, fill savings, pieces key, Hyperliquid signing, Chain Signatures pieces, NEAR relay, exit logic | 165 |
-| `server/` | API, SQLite, jobs, NEAR sign-in, OutLayer wallet client, Chain Signatures relay, money flows, Hunt Map collector, Hunter's View | 176 |
-| `signer/` | NEAR contract `unhuntable.near`: Hyperliquid accounts controlled by Chain Signatures, signing only what each piece key approved | 12 |
+| `client/` | TypeScript: sealed boxes, guard client, position planner, fill savings, pieces key, Hyperliquid signing, Chain Signatures pieces, NEAR relay, exit logic | 171 |
+| `server/` | API, SQLite, jobs, NEAR sign-in, OutLayer wallet client, Chain Signatures relay, money flows, Hunt Map collector, Hunter's View | 181 |
+| `signer/` | NEAR contract `unhuntable.near`: Hyperliquid accounts controlled by Chain Signatures, signing only what each piece key approved | 13 |
 | `contract/` | NEAR records contract: piece hashes, guard builds, fee ledger, treasury mirror | 18 |
-| `web/` | Phone-first static web app with a strict CSP | 41 unit + Playwright at two screen sizes |
+| `web/` | Phone-first static web app with a strict CSP | 44 unit + Playwright at two screen sizes |
 | `exit/` | Leave-without-us tool: one HTML page or a CLI | in `client/` |
 | `attacks/` | Linking attacks with public data only | |
 | `tools/` | EAS proof check and its reference | |

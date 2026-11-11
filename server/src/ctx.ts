@@ -28,6 +28,8 @@ export interface Ctx {
   appFeeAccount: string;
   /** Pieces controlled by NEAR Chain Signatures. When set, new pieces are made this way. */
   chainsig?: { contract: string; relay: Pick<NearRelay, "call">; chain: "Mainnet" | "Testnet" };
+  /** The builder fee is switched on; it is used only when the contract and the guard agree (builder.ts). */
+  builderFee?: boolean;
   random: (n: number) => Uint8Array;
   log?: Logger;
 }
@@ -56,6 +58,8 @@ export interface WalletRow {
   agent: string | null;
   policy_state: "none" | "locked" | "unlocked";
   policy_json: string | null;
+  /** 1 once Hyperliquid took this piece's builder fee approval. */
+  builder_ok: number;
   created_ms: number;
 }
 

@@ -153,6 +153,8 @@ export interface PlanAnswer {
   plan: Plan;
   feesUsd: string;
   exitFeeUsd: string;
+  /** The builder fee on opening, when it is on: rate "0.01%" and the most it can be, in dollars. */
+  builderFee?: { rate: string; usd: string } | null;
   world: { name: string; sizeUsd: string; side: Side }[];
   newPiecesNeeded: number;
 }

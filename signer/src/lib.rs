@@ -6,8 +6,9 @@
 //! private key for the Hyperliquid account exists anywhere.
 //!
 //! The contract signs a Hyperliquid action only when:
-//! - it is one of the actions in `hl.rs` (no orders, no builder fees, no account
-//!   conversions), and the contract built its hash itself from typed fields, and
+//! - it is one of the actions in `hl.rs` (no orders, no account conversions, and a
+//!   builder fee only for the builder fixed at build time, at exactly 0.01%), and the
+//!   contract built its hash itself from typed fields, and
 //! - the piece key signed that exact action with the piece's current counter.
 //!
 //! Anyone may relay a call (our server does), but nobody without the piece key can get
@@ -97,6 +98,13 @@ impl Contract {
     #[result_serializer(borsh)]
     pub fn signer(&self) -> AccountId {
         self.signer.clone()
+    }
+
+    /// The only builder a piece can approve a fee for, and the only rate; None when builder
+    /// fees are off in this build.
+    #[result_serializer(borsh)]
+    pub fn builder(&self) -> Option<(String, String)> {
+        hl::BUILDER.map(|b| (b.to_string(), hl::BUILDER_FEE_RATE.to_string()))
     }
 
     #[result_serializer(borsh)]

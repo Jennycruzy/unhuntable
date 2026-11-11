@@ -43,6 +43,8 @@ export interface Config {
   relayAccount: string;
   /** The Hunt Map collector's SQLite file, read for /api/hunt-map; unset = no map. */
   huntmapDb?: string;
+  /** BUILDER_FEE=on: new NEAR-controlled pieces approve the builder fee and their opens carry it. */
+  builderFee: boolean;
   secrets: Secrets;
 }
 
@@ -95,6 +97,12 @@ function int(name: string, v: string | undefined, dflt: number): number {
   return n;
 }
 
+function onOff(name: string, v: string | undefined): boolean {
+  if (v === undefined || v === "" || v === "off") return false;
+  if (v === "on") return true;
+  throw new ConfigError(`${name} must be on or off`);
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const network = env.NETWORK ?? "mainnet";
   if (network !== "mainnet" && network !== "testnet") throw new ConfigError("NETWORK must be mainnet or testnet");
@@ -118,6 +126,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     chainsigContract: env.CHAINSIG_CONTRACT ?? "",
     relayAccount: env.RELAY_ACCOUNT ?? "",
     huntmapDb: env.HUNTMAP_DB || undefined,
+    builderFee: onOff("BUILDER_FEE", env.BUILDER_FEE),
     secrets: readSecrets(env.SECRETS_FILE),
   };
 }

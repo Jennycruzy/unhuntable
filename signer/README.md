@@ -8,9 +8,11 @@ backed up by their 12 words. NEAR's MPC network (`v1.signer`) derives the piece'
 Hyperliquid account from this contract's account and a path built from that key.
 The contract asks the MPC network for a signature only when:
 
-1. the action is one of six Hyperliquid account actions (below), and the contract
+1. the action is one of seven Hyperliquid account actions (below), and the contract
    built the action's hash itself from typed fields. It never signs a hash a caller
-   hands it, and it cannot sign orders, builder fees or account changes;
+   hands it, and it cannot sign orders or account changes. A builder fee approval
+   is signed only for the builder address fixed when the contract was built, and
+   only at exactly 0.01%;
 2. the piece key signed that exact action with the piece's current counter.
 
 Anyone may relay the call. Our server does, so the user's NEAR account never
@@ -32,17 +34,20 @@ how money comes home.
 | 3 | `Withdraw { destination, amount, time }` | `HyperliquidTransaction:Withdraw` |
 | 4 | `SpotSend { destination, token, amount, time }` | `HyperliquidTransaction:SpotSend` |
 | 5 | `UsdSend { destination, amount, time }` | `HyperliquidTransaction:UsdSend` |
+| 6 | `ApproveBuilderFee { max_fee_rate, builder, nonce }` | `HyperliquidTransaction:ApproveBuilderFee` |
 
 Addresses are `0x` and 40 lowercase hex characters. Amounts are plain decimals such
 as `12.5`. Market list names (`source_dex`, `destination_dex`) are empty for the
 main list or up to 16 lowercase letters and digits, such as `xyz`. Anything else is
-refused with a plain sentence. `SendAsset` is how a piece moves its USDC onto
+refused with a plain sentence. `ApproveBuilderFee` is refused unless `builder` is
+the address the contract was built with (`UNHUNTABLE_BUILDER`) and `max_fee_rate`
+is exactly `0.01%`; a build without that address refuses every one. `SendAsset` is how a piece moves its USDC onto
 trade.xyz and back; the app only ever sends it from a piece to itself. The hashes match Hyperliquid's own Python SDK for
 every action type (`src/hl_vectors.json`, test `typed_data_hash_matches_hyperliquid_sdk`).
 
 ## Methods
 
-Arguments and results are borsh, which keeps the contract near 78 KB. A
+Arguments and results are borsh, which keeps the contract near 79 KB. A
 `PublicKey` is a borsh byte vector: a 4-byte little-endian length (33), the curve
 byte `0`, then the 32 key bytes. Strings are a 4-byte length and UTF-8 bytes;
 numbers are little-endian; an action is its tag byte followed by its fields in the
@@ -52,6 +57,7 @@ order above.
 | --- | --- | --- |
 | `new(signer: Option<AccountId>, hl_chain: Option<String>)` | once | MPC contract (default `v1.signer`) and `"Mainnet"` or `"Testnet"` |
 | `signer()`, `hl_chain()` | view | Settings |
+| `builder() -> Option<(String, String)>` | view | The one builder address and rate (`0.01%`) a piece can approve, or none when builder fees are off in this build |
 | `path(piece_key) -> String` | view | `u1/` followed by the piece key as 64 hex characters |
 | `add_piece(piece_key) -> { path, cost, refund }` | anyone, payable | Registers a piece key; storage is paid from the deposit and the rest refunded |
 | `counter(piece_key) -> Option<u64>` | view | Actions signed so far; the next message names this number |
@@ -78,6 +84,7 @@ address from the signature: `r` is `big_r` without its first byte, `s` is `s`, a
 ```
 cargo test                              # unit tests, including the Hyperliquid SDK vectors
 cargo near build non-reproducible-wasm --no-abi
+UNHUNTABLE_BUILDER=0x<builder address> cargo near build non-reproducible-wasm --no-abi   # with the builder fee
 ```
 
 On testnet, deploy with `new(Some("v1.signer-prod.testnet"), Some("Testnet"))`.

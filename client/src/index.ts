@@ -128,6 +128,8 @@ export {
 } from "./exit.js";
 export {
   ADD_PIECE_DEPOSIT,
+  BUILDER_FEE_RATE,
+  BUILDER_FEE_TENTHS_BP,
   MESSAGE_PREFIX,
   MPC_SIGNER,
   PATH_PREFIX,
@@ -149,6 +151,7 @@ export {
   pieceKeyArgs,
   pieceKeyBytes,
   publicKeyHex,
+  readBuilder,
   readCounter,
   readString,
   recoverSigner,

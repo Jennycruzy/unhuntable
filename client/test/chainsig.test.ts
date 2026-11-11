@@ -14,6 +14,7 @@ import {
   mpcToHl,
   pieceKeyBytes,
   readCounter,
+  readBuilder,
   readString,
   recoverSigner,
   signArgs,
@@ -43,6 +44,8 @@ function fromRust(a: Record<string, Record<string, unknown>>): ChainSigAction {
       return { kind: "spotSend", destination: f.destination, token: f.token, amount: f.amount, time: f.time };
     case "UsdSend":
       return { kind: "usdSend", destination: f.destination, amount: f.amount, time: f.time };
+    case "ApproveBuilderFee":
+      return { kind: "approveBuilderFee", maxFeeRate: f.max_fee_rate, builder: f.builder, nonce: f.nonce };
   }
   throw new Error(name);
 }
@@ -177,5 +180,41 @@ describe("Hyperliquid actions", () => {
     const { action, nonce } = hlAction({ kind: "withdraw", destination: "0x" + "1".repeat(40), amount: "2", time: 99 });
     expect(action.type).toBe("withdraw3");
     expect(nonce).toBe(99);
+  });
+});
+
+describe("builder fee", () => {
+  const B = "0x" + "22".repeat(20);
+  const a: ChainSigAction = { kind: "approveBuilderFee", maxFeeRate: "0.01%", builder: B, nonce: 1762500000009 };
+
+  it("is tag 6 in borsh, in the contract's field order", () => {
+    const b = borshAction(a);
+    expect(b[0]).toBe(6);
+    expect(bytesToHex(b)).toBe("06" + "05000000" + bytesToHex(new TextEncoder().encode("0.01%")) + "2a000000" + bytesToHex(new TextEncoder().encode(B)) + "09b92f5d9a010000");
+  });
+
+  it("is posted to Hyperliquid as approveBuilderFee", () => {
+    expect(hlAction(a)).toEqual({
+      action: { type: "approveBuilderFee", hyperliquidChain: "Mainnet", signatureChainId: "0x66eee", maxFeeRate: "0.01%", builder: B, nonce: 1762500000009 },
+      nonce: 1762500000009,
+    });
+  });
+
+  it("refuses any rate but one basis point, as the contract does", () => {
+    for (const maxFeeRate of ["0.1%", "0.010%", "0.02%", "1%"]) expect(() => borshAction({ ...a, maxFeeRate })).toThrow(/exactly 0.01%/);
+    expect(() => borshAction({ ...a, builder: "0x2222" })).toThrow(/address/);
+  });
+
+  it("reads the contract's builder answer", () => {
+    const enc = (s: string) => {
+      const b = new TextEncoder().encode(s);
+      const n = new Uint8Array(4);
+      new DataView(n.buffer).setUint32(0, b.length, true);
+      return [...n, ...b];
+    };
+    expect(readBuilder(Uint8Array.from([1, ...enc(B), ...enc("0.01%")]))).toEqual({ builder: B, rate: "0.01%" });
+    expect(readBuilder(Uint8Array.from([0]))).toBeNull();
+    expect(() => readBuilder(Uint8Array.from([1, ...enc("nope"), ...enc("0.01%")]))).toThrow();
+    expect(() => readBuilder(Uint8Array.from([1, ...enc(B)]))).toThrow();
   });
 });

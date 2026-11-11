@@ -19,6 +19,8 @@ import {
 } from "unhuntable-client";
 import { ed25519 } from "@noble/curves/ed25519";
 import { describe, expect, it } from "vitest";
+import { forgetBuilder } from "../src/builder.js";
+import { tickCoin } from "../src/watch.js";
 import { buildServer } from "../src/index.js";
 import { functionCallTx, readSecretKey, signTx } from "../src/relay.js";
 import { testConfig } from "./helpers.js";
@@ -62,6 +64,9 @@ function decodeAction(b: Uint8Array): { action: ChainSigAction; rest: Uint8Array
     case 4:
       action = { kind: "spotSend", destination: s(), token: s(), amount: s(), time: u64() };
       break;
+    case 6:
+      action = { kind: "approveBuilderFee", maxFeeRate: s(), builder: s(), nonce: u64() };
+      break;
     default:
       throw new Error(`fake contract: action tag ${b[0]}`);
   }
@@ -72,6 +77,8 @@ class FakeChain {
   counters = new Map<string, number>();
   calls: { method: string; args: Uint8Array }[] = [];
   refuse = false;
+  /** The builder this contract build approves; null = builder fees off. */
+  builder: string | null = null;
 
   mpcKey(path: string): Uint8Array {
     return sha256(new TextEncoder().encode(`mpc:${CONTRACT}:${path}`));
@@ -86,6 +93,16 @@ class FakeChain {
     if (params.request_type !== "call_function") return undefined;
     const args = Buffer.from(params.args_base64, "base64");
     const out = (bytes: Uint8Array) => ({ jsonrpc: "2.0", id: "unhuntable", result: { result: [...bytes], logs: [], block_height: 1, block_hash: "x" } });
+    if (params.account_id === CONTRACT && params.method_name === "builder") {
+      if (!this.builder) return out(new Uint8Array([0]));
+      const enc = (v: string) => {
+        const b = new TextEncoder().encode(v);
+        const n = new Uint8Array(4);
+        new DataView(n.buffer).setUint32(0, b.length, true);
+        return [...n, ...b];
+      };
+      return out(Uint8Array.from([1, ...enc(this.builder), ...enc("0.01%")]));
+    }
     if (params.account_id === CONTRACT) {
       const keyHex = bytesToHex(args.subarray(5, 37));
       if (params.method_name === "counter") {
@@ -169,7 +186,9 @@ function setup(balanceState: "none" | "locked" = "none"): S {
             ? { kind: "approveAgent", agentAddress: a.agentAddress, agentName: a.agentName, nonce: a.nonce }
             : a.type === "sendAsset"
               ? { kind: "sendAsset", destination: a.destination, sourceDex: a.sourceDex, destinationDex: a.destinationDex, token: a.token, amount: a.amount, nonce: a.nonce }
-              : null;
+              : a.type === "approveBuilderFee"
+                ? { kind: "approveBuilderFee", maxFeeRate: a.maxFeeRate, builder: a.builder, nonce: a.nonce }
+                : null;
     return act ? recoverSigner(actionDigest(act), body.signature) : undefined;
   };
   const alice = addUser(h);
@@ -541,6 +560,111 @@ describe("going home from trade.xyz", () => {
 
 // The fake contract's message check is the client's chainSigMessage; the real contract's
 // check is pinned to the same text by client/test/chainsig.test.ts (piece C on mainnet).
+describe("the builder fee", () => {
+  const B = "0x" + "bb".repeat(20);
+  const on = (s: S) => {
+    s.h.ctx.builderFee = true;
+    s.chain.builder = B;
+    s.h.world.guardBuilder = B;
+    forgetBuilder(s.h.ctx);
+  };
+  const exchanges = (s: S) => s.h.world.calls.filter((c) => c.host === "hl.test" && c.path === "/exchange").map((c) => c.body);
+  const opens = (s: S) => s.h.world.calls.map((c) => c.inner).filter((x) => x?.op === "open");
+
+  /** Register, check the steps, sign all of them, then fund, lock and open. */
+  async function run(s: S, body: object) {
+    const created = (await post(s, "/api/positions", body)).json();
+    const piece = chainSigPieceKey(key, 0);
+    const reg = (await post(s, "/api/chainsig/register", { label: "piece:0", publicKey: piece.publicKeyStr })).json();
+    const sig = (step: { counter: number; action: ChainSigAction } | null) => (step ? bytesToHex(signPieceAction(piece, CONTRACT, step.counter, step.action)) : undefined);
+    const r = await post(s, "/api/chainsig/approve", { label: "piece:0", signature: sig(reg.approve), moveSignature: sig(reg.move), builderSignature: sig(reg.builder) });
+    expect(r.statusCode, r.body).toBe(200);
+    await post(s, `/api/positions/${created.positionId}/continue`);
+    await runFor(s.h, 1_300_000);
+    expect((await post(s, "/api/policy/confirm", { positionId: created.positionId, txHashes: ["t"] })).statusCode).toBe(200);
+    await runFor(s.h, 1_300_000);
+    return { id: created.positionId as string, reg };
+  }
+
+  it("is off unless switched on and the contract and the guard name the same builder", async () => {
+    for (const [fee, contract, guard] of [
+      [false, B, B],
+      [true, null, B],
+      [true, B, null],
+      [true, B, "0x" + "cc".repeat(20)],
+    ] as const) {
+      const s = setup();
+      s.h.ctx.builderFee = fee;
+      s.chain.builder = contract;
+      s.h.world.guardBuilder = guard;
+      forgetBuilder(s.h.ctx);
+      await post(s, "/api/positions", ETH);
+      const reg = (await post(s, "/api/chainsig/register", { label: "piece:0", publicKey: chainSigPieceKey(key, 0).publicKeyStr })).json();
+      expect(reg.builder).toBeNull();
+      expect((await post(s, "/api/plan", ETH)).json().builderFee).toBeNull();
+    }
+  });
+
+  it("a new piece signs the approval last; NEAR signs it after the agent; only the open carries the fee", async () => {
+    const s = setup();
+    on(s);
+    expect((await post(s, "/api/plan", ETH)).json().builderFee).toEqual({ rate: "0.01%", usd: "0.0030" });
+    const { id, reg } = await run(s, ETH);
+    expect(reg.builder.counter).toBe(reg.approve.counter + 1);
+    expect(reg.builder.action).toMatchObject({ kind: "approveBuilderFee", maxFeeRate: "0.01%", builder: B });
+    expect(state(s, "positions", id)).toBe("open");
+    expect(s.chain.calls.map((c) => c.method)).toEqual(["add_piece", "sign", "sign"]);
+    const ex = exchanges(s);
+    expect(ex.map((b) => b.action.type)).toEqual(["approveAgent", "approveBuilderFee"]);
+    // Hyperliquid got the approval from the piece's own account, as its rules require
+    expect(s.h.world.exchangeSigner!(ex[1])).toBe(reg.account);
+    expect(s.h.db.prepare("SELECT builder_ok FROM pieces WHERE label = 'piece:0'").get()).toEqual({ builder_ok: 1 });
+    expect(opens(s).map((o) => o.builder)).toEqual([true]);
+    // a stop tick never carries it
+    await tickCoin(s.h.ctx, "ETH");
+    const ticks = s.h.world.calls.map((c) => c.inner).filter((x) => x?.op === "tick_coin");
+    expect(ticks.length).toBeGreaterThan(0);
+    for (const t of ticks) expect(t.builder).toBeUndefined();
+  });
+
+  it("a signature for the wrong step or a missing one is refused", async () => {
+    const s = setup();
+    on(s);
+    await post(s, "/api/positions", ETH);
+    const piece = chainSigPieceKey(key, 0);
+    const reg = (await post(s, "/api/chainsig/register", { label: "piece:0", publicKey: piece.publicKeyStr })).json();
+    const sigA = bytesToHex(signPieceAction(piece, CONTRACT, reg.approve.counter, reg.approve.action));
+    expect((await post(s, "/api/chainsig/approve", { label: "piece:0", signature: sigA })).json().error).toBe("bad_request");
+    expect((await post(s, "/api/chainsig/approve", { label: "piece:0", signature: sigA, builderSignature: sigA })).json().error).toBe("bad_signature");
+  });
+
+  it("on trade.xyz the approval comes after the move, and the stock open carries no fee", async () => {
+    const s = setup();
+    on(s);
+    expect((await post(s, "/api/plan", NVDA)).json().builderFee).toBeNull();
+    const { id, reg } = await run(s, NVDA);
+    expect(reg.move.counter).toBe(reg.approve.counter + 1);
+    expect(reg.builder.counter).toBe(reg.move.counter + 1);
+    expect(state(s, "positions", id)).toBe("open");
+    expect(exchanges(s).map((b) => b.action.type)).toEqual(["approveAgent", "sendAsset", "approveBuilderFee"]);
+    expect(opens(s).map((o) => o.builder)).toEqual([undefined]);
+  });
+
+  it("if Hyperliquid refuses the approval, the position still opens, without the fee", async () => {
+    const s = setup();
+    on(s);
+    s.h.world.exchangeRefuse = (a) => (a.type === "approveBuilderFee" ? "Builder has insufficient balance to be approved." : undefined);
+    const { id } = await run(s, ETH);
+    expect(state(s, "positions", id)).toBe("open");
+    expect(s.h.db.prepare("SELECT builder_ok FROM pieces WHERE label = 'piece:0'").get()).toEqual({ builder_ok: 0 });
+    expect(s.h.db.prepare("SELECT state, error FROM chainsig_requests WHERE purpose = 'approve_builder'").get()).toEqual({
+      state: "failed",
+      error: "Builder has insufficient balance to be approved.",
+    });
+    expect(opens(s).map((o) => o.builder)).toEqual([undefined]);
+  });
+});
+
 it("the fake MPC network's account is a real secp256k1 address", () => {
   const c = new FakeChain();
   expect(c.accountOf("00".repeat(32))).toMatch(/^0x[0-9a-f]{40}$/);

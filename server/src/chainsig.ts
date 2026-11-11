@@ -11,6 +11,7 @@
 // sign. The destinations of money moves are chosen in the browser (see web/lib/home.ts).
 import {
   ADD_PIECE_DEPOSIT,
+  BUILDER_FEE_RATE,
   MPC_SIGNER,
   SIGN_GAS,
   USDC_SPOT_TOKEN,
@@ -34,6 +35,7 @@ import {
 } from "unhuntable-client";
 import { hexToBytes } from "@noble/hashes/utils";
 import { z } from "zod";
+import { activeBuilder } from "./builder.js";
 import { userRow, walletByLabel, type Ctx, type WalletRow } from "./ctx.js";
 import { newId } from "./db.js";
 import { HyperliquidError } from "./hl.js";
@@ -48,11 +50,11 @@ const ADD_PIECE_GAS = 30_000_000_000_000n;
 
 export const RegisterBody = z.object({ label: Label, publicKey: z.string().regex(/^ed25519:[1-9A-HJ-NP-Za-km-z]{32,44}$/) }).strict();
 const Sig = z.string().regex(/^[0-9a-f]{128}$/);
-/** signature: the approve-agent action; moveSignature: the move onto trade.xyz. At least one. */
+/** signature: the approve-agent action; moveSignature: the move onto trade.xyz; builderSignature: the builder fee approval. At least one. */
 export const ApproveBody = z
-  .object({ label: Label, signature: Sig.optional(), moveSignature: Sig.optional() })
+  .object({ label: Label, signature: Sig.optional(), moveSignature: Sig.optional(), builderSignature: Sig.optional() })
   .strict()
-  .refine((b) => b.signature !== undefined || b.moveSignature !== undefined);
+  .refine((b) => b.signature !== undefined || b.moveSignature !== undefined || b.builderSignature !== undefined);
 
 const ActionSchema: z.ZodType<ChainSigAction> = z.union([
   z.object({ kind: z.literal("approveAgent"), agentAddress: z.string(), agentName: z.string(), nonce: z.number().int().nonnegative() }).strict(),
@@ -90,7 +92,7 @@ export const HomeSigsBody = z
 export interface RequestRow {
   id: string;
   piece_id: string;
-  purpose: "approve_agent" | "home_to_spot" | "home_send" | "xyz_in" | "home_from_xyz";
+  purpose: "approve_agent" | "home_to_spot" | "home_send" | "xyz_in" | "home_from_xyz" | "approve_builder";
   home_id: string | null;
   position_id: string | null;
   counter: number;
@@ -274,7 +276,21 @@ export async function registerPiece(ctx: Ctx, userId: string, body: z.infer<type
     })();
     move = { counter: at, action };
   }
-  return { label: body.label, account, contract: c.contract, approve, move };
+
+  // A new piece also approves the builder fee, last, when the fee is on. It is the last
+  // counter of the setup, so if it is never used nothing after it waits on it.
+  let builder: { counter: number; action: ChainSigAction } | null = null;
+  const b = approve ? await activeBuilder(ctx) : null;
+  if (approve && b) {
+    const action: ChainSigAction = { kind: "approveBuilderFee", maxFeeRate: BUILDER_FEE_RATE, builder: b, nonce: ctx.now() + 2 };
+    checkAction(action);
+    const at = (move ? move.counter : approve.counter) + 1;
+    ctx.db
+      .prepare("INSERT INTO chainsig_requests (id, piece_id, purpose, counter, action_json, state, created_ms, network) VALUES (?, ?, 'approve_builder', ?, ?, 'unsigned', ?, ?)")
+      .run(newId(), w.id, at, JSON.stringify(action), ctx.now(), ctx.network);
+    builder = { counter: at, action };
+  }
+  return { label: body.label, account, contract: c.contract, approve, move, builder };
 }
 
 /** The piece key's signatures over the waiting approve-agent action and move onto trade.xyz; checked here before they are kept. */
@@ -286,18 +302,23 @@ export function approvePiece(ctx: Ctx, userId: string, body: z.infer<typeof Appr
   const r = latest(ctx, w.id, "approve_agent");
   const x = xyzMoveFor(ctx, w);
   const m = x ? latestMove(ctx, w.id, x.positionId) : undefined;
+  const bf = latest(ctx, w.id, "approve_builder");
   const wantApprove = !w.agent && r?.state === "unsigned";
   const wantMove = m?.state === "unsigned";
-  if (!wantApprove && !wantMove) throw new ApiError("wrong_state");
+  const wantBuilder = bf?.state === "unsigned";
+  if (!wantApprove && !wantMove && !wantBuilder) throw new ApiError("wrong_state");
   if (wantApprove !== (body.signature !== undefined) || wantMove !== (body.moveSignature !== undefined)) throw new ApiError("bad_request");
+  if (wantBuilder !== (body.builderSignature !== undefined)) throw new ApiError("bad_request");
   const check = (row: RequestRow, sig: string) => {
     if (!verifyPieceAction(key, c.contract, row.counter, JSON.parse(row.action_json) as ChainSigAction, hexToBytes(sig), c.chain)) throw new ApiError("bad_signature");
   };
   if (wantApprove) check(r!, body.signature!);
   if (wantMove) check(m!, body.moveSignature!);
+  if (wantBuilder) check(bf!, body.builderSignature!);
   ctx.db.transaction(() => {
     if (wantApprove) ctx.db.prepare("UPDATE chainsig_requests SET signature = ?, state = 'signed' WHERE id = ?").run(body.signature, r!.id);
     if (wantMove) ctx.db.prepare("UPDATE chainsig_requests SET signature = ?, state = 'signed' WHERE id = ?").run(body.moveSignature, m!.id);
+    if (wantBuilder) ctx.db.prepare("UPDATE chainsig_requests SET signature = ?, state = 'signed' WHERE id = ?").run(body.builderSignature, bf!.id);
   })();
   return { ok: true as const, label: body.label };
 }
@@ -351,6 +372,33 @@ export async function approveAgentNow(ctx: Ctx, w: WalletRow): Promise<void> {
   const agent = (JSON.parse(r.action_json) as { agentAddress: string }).agentAddress;
   await ctx.guard.register(w.shard_id!, w.hl_address!);
   ctx.db.prepare("UPDATE pieces SET agent = ? WHERE id = ?").run(agent, w.id);
+}
+
+/**
+ * After the agent approval (and any move onto trade.xyz): send the builder fee approval the
+ * piece key signed. Never throws and never holds a position up: if NEAR or Hyperliquid does
+ * not take it, the piece simply trades without the fee.
+ */
+export async function approveBuilderNow(ctx: Ctx, w: WalletRow): Promise<boolean> {
+  if (w.builder_ok === 1) return true;
+  const r = latest(ctx, w.id, "approve_builder");
+  if (!r || r.state === "unsigned" || r.state === "failed") return false;
+  const fail = (why: string) => ctx.db.prepare("UPDATE chainsig_requests SET state = 'failed', error = ? WHERE id = ?").run(why.slice(0, 300), r.id);
+  if (r.state === "signed" && ctx.now() - r.created_ms > APPROVAL_TTL_MS) {
+    fail("too old");
+    return false;
+  }
+  try {
+    await runRequest(ctx, w, r);
+  } catch (e) {
+    if (e instanceof ApiError || e instanceof HyperliquidError) {
+      fail(e.message);
+      return false;
+    }
+    throw e;
+  }
+  ctx.db.prepare("UPDATE pieces SET builder_ok = 1 WHERE id = ?").run(w.id);
+  return true;
 }
 
 /** Funded for a stock position: move the funding onto trade.xyz with the move the piece key signed. */

@@ -46,6 +46,7 @@ Settings come from the environment:
 | `GUARD_PROJECT` | none | Name of the guard project |
 | `POLICY_CONTRACT` | `outlayer.near` | Contract that stores wallet policies |
 | `APP_FEE_ACCOUNT` | none | Account in INTENTS that receives our fee on Aurora deposits |
+| `BUILDER_FEE` | `off` | `on`: new NEAR-controlled pieces approve the builder fee and their crypto opens carry it, while the signer contract and the guard name the same builder |
 | `HUNTMAP_DB` | none | Path of the Hunt Map collector's SQLite file; without it `/api/hunt-map` answers `{ "map": null }` |
 
 Secrets are read only from `SECRETS_FILE`, never from the environment or
@@ -194,6 +195,19 @@ server relays it to the signer contract and posts the signed action. Going home
 starts with `home_from_xyz`, the same move in the other direction. Both are rows
 in `chainsig_requests` (migration 004). Balances, fills and liquidation distance
 for these markets are read from Hyperliquid with `dex: "xyz"`.
+
+### The builder fee
+
+With `BUILDER_FEE=on`, `builder.ts` asks the signer contract (`builder` view) and
+the guard (`addr`) which builder they were built with, every 10 minutes. Only when
+both name the same address does a new NEAR-controlled piece get one more step at
+registration: an `approveBuilderFee` at 0.01%, at the counter after its agent
+approval (and after its trade.xyz move, if any), kept as an `approve_builder` row
+(migration 005). After funding, the server relays it like any other request; if
+NEAR or Hyperliquid does not take it, the row is marked failed and the piece
+trades without the fee. `pieces.builder_ok` records that Hyperliquid took it, and
+only then does an `open` on Hyperliquid's own list ask the guard for the fee. The
+plan preview answers `builderFee: { rate, usd }` (the most it can be) or `null`.
 
 ### Watching and refills
 

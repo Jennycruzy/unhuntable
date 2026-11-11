@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { chainSigMessage, chainSigPieceKey, ethAddress, type ChainSigAction } from "unhuntable-client/chainsig";
 import { keyFromMnemonic } from "unhuntable-client/keys";
 import { Api } from "../lib/api";
-import { setupChainSigPiece, signHomeAll, usdcUnits8 } from "../lib/chainsig";
+import { contractBuilder, setupChainSigPiece, signHomeAll, usdcUnits8 } from "../lib/chainsig";
 import { scriptedFetch } from "./helpers";
 
 const WORDS = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
@@ -184,5 +184,63 @@ describe("going home from a NEAR-controlled piece", () => {
     expect(usdcUnits8("11.5")).toBe("1150000000");
     expect(usdcUnits8("2")).toBe("200000000");
     expect(() => usdcUnits8("1e3")).toThrow();
+  });
+});
+
+describe("the builder fee approval", () => {
+  const B = "0x" + "bb".repeat(20);
+  const FEE: ChainSigAction = { kind: "approveBuilderFee", maxFeeRate: "0.01%", builder: B, nonce: 1800000000002 };
+  const enc = (v: string) => {
+    const b = new TextEncoder().encode(v);
+    const n = new Uint8Array(4);
+    new DataView(n.buffer).setUint32(0, b.length, true);
+    return [...n, ...b];
+  };
+  /** NEAR RPC's answer to the signer contract's `builder` view. */
+  const rpcBuilder = (b: string | null) => ({ body: { jsonrpc: "2.0", result: { result: b ? [1, ...enc(b), ...enc("0.01%")] : [0] } } });
+
+  it("is signed last, only for the builder the contract itself names", async () => {
+    const f = scriptedFetch([
+      ["POST /api/chainsig/register", { body: { label: "piece:0", account: ACCOUNT, contract: "unhuntable.near", approve: { counter: 0, action: APPROVE }, builder: { counter: 1, action: FEE } } }],
+      ["POST fastnear.com", rpcDerived],
+      ["POST fastnear.com", (s) => {
+        const p = JSON.parse(s.body).params;
+        expect([p.account_id, p.method_name]).toEqual(["unhuntable.near", "builder"]);
+        return rpcBuilder(B);
+      }],
+      ["POST /api/chainsig/approve", (s) => {
+        const b = JSON.parse(s.body);
+        expect(signedOk(JSON.stringify({ signature: b.builderSignature }), 1, FEE)).toBe(true);
+        expect(signedOk(s.body, 0, APPROVE)).toBe(true);
+        return { body: { ok: true, label: "piece:0" } };
+      }],
+    ]);
+    const api = new Api(f.fetch, "https://api.test");
+    expect(await setupChainSigPiece({ api, key, account: "alice.near", outlayerFetch: f.fetch }, "piece:0")).toBe(ACCOUNT);
+    expect(f.left).toEqual([]);
+  });
+
+  it("refuses another builder, another rate, a fee the contract has off, or one out of order", async () => {
+    const bad: [ChainSigAction, number, string | null][] = [
+      [{ ...FEE, builder: "0x" + "cc".repeat(20) } as ChainSigAction, 1, B],
+      [{ ...FEE, maxFeeRate: "0.1%" } as ChainSigAction, 1, B],
+      [FEE, 1, null],
+      [FEE, 2, B],
+    ];
+    for (const [action, counter, ours] of bad) {
+      const f = scriptedFetch([
+        ["POST /api/chainsig/register", { body: { label: "piece:0", account: ACCOUNT, contract: "unhuntable.near", approve: { counter: 0, action: APPROVE }, builder: { counter, action } } }],
+        ["POST fastnear.com", rpcDerived],
+        ["POST fastnear.com", rpcBuilder(ours)],
+      ]);
+      const api = new Api(f.fetch, "https://api.test");
+      await expect(setupChainSigPiece({ api, key, account: "alice.near", outlayerFetch: f.fetch }, "piece:0")).rejects.toThrow(/not the builder fee the signer contract allows/);
+      expect(f.sent.some((s) => s.url.includes("/api/chainsig/approve"))).toBe(false);
+    }
+  });
+
+  it("reads the contract's answer, including fees off", async () => {
+    expect(await contractBuilder(scriptedFetch([["POST fastnear.com", rpcBuilder(B)]]).fetch)).toEqual({ builder: B, rate: "0.01%" });
+    expect(await contractBuilder(scriptedFetch([["POST fastnear.com", rpcBuilder(null)]]).fetch)).toBeNull();
   });
 });
