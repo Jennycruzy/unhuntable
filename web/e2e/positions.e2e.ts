@@ -46,7 +46,9 @@ test("hunter's view puts what you see beside what Hyperliquid shows anyone", asy
   await expect(view.getByTestId("hunter-verdict")).toHaveText("Hyperliquid shows 2 separate accounts and no stop or take-profit on the book.");
   expect(apiRequests.some((r) => r.url.endsWith("/api/positions/pos1/hunter"))).toBe(true);
   await shot(page, "positions-hunter", info.project.name);
-  // the filled panel is readable in both colour schemes
+  // the filled panel is readable in both colour schemes; the phone's fixed tab bar is put in the
+  // page flow first, so no row sits under it while the colours are measured
+  await page.locator("nav.nav").evaluate((n) => ((n as HTMLElement).style.position = "static"));
   for (const colorScheme of ["dark", "light"] as const) {
     await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
     const bad = (await new AxeBuilder({ page }).include('[data-testid="hunter-view"]').analyze()).violations.filter((v) => v.impact === "serious" || v.impact === "critical");
