@@ -1,6 +1,6 @@
 # Unhuntable
 
-**Private perps for DeFi traders and AI agents, on Hyperliquid and trade.xyz. Built on nine parts of the NEAR stack, all live on mainnet.**
+**Private perps for DeFi traders and AI agents, on Hyperliquid and trade.xyz. Built on ten parts of the NEAR stack.**
 
 **Unhuntable hides the price that wipes you out, for people and for their agents.** Your position is split across accounts nobody can link, your stop is sealed where nobody can read it, and each piece's account is controlled by NEAR Chain Signatures, with no private key anywhere. Hunters have nothing to push the price to.
 
@@ -16,7 +16,7 @@ Tracks: **Privacy & Private AI** · **Unstoppable DeFi** · **AI Security & Defe
 - **Proven on mainnet with real money:** [a sealed stop firing on an NVDA short](https://app.hyperliquid.xyz/explorer/tx/0xe3658df9d0c075c3e4df04488de8bc02021800df6bc39495872e394c8fc44fae), [NEAR's MPC network signing for a Hyperliquid account with no private key](https://nearblocks.io/txns/86qJbTWkiXwXsKfCCWqK63yLanzvkbxikMj1R4HfufVd), and [an AI agent paying for a call with x402](https://nearblocks.io/txns/7VcZWHJzgrauZaY6irWh1BiHGcr7kDch92UG69MFvMBD).
 - **The answer NEAR's founder pointed to.** In [NEP discussion #531](https://github.com/near/NEPs/issues/531), Illia Polosukhin notes that users spread their activity over many separate accounts to keep it apart, and that the answer lives in the application layer. Unhuntable is that answer for perps: the separate accounts are made and funded for you, from your one NEAR account.
 
-[For judges](#for-judges-start-here) · [How it works](#how-it-works-in-short) · [Two doors](#two-doors-one-protection) · [NEAR stack](#nine-parts-of-the-near-stack-each-doing-real-work) · [Mainnet proof](#what-ran-on-mainnet-with-real-money) · [Go deeper](#go-deeper)
+[For judges](#for-judges-start-here) · [How it works](#how-it-works-in-short) · [Two doors](#two-doors-one-protection) · [NEAR stack](#ten-parts-of-the-near-stack-each-doing-real-work) · [Mainnet proof](#what-ran-on-mainnet-with-real-money) · [Go deeper](#go-deeper)
 
 ---
 
@@ -27,6 +27,26 @@ Ninety seconds, no wallet and no money needed:
 1. **Open the [Hunt Map](https://tryunhuntable.site/hunt-map/).** Real Hyperliquid accounts and the exact prices that liquidate them, read from Hyperliquid's public API every 5 minutes. This is what every trader is exposed to today.
 2. **Open three mainnet transactions.** [A sealed stop firing on an NVDA short](https://app.hyperliquid.xyz/explorer/tx/0xe3658df9d0c075c3e4df04488de8bc02021800df6bc39495872e394c8fc44fae), [NEAR's MPC network signing for a Hyperliquid account with no private key](https://nearblocks.io/txns/86qJbTWkiXwXsKfCCWqK63yLanzvkbxikMj1R4HfufVd), and [an AI agent paying for a call with x402](https://nearblocks.io/txns/7VcZWHJzgrauZaY6irWh1BiHGcr7kDch92UG69MFvMBD).
 3. **Run the tests.** 491 tests across the guard, the signer contract, the client, the server, the MCP server and the app, plus browser tests at phone and desktop size, all in CI: [Check it yourself](docs/check-it-yourself.md).
+
+---
+
+## Ten parts of the NEAR stack, each doing real work
+
+| | What it does in Unhuntable | Proof on mainnet |
+| --- | --- | --- |
+| **NEAR Chain Signatures** | `unhuntable.near` asks `v1.signer` to sign Hyperliquid actions for a piece, so the piece's Hyperliquid account has no private key anywhere | [`unhuntable.near`](https://nearblocks.io/address/unhuntable.near) · [approve-agent tx](https://nearblocks.io/txns/86qJbTWkiXwXsKfCCWqK63yLanzvkbxikMj1R4HfufVd) · [the account it controls](https://app.hyperliquid.xyz/explorer/address/0x35c99eff31255e9ac3fc2a3c6e4dd70cb026b02a) |
+| **OutLayer TEE (Intel TDX)** | Runs the guard: sealed stops, one agent key per piece, up to seven price sources, the defence ladder | Sealed-stop trade: public order list `[]` while open, then a reduce-only close |
+| **trade.xyz (US stocks on Hyperliquid)** | 12 stock and index markets, isolated margin, money moved onto trade.xyz and back by Chain Signatures, stops that need two prices from outside the book | [move in](https://nearblocks.io/txns/8LzpGyN9kKpDwMmYKihG1MXXbgHFbs9H3E9Ci7w1jL6Z) · [stop fired](https://nearblocks.io/txns/6ewnHXXtwTjBvqdEqYdDkoVc3oE3ew2b6prZ5MAVCz4c) · [move back](https://nearblocks.io/txns/CALA24Gya1fLd8No2wzukUSM8cQ29eaBAUActpFLVGvc) |
+| **x402 on NEAR (AI agents)** | Each agent call is paid in USDC on NEAR with a NEP-366 delegated `ft_transfer`, settled by our relayer before the call runs | [paid agent call](https://nearblocks.io/txns/7VcZWHJzgrauZaY6irWh1BiHGcr7kDch92UG69MFvMBD) |
+| **NEAR Intents (Confidential)** | Holds your private balance and funds each piece with no public link between pieces | 2.5 USDC sent privately to a piece, arriving as 2.178894 USDC |
+| **1Click** | Deposits from any chain, and pays out to Hyperliquid through a shared payer used by thousands of accounts | [15 USDT in from BNB Chain](#what-ran-on-mainnet-with-real-money); ~2,000 shared-payer sends to 991 accounts in 12 hours |
+| **Aurora Intents** | A second private way in, straight to a piece's Hyperliquid account, with our 6 basis point integrator fee | 2 USDC from Arbitrum landed as 1.6827 USDC, fee applied |
+| **OutLayer VRF** | Draws piece sizes, entry times and stop jitter, with proofs anyone can check | Each plan stores its VRF output and proof |
+| **OutLayer custody + on-chain policies** | Your wallets, under policies owned by **your** NEAR account that our server cannot change | Policies stored by the owner's Meteor wallet and read back from chain before money moved |
+| **Sputnik DAO (treasury mode)** | A piece handed to a DAO moves only on a passed vote: `unhuntable.near` signs for it only when the DAO calls | On NEAR testnet: [proposal passed, NEAR signed for the piece's account](docs/treasury.md#proof); the same code runs on mainnet `unhuntable.near` |
+| **NEAR wallets (NEP-413)** | Sign-in, the pieces key, every policy approval | Meteor on mainnet; HOT and MyNearWallet supported |
+| **EAS** | A signed track record from the guard, totals only | Verifies with the official EAS SDK |
+| **Security work for OutLayer** | Found and reported a flaw that leaked call inputs from public records | [out-layer/outlayer#35](https://github.com/out-layer/outlayer/issues/35) |
 
 ---
 
@@ -66,25 +86,6 @@ Agents get hunted more than people: their wallets are public, they trade on sche
 - **A stop the agent cannot leak.** The MCP tool seals the stop on the agent's own machine into boxes only the guard can open. No tool reads it back, so a hostile prompt finds nothing to give away.
 - **No way to move money.** The agent opens and closes on pieces you set up. Making pieces and moving money need your 12 words, which never leave your browser.
 - **Pays for every call itself, in USDC on NEAR.** Each call is paid with x402: the agent signs a NEP-366 delegated `ft_transfer`, our relayer settles it on NEAR before the call runs, and a call the limits refuse costs nothing. [A paid agent call on mainnet](https://nearblocks.io/txns/7VcZWHJzgrauZaY6irWh1BiHGcr7kDch92UG69MFvMBD), 4.5 seconds [end to end](https://nearblocks.io/txns/6XQ9FdGdfuhGYJcinGyHedhqoBCvxorQ1figfR2RAdaL).
-
----
-
-## Nine parts of the NEAR stack, each doing real work
-
-| | What it does in Unhuntable | Proof on mainnet |
-| --- | --- | --- |
-| **NEAR Chain Signatures** | `unhuntable.near` asks `v1.signer` to sign Hyperliquid actions for a piece, so the piece's Hyperliquid account has no private key anywhere | [`unhuntable.near`](https://nearblocks.io/address/unhuntable.near) · [approve-agent tx](https://nearblocks.io/txns/86qJbTWkiXwXsKfCCWqK63yLanzvkbxikMj1R4HfufVd) · [the account it controls](https://app.hyperliquid.xyz/explorer/address/0x35c99eff31255e9ac3fc2a3c6e4dd70cb026b02a) |
-| **OutLayer TEE (Intel TDX)** | Runs the guard: sealed stops, one agent key per piece, up to seven price sources, the defence ladder | Sealed-stop trade: public order list `[]` while open, then a reduce-only close |
-| **trade.xyz (US stocks on Hyperliquid)** | 12 stock and index markets, isolated margin, money moved onto trade.xyz and back by Chain Signatures, stops that need two prices from outside the book | [move in](https://nearblocks.io/txns/8LzpGyN9kKpDwMmYKihG1MXXbgHFbs9H3E9Ci7w1jL6Z) · [stop fired](https://nearblocks.io/txns/6ewnHXXtwTjBvqdEqYdDkoVc3oE3ew2b6prZ5MAVCz4c) · [move back](https://nearblocks.io/txns/CALA24Gya1fLd8No2wzukUSM8cQ29eaBAUActpFLVGvc) |
-| **x402 on NEAR (AI agents)** | Each agent call is paid in USDC on NEAR with a NEP-366 delegated `ft_transfer`, settled by our relayer before the call runs | [paid agent call](https://nearblocks.io/txns/7VcZWHJzgrauZaY6irWh1BiHGcr7kDch92UG69MFvMBD) |
-| **NEAR Intents (Confidential)** | Holds your private balance and funds each piece with no public link between pieces | 2.5 USDC sent privately to a piece, arriving as 2.178894 USDC |
-| **1Click** | Deposits from any chain, and pays out to Hyperliquid through a shared payer used by thousands of accounts | [15 USDT in from BNB Chain](#what-ran-on-mainnet-with-real-money); ~2,000 shared-payer sends to 991 accounts in 12 hours |
-| **Aurora Intents** | A second private way in, straight to a piece's Hyperliquid account, with our 6 basis point integrator fee | 2 USDC from Arbitrum landed as 1.6827 USDC, fee applied |
-| **OutLayer VRF** | Draws piece sizes, entry times and stop jitter, with proofs anyone can check | Each plan stores its VRF output and proof |
-| **OutLayer custody + on-chain policies** | Your wallets, under policies owned by **your** NEAR account that our server cannot change | Policies stored by the owner's Meteor wallet and read back from chain before money moved |
-| **NEAR wallets (NEP-413)** | Sign-in, the pieces key, every policy approval | Meteor on mainnet; HOT and MyNearWallet supported |
-| **EAS** | A signed track record from the guard, totals only | Verifies with the official EAS SDK |
-| **Security work for OutLayer** | Found and reported a flaw that leaked call inputs from public records | [out-layer/outlayer#35](https://github.com/out-layer/outlayer/issues/35) |
 
 ---
 
