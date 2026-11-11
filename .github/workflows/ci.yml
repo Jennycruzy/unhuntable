@@ -220,7 +220,8 @@ jobs:
         run: npm run build
       - name: Install Chromium
         working-directory: web
-        run: npx playwright install --with-deps chromium
+        # the runner's apt mirrors are sometimes unreachable; its image already has Chromium's libraries
+        run: npx playwright install --with-deps chromium || npx playwright install chromium
       - name: Browser tests at 360 and 1280 wide
         working-directory: web
         run: npx playwright test
