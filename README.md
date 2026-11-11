@@ -10,7 +10,20 @@
 
 Tracks: **Privacy & Private AI** · **Unstoppable DeFi** · **AI Security & Defense**
 
-[The problem](#the-problem-the-answer-the-proof) · [Mainnet proof](#what-ran-on-mainnet-with-real-money) · [What is built](#what-is-built-and-live) · [Built on NEAR](#built-on-near) · [See it live](#the-hunt-map-and-hunters-view) · [How it works](#how-it-works) · [Who could cheat](#who-could-cheat-and-why-they-cannot) · [Privacy](#privacy-who-sees-what) · [Leave without us](#leave-without-us) · [Check it yourself](#check-it-yourself)
+[How it works](#how-it-works-in-short) · [The problem](#the-problem-the-answer-the-proof) · [Mainnet proof](#what-ran-on-mainnet-with-real-money) · [What is built](#what-is-built-and-live) · [Built on NEAR](#built-on-near) · [See it live](#the-hunt-map-and-hunters-view) · [Every step in detail](#how-it-works) · [Who could cheat](#who-could-cheat-and-why-they-cannot) · [Privacy](#privacy-who-sees-what) · [Leave without us](#leave-without-us) · [Check it yourself](#check-it-yourself)
+
+---
+
+## How it works, in short
+
+1. **Sign in with your NEAR wallet.** Your browser makes 12 words that only you hold. Every key Unhuntable uses for you comes from them.
+2. **Deposit from any chain.** The money lands in your private balance on NEAR Intents.
+3. **Open a trade.** Pick BTC, ETH, SOL or a US stock on trade.xyz, then size and leverage. A big position is split into 2 to 12 separate Hyperliquid accounts, each funded on its own from your private balance, so nobody can tie them together.
+4. **Set your stop.** Your browser seals it into a box only the guard can open. It never goes on Hyperliquid's book, so there is no level for anyone to hunt.
+5. **The guard watches.** It runs inside an OutLayer TEE, checks prices every 2 minutes, fires your stop only when independent prices agree, and cuts size before liquidation. It can trade, but Hyperliquid refuses it if it tries to move money.
+6. **Go home.** Your own keys sign the money back to your private balance through NEAR Chain Signatures. If we ever disappear, the exit tool brings it home from your 12 words alone.
+
+[Every step in detail](#how-it-works)
 
 ---
 
