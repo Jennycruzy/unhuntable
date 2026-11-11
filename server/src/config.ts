@@ -16,6 +16,8 @@ export interface Secrets {
   relayKey?: string;
   /** NEAR AI Cloud API key for the AI hunter; without it the hunter is off. */
   nearaiKey?: string;
+  /** PingPay Agent Pay API key: with X402=on, agents may also pay from any chain through Ping. */
+  pingKey?: string;
 }
 
 export interface Config {
@@ -59,6 +61,9 @@ export interface Config {
   /** NEAR AI Cloud base URL and the model the AI hunter runs in. */
   nearaiUrl: string;
   nearaiModel: string;
+  /** PingPay host and the price of one agent call paid through it (at least 0.2 USDC). */
+  pingUrl: string;
+  pingPrice: string;
   secrets: Secrets;
 }
 
@@ -76,6 +81,7 @@ const SecretsFile = z.object({
   auroraKey: z.string().min(1).optional(),
   relayKey: z.string().regex(/^ed25519:[1-9A-HJ-NP-Za-km-z]{43,90}$/).optional(),
   nearaiKey: z.string().min(1).optional(),
+  pingKey: z.string().min(1).optional(),
 });
 
 /** Read and check the secrets file. Error messages never include file contents. */
@@ -148,6 +154,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     x402Price: env.X402_PRICE || "0.002",
     nearaiUrl: (env.NEARAI_URL || NEARAI_URL).replace(/\/+$/, ""),
     nearaiModel: env.NEARAI_MODEL || NEARAI_MODEL,
+    pingUrl: (env.PINGPAY_URL || "https://pay.pingpay.io").replace(/\/+$/, ""),
+    pingPrice: env.PINGPAY_PRICE || "0.2",
     secrets: readSecrets(env.SECRETS_FILE),
   };
 }

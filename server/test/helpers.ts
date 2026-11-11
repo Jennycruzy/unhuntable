@@ -44,6 +44,8 @@ export function testConfig(over: Partial<Config> = {}): Config {
     x402Price: "0.002",
     nearaiUrl: "https://nearai.test/v1",
     nearaiModel: "test/model",
+    pingUrl: "https://ping.test",
+    pingPrice: "0.2",
     secrets: readSecrets(secretsFile()),
     ...over,
   };

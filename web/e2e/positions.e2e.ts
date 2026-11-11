@@ -49,6 +49,10 @@ test("hunter's view puts what you see beside what Hyperliquid shows anyone", asy
   // the filled panel is readable in both colour schemes; the phone's fixed tab bar is put in the
   // page flow first, so no row sits under it while the colours are measured
   await page.locator("nav.nav").evaluate((n) => ((n as HTMLElement).style.position = "static"));
+  // measure the final colours, not a colour-scheme change halfway through its transition
+  await page.getByTestId("hunter-view").evaluate((view) => {
+    for (const el of [view, ...view.querySelectorAll<HTMLElement>("*")]) (el as HTMLElement).style.transition = "none";
+  });
   for (const colorScheme of ["dark", "light"] as const) {
     await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
     const bad = (await new AxeBuilder({ page }).include('[data-testid="hunter-view"]').analyze()).violations.filter((v) => v.impact === "serious" || v.impact === "critical");

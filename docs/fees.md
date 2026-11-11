@@ -8,7 +8,7 @@ Our Aurora key carries an integrator fee of 6 basis points on deposits through A
 
 ## x402 agent calls
 
-Each AI agent call costs 0.002 USDC on NEAR by default, paid with x402 to `unhuntable.near` and settled before the call runs. See [AI agents](ai-agents.md).
+Each AI agent call costs 0.002 USDC on NEAR by default, paid with x402 to `unhuntable.near` and settled before the call runs. Agents paying from another chain through PingPay pay 0.2 USDC per call (Ping's smallest payment), settled to `unhuntable.near` through NEAR Intents, less Ping's 0.5% fee. See [AI agents](ai-agents.md).
 
 ## Hyperliquid builder fee
 

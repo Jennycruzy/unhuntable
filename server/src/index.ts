@@ -36,7 +36,7 @@ import { registerAgentRoutes } from "./agents.js";
 import { HuntUs } from "./huntus.js";
 import { AiHunter } from "./aihunt.js";
 import { NearAi } from "./nearai.js";
-import { nearPaywall, type Paywall } from "./x402.js";
+import { bothPaywalls, nearPaywall, pingRoute, type Paywall } from "./x402.js";
 
 export interface ServerDeps {
   config: Config;
@@ -225,6 +225,10 @@ export async function main(): Promise<void> {
       relayKey: config.secrets.relayKey,
       rpcUrl: config.nearRpcUrl,
     });
+    if (config.secrets.pingKey) {
+      const network = config.network === "mainnet" ? "near:mainnet" : "near:testnet";
+      paywall = bothPaywalls(paywall, pingRoute({ apiKey: config.secrets.pingKey, price: config.pingPrice, base: config.pingUrl }), { payTo: config.x402PayTo, network });
+    }
   }
   let huntUs: HuntUs | undefined;
   if (config.huntUsFile) {

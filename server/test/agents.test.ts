@@ -14,6 +14,7 @@ function fakePaywall() {
     price: "0.002",
     payTo: "unhuntable.near",
     network: "near:mainnet",
+    routes: [{ name: "near", price: "0.002" }],
     async charge(req) {
       const sig = req.headers["payment-signature"];
       if (sig === "bad") return { reply: { status: 402, headers: { "PAYMENT-REQUIRED": "challenge" }, body: { error: "invalid_signature" } } };

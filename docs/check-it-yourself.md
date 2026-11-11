@@ -26,7 +26,7 @@ cd client && npm ci && npm test
 cd client && npm run build && cd ../server && npm ci && npm test
 ```
 
-→ `223 passed`. Sign-in with a NEP-413 signature, encrypted wallet keys, deposits, funding, policy batches and read-back, ticks, refills and going home, with fake clocks and recorded replies. `chainsig.test.ts` runs a position and a trip home on NEAR-controlled pieces against a fake contract and MPC network that check signatures the way the real ones do; it refuses another key's signature, a wrong counter, a send back to perps and any token but USDC, and its relay transactions match near-api-js byte for byte.
+→ `232 passed`. Sign-in with a NEP-413 signature, encrypted wallet keys, deposits, funding, policy batches and read-back, ticks, refills and going home, with fake clocks and recorded replies. `chainsig.test.ts` runs a position and a trip home on NEAR-controlled pieces against a fake contract and MPC network that check signatures the way the real ones do; it refuses another key's signature, a wrong counter, a send back to perps and any token but USDC, and its relay transactions match near-api-js byte for byte.
 
 **4. The signer contract** (Rust, needs `rustup`):
 
@@ -50,7 +50,7 @@ cd web && npm ci && npm test && npm run build && npx playwright test
 cd client && npm run build && cd ../agent && npm ci && npm test
 ```
 
-→ `6 passed`. Stops sealed on the agent's machine open only with the guard's key; a full MCP session opens, seals, reads status and closes; no tool answer and no request ever carries the stop price.
+→ `10 passed`. Stops sealed on the agent's machine open only with the guard's key; a full MCP session opens, seals, reads status and closes; no tool answer and no request ever carries the stop price; the PingPay payer quotes, deposits once and retries while NEAR Intents settles.
 
 **7. The exit tool is exactly its source:**
 
@@ -80,5 +80,14 @@ curl -s https://main.fastfs.io/4399fffd59abe3f29284d29936bf83d41e1344e82c9713946
 ```
 
 → both print `9fcd15a786ae017bc180e1d968f3ddaa8aee81627c532ce7ca04a89a5c2687ce`. `list_versions` with the same argument lists every guard build we have published, each with its hash and file address. The active build is [`guard/`](../guard/) at commit `045d307`.
+
+**10. The NEAR AI Hunter's answer came from NEAR AI's TEE** (network, read-only, no account):
+
+```bash
+cd tools && npm install --no-package-lock && cd ..
+node tools/check-ai-hunt.cjs docs/proof/ai-hunt-mainnet.json
+```
+
+→ three `yes` lines: the signed text holds the hashes of the exact request and response bytes, the signature recovers to the enclave's address, and that address is a signing key in NEAR AI's public attestation report for the model. Then it prints what the hunter answered. The same check works on any receipt downloaded from a hunt in the app.
 
 [Back to the README](../README.md)

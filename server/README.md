@@ -52,6 +52,8 @@ Settings come from the environment:
 | `HUNT_US_FILE` | none | JSON `{ coin, pieces: [2-12 Hyperliquid addresses] }`: the live position the Hunt us page challenges visitors to find |
 | `BUILDER_FEE` | `off` | `on`: new NEAR-controlled pieces approve the builder fee and their crypto opens carry it, while the signer contract and the guard name the same builder |
 | `HUNTMAP_DB` | none | Path of the Hunt Map collector's SQLite file; without it `/api/hunt-map` answers `{ "map": null }` |
+| `PINGPAY_PRICE` | `0.2` | Price of one agent call paid through PingPay Agent Pay, in USDC (Ping's minimum is 0.2); needs `pingKey` and `X402=on` |
+| `PINGPAY_URL` | `https://pay.pingpay.io` | PingPay host |
 | `NEARAI_URL` | `https://cloud-api.near.ai/v1` | NEAR AI Cloud, for the NEAR AI Hunter (needs `nearaiKey`) |
 | `NEARAI_MODEL` | `Qwen/Qwen3.6-35B-A3B-FP8` | The model the hunter runs in; it must sign its answers inside a TEE |
 
@@ -61,12 +63,14 @@ anywhere else:
 ```json
 { "paymentKey": "...", "walletKeys": { "<wallet id>": "<wallet API key>" },
   "keystoreKey": "<32 bytes as 64 hex characters>", "auroraKey": "...",
-  "nearaiKey": "..." }
+  "nearaiKey": "...", "pingKey": "..." }
 ```
 
 `keystoreKey` encrypts the wallet key file. `auroraKey` is the Aurora Swap API
 key; without it the aurora deposit route answers `route_unavailable`. `nearaiKey`
 is the NEAR AI Cloud API key; without it the NEAR AI Hunter's routes are not served.
+`pingKey` is the PingPay Agent Pay API key; with it, agent calls can also be paid from
+any chain through PingPay.
 
 The server refuses to start if group or others can read the secrets file or the
 wallet key file. Run `chmod 600` on both.

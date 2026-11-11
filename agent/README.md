@@ -75,13 +75,22 @@ MCP client settings (the Agents screen shows them with the key filled in):
 `NEAR_NETWORK` (`near:mainnet` by default) and `NEAR_RPC_URL` are optional. The payer
 key never leaves this machine; it signs only the payment.
 
+To pay through PingPay Agent Pay instead, add `"UNHUNTABLE_PAY_WITH": "pingpay"`. Each call
+then costs 0.2 USDC: the agent asks Ping for a quote with its own account as the refund
+address, sends the quoted amount to the quoted NEAR Intents deposit address with
+`ft_transfer` (registering that address with the token first when needed), and sends the
+proof. `PINGPAY_TOKEN` picks the NEP-141 token it pays with (USDC on NEAR by default); the
+account needs a little NEAR for gas.
+
 ## Test
 
 ```bash
 npm test
 ```
 
-Six tests, no network: stops sealed here open only with the guard's key and carry each
+Ten tests, no network: stops sealed here open only with the guard's key and carry each
 piece's size; a full MCP session over an in-memory transport opens, seals, reads status
 and closes; nothing that leaves the machine and no tool answer contains the stop price;
-refusals come back in the server's own words.
+refusals come back in the server's own words; the PingPay payer quotes with its own refund
+address, deposits once, retries while NEAR Intents settles, and registers the deposit
+address before transferring.

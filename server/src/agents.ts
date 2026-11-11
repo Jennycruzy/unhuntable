@@ -194,7 +194,13 @@ export function registerAgentRoutes(app: FastifyInstance, ctx: Ctx, paywall?: Pa
   const id = (req: FastifyRequest): string => parse(Id, (req.params as { id?: string }).id);
 
   app.post("/api/agents", async (req) => newKey(ctx, owner(req), parse(NewKeyBody, req.body)));
-  app.get("/api/agents", async (req) => ({ ...listKeys(ctx, owner(req)), price: paywall?.price ?? null, payTo: paywall?.payTo ?? null, network: paywall?.network ?? null }));
+  app.get("/api/agents", async (req) => ({
+    ...listKeys(ctx, owner(req)),
+    price: paywall?.price ?? null,
+    payTo: paywall?.payTo ?? null,
+    network: paywall?.network ?? null,
+    routes: paywall?.routes ?? [],
+  }));
   app.post("/api/agents/:id/revoke", async (req) => revokeKey(ctx, owner(req), id(req)));
 
   // Free: the guard's box key, so the agent can seal a stop on its own machine.
@@ -224,9 +230,12 @@ export function registerAgentRoutes(app: FastifyInstance, ctx: Ctx, paywall?: Pa
       if ("reply" in c) {
         const body = c.reply.body && typeof c.reply.body === "object" ? c.reply.body : {};
         const tried = req.headers["payment-signature"] !== undefined || req.headers["x-payment"] !== undefined;
-        const e = tried
-          ? new ApiError("payment_failed", { reason: String((body as { error?: unknown }).error ?? "the facilitator refused it") })
-          : new ApiError("payment_required", { price: paywall.price });
+        // a second challenge (PingPay's quote: deposit address and amount) is not a failure
+        const challenge = Array.isArray((body as { accepts?: unknown }).accepts);
+        const e =
+          tried && !challenge
+            ? new ApiError("payment_failed", { reason: String((body as { error?: unknown }).error ?? "the facilitator refused it") })
+            : new ApiError("payment_required", { price: paywall.price });
         return reply.code(c.reply.status).headers(c.reply.headers).send({ ...body, ...e.body() });
       }
       paid = c.paid;

@@ -16,6 +16,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createNearPaymentFetch } from "@fastnear/x402";
 import { createLocalNearSigner } from "@fastnear/x402/node";
+import { NEAR_USDC, createPingPaymentFetch, nearTokenDeposit } from "./pingpay.js";
 import { z } from "zod";
 import { AgentApi, AgentApiError } from "./api.js";
 import { describeStatus } from "./words.js";
@@ -124,7 +125,18 @@ async function main(): Promise<void> {
     secretKey: need("NEAR_PAYER_SECRET_KEY") as `ed25519:${string}`,
     ...(process.env.NEAR_RPC_URL ? { rpcUrls: { [network]: process.env.NEAR_RPC_URL } } : {}),
   });
-  const paidFetch = createNearPaymentFetch({ signer, network }) as typeof fetch;
+  // UNHUNTABLE_PAY_WITH=pingpay pays each call through PingPay Agent Pay (0.2 USDC, settled
+  // through NEAR Intents) with the payer's own token on NEAR; the default is a USDC transfer.
+  const payWith = process.env.UNHUNTABLE_PAY_WITH ?? "near";
+  if (payWith !== "near" && payWith !== "pingpay") throw new Error("UNHUNTABLE_PAY_WITH must be near or pingpay.");
+  const paidFetch =
+    payWith === "pingpay"
+      ? createPingPaymentFetch({
+          accountId: need("NEAR_PAYER_ACCOUNT_ID"),
+          token: process.env.PINGPAY_TOKEN ?? NEAR_USDC,
+          deposit: nearTokenDeposit(process.env.NEAR_RPC_URL ?? "https://free.rpc.fastnear.com", need("NEAR_PAYER_ACCOUNT_ID"), need("NEAR_PAYER_SECRET_KEY")),
+        })
+      : (createNearPaymentFetch({ signer, network }) as typeof fetch);
   const api = new AgentApi(process.env.UNHUNTABLE_URL ?? "https://tryunhuntable.site", need("UNHUNTABLE_AGENT_KEY"), paidFetch);
   await buildServer(api).connect(new StdioServerTransport());
 }
