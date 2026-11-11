@@ -1,22 +1,21 @@
 # Unhuntable
 
-**On Hyperliquid, anyone can see the price that wipes you out. near.com hides your name, not that price. Unhuntable hides the price.**
+**Private perps on Hyperliquid and trade.xyz.** Your position is split across accounts nobody can link, and your stop-loss is sealed where nobody can read it, so hunters have no level to push the price to. Built on NEAR.
 
-> Every Hyperliquid account is public: its size, its entry, the exact price that liquidates it, and every stop-loss resting on the book. NEAR's own near.com already makes perps confidential, so nobody can tie a position back to you. But hunters do not need your name. They push the price to the level they can read on the book, take the liquidation, and the market watches.
+## What is built and live
 
-**Unhuntable removes the level itself.** Your position is split across separate Hyperliquid accounts ("pieces") that nobody can tie together, so there is no big position to find. Your stop-loss is sealed inside a TEE on OutLayer and is not on the book until the moment it fires. A guard watches every piece and cuts size before liquidation, and Hyperliquid itself refuses it when it tries to move money. Every new piece's Hyperliquid account is controlled by **NEAR Chain Signatures**, under a contract that signs only what that piece's own key approved: no private key for the account exists anywhere, and our server cannot sign a thing.
+Each part below has run on mainnet with real money, with a link to check it. The app is live at [tryunhuntable.site](https://tryunhuntable.site).
 
-## Two NEAR technologies carry the whole product
+- **Crypto perps on Hyperliquid.** BTC, ETH and SOL, split into 1 to 12 pieces, each its own Hyperliquid account, funded separately so nothing ties them together. [A sealed-stop ETH trade](#what-ran-on-mainnet-with-real-money): the public order list stayed empty while it was open, then the stop fired.
+- **US stocks on trade.xyz.** NVDA, TSLA, AAPL, MSFT, GOOGL, AMZN, META, AMD, MU, INTC, XYZ100 and SP500, from the same pieces and with the same sealed stop. [An NVDA short opened](https://app.hyperliquid.xyz/explorer/tx/0xdfdd58cd4df862ffe15704488de26802050700b2e8fb81d183a604200cfc3cea) with an empty public order list, and [the sealed stop closed it](https://app.hyperliquid.xyz/explorer/tx/0xe3658df9d0c075c3e4df04488de8bc02021800df6bc39495872e394c8fc44fae).
+- **Stops nobody can read.** The stop is sealed in your browser into a box only the guard can open. The guard runs in an OutLayer TEE and fires a reduce-only close when independent prices agree; for stocks, two of them must come from outside the trade.xyz book. Nothing rests on the book until the moment it fires.
+- **Accounts with no private key.** Each piece's Hyperliquid account is controlled by NEAR Chain Signatures through our contract [`unhuntable.near`](https://nearblocks.io/address/unhuntable.near), which signs only what that piece's own key approved. We could not move your money even if we wanted to. [NEAR signed a piece's approval in 6.5 seconds](https://nearblocks.io/txns/86qJbTWkiXwXsKfCCWqK63yLanzvkbxikMj1R4HfufVd).
+- **Money in and out with no trail.** A private balance in NEAR Intents' confidential mode funds every piece separately; deposits come from any chain through 1Click or Aurora Intents.
+- **AI agents trade through the same pieces.** An MCP server with its own key and limits, stops sealed on the agent's machine, every call paid with x402 in USDC on NEAR. [A paid agent call on mainnet](https://nearblocks.io/txns/7VcZWHJzgrauZaY6irWh1BiHGcr7kDch92UG69MFvMBD).
+- **See the problem, and your answer to it.** The public [Hunt Map](https://tryunhuntable.site/hunt-map/) lists the liquidation price of every large position held by Hyperliquid's biggest accounts. Hunter's View puts each of your positions beside what Hyperliquid's public API shows for it: separate accounts, no stop on the book.
+- **Leave without us.** The exit tool brings your money home from your 12 words alone, even if our servers are gone.
 
-**1. NEAR Chain Signatures: Hyperliquid accounts with no private key.** Every new piece's Hyperliquid account belongs to our NEAR contract, [`unhuntable.near`](https://nearblocks.io/address/unhuntable.near), and NEAR's MPC network (`v1.signer`) signs for it. No private key for the account exists anywhere: not on our server, not in the enclave, not in a wallet. The contract signs only the exact action that piece's own key approved, so **we could not move your money even if we wanted to.** Live on mainnet: [NEAR signed the guard's approval in 6.5 seconds](https://nearblocks.io/txns/86qJbTWkiXwXsKfCCWqK63yLanzvkbxikMj1R4HfufVd) and Hyperliquid answered `ok`.
-
-**2. A TEE on OutLayer: the guard nobody can read.** The guard runs inside OutLayer's trusted execution environment (Intel TDX, attested). It holds your sealed stops and one trading key per piece, draws piece sizes and timing from OutLayer's verifiable randomness, and fires your stop only when 3 of 7 price sources agree. Your stop is not on Hyperliquid's book and our server cannot read it. **Hunters have no level to push the price to.** Live on mainnet: while a sealed-stop trade was open, the account's public order list was empty (`[]`); then the stop fired as a reduce-only close. The attestation names the exact guard build that ran, and `check_guard` on our records contract answers whether that build is one we published.
-
-Together: **no key to steal, no stop to read, no accounts to link.**
-
-**US stocks too.** The same pieces trade NVDA, TSLA, AAPL and nine more markets on [trade.xyz](https://trade.xyz), Hyperliquid's stock market list. NEAR Chain Signatures move the money there and back, and the sealed stop fires only when prices from outside the order book agree. Live on mainnet: [an NVDA short opened](https://app.hyperliquid.xyz/explorer/tx/0xdfdd58cd4df862ffe15704488de26802050700b2e8fb81d183a604200cfc3cea) with an empty public order list, and [the sealed stop closed it](https://app.hyperliquid.xyz/explorer/tx/0xe3658df9d0c075c3e4df04488de8bc02021800df6bc39495872e394c8fc44fae).
-
-**See the problem live:** the [Hunt Map](https://tryunhuntable.site/hunt-map/) lists the liquidation price of every large position held by Hyperliquid's biggest accounts, read from Hyperliquid's public API every 5 minutes. **See the answer on your own trade:** Hunter's View puts each of your positions beside what the same public API shows for it.
+**Why it matters.** On Hyperliquid, anyone can see the price that wipes you out: every account's size, entry, liquidation price and resting stops are public. near.com hides your name, not that price. Hunters do not need your name; they push the price to the level they can read, take the liquidation, and the market watches. Unhuntable removes the level itself.
 
 Tracks: **Privacy & Private AI** · **Unstoppable DeFi** · **AI Security & Defense**
 
@@ -25,7 +24,7 @@ Tracks: **Privacy & Private AI** · **Unstoppable DeFi** · **AI Security & Defe
 | | What it does in Unhuntable | Proof on mainnet |
 | --- | --- | --- |
 | **NEAR Chain Signatures** | `unhuntable.near` asks `v1.signer` to sign Hyperliquid actions for a piece, so the piece's Hyperliquid account has no private key anywhere | [`unhuntable.near`](https://nearblocks.io/address/unhuntable.near) · [approve-agent tx](https://nearblocks.io/txns/86qJbTWkiXwXsKfCCWqK63yLanzvkbxikMj1R4HfufVd) · [the account it controls](https://app.hyperliquid.xyz/explorer/address/0x35c99eff31255e9ac3fc2a3c6e4dd70cb026b02a) |
-| **OutLayer TEE (Intel TDX)** | Runs the guard: sealed stops, one agent key per piece, seven price sources, the defence ladder | Sealed-stop trade: public order list `[]` while open, then a reduce-only close |
+| **OutLayer TEE (Intel TDX)** | Runs the guard: sealed stops, one agent key per piece, up to seven price sources, the defence ladder | Sealed-stop trade: public order list `[]` while open, then a reduce-only close |
 | **trade.xyz (US stocks on Hyperliquid)** | 12 stock and index markets, isolated margin, money moved onto trade.xyz and back by Chain Signatures, stops that need two prices from outside the book | [move in](https://nearblocks.io/txns/8LzpGyN9kKpDwMmYKihG1MXXbgHFbs9H3E9Ci7w1jL6Z) · [stop fired](https://nearblocks.io/txns/6ewnHXXtwTjBvqdEqYdDkoVc3oE3ew2b6prZ5MAVCz4c) · [move back](https://nearblocks.io/txns/CALA24Gya1fLd8No2wzukUSM8cQ29eaBAUActpFLVGvc) |
 | **x402 on NEAR (AI agents)** | Each agent call is paid in USDC on NEAR with a NEP-366 delegated `ft_transfer`, settled by our relayer before the call runs | [paid agent call](https://nearblocks.io/txns/7VcZWHJzgrauZaY6irWh1BiHGcr7kDch92UG69MFvMBD) |
 | **NEAR Intents (Confidential)** | Holds your private balance and funds each piece with no public link between pieces | 2.5 USDC sent privately to a piece, arriving as 2.178894 USDC |
@@ -64,7 +63,7 @@ How the app uses it, end to end:
 
 ### OutLayer TEE: the guard, the wallets and your rules
 
-The guard ([`guard/`](guard/)) is a Rust program that runs inside OutLayer's trusted execution environment (TEE: Intel TDX, attested). It holds one Hyperliquid agent key per piece, keeps your stops in sealed storage, draws every random choice from OutLayer's VRF, checks seven price sources, fires stops and runs the defence ladder. OutLayer custody wallets hold your private balance, under a policy stored on chain with **you** as owner: where money may go, and that Hyperliquid signing stays off. Our server cannot change it.
+The guard ([`guard/`](guard/)) is a Rust program that runs inside OutLayer's trusted execution environment (TEE: Intel TDX, attested). It holds one Hyperliquid agent key per piece, keeps your stops in sealed storage, draws every random choice from OutLayer's VRF, checks up to seven price sources, fires stops and runs the defence ladder. OutLayer custody wallets hold your private balance, under a policy stored on chain with **you** as owner: where money may go, and that Hyperliquid signing stays off. Our server cannot change it.
 
 - A sealed-stop trade on a Chain Signatures piece: the public order list stayed empty (`[]`) while the position was open, and the stop fired as a reduce-only close.
 - Policy changes approved by the owner's NEAR wallet and read back from chain before any money moved.
@@ -147,7 +146,7 @@ The same problem shows up across all public chains. In [NEP discussion #531](htt
 **The answer.** Three things a trader on Hyperliquid cannot get today, together:
 
 1. **Pieces nobody can tie together.** A position is split into 2 to 12 accounts. Each is funded separately from a confidential balance on NEAR Intents and arrives through the same shared payer that funds thousands of other Hyperliquid accounts a day. Sizes are randomised and entries are spread over minutes, with the timing drawn from a VRF anyone can check.
-2. **Stops that do not exist until they fire.** No stop order rests on Hyperliquid. The level is sealed in your browser into a box only the guard can open, and the guard runs inside an OutLayer enclave. When at least three of seven public price sources agree the level is crossed, the guard sends a reduce-only market order. Nobody can see where it is, including us.
+2. **Stops that do not exist until they fire.** No stop order rests on Hyperliquid. The level is sealed in your browser into a box only the guard can open, and the guard runs inside an OutLayer enclave. When at least three public price sources (of up to seven) agree the level is crossed, the guard sends a reduce-only market order. Nobody can see where it is, including us.
 3. **A guard that defends but cannot steal.** The guard holds one Hyperliquid *agent* key per piece. An agent key can place and cancel orders; Hyperliquid refuses any transfer it signs. The guard cuts size on a ladder as liquidation gets close, and it has no way to move money out.
 
 **The proof.** We ran it on Hyperliquid mainnet with real money (table below), attacked our own pieces with only public data, and found and reported a privacy flaw in OutLayer's public call record that would have exposed sealed stops. Everything else in this repo is tested offline: about 400 tests across the guard, the signer, the client, the server, the records contract and the app, all in CI.
@@ -342,7 +341,7 @@ Each rung is saved before the order goes out and fires once, so a cut is not rep
 | A relay | Change an amount or destination, or replay a request | The piece key signs the contract, the counter and the action's hash; any change or repeat fails the check. | `server_cannot_change_the_action`, `replay_refused` |
 | Our server | Learn your stop | Stops are sealed in your browser to the guard's key. The server forwards boxes it cannot open. | `client/src/box-browser.ts`, `stop_level_never_in_output` |
 | Our server | Run one user's call as another's piece | The plain shard id next to a sealed call must equal the one inside the box, or the guard refuses. | `outer_shard_must_match_box` |
-| One price source | Fire your stop with a fake print | Three of seven sources must agree within 0.5%. | `one_bad_feed_cannot_fire`, `one_bad_feed_cannot_fire_tp` |
+| One price source | Fire your stop with a fake print | At least three sources must agree within 0.5%. | `one_bad_feed_cannot_fire`, `one_bad_feed_cannot_fire_tp` |
 | Two guard runs at once | Fire a stop twice | Compare-and-swap in sealed storage before any order. | `real_crash_fires_once`, `tp_fires_once` |
 | Anyone replaying a call | Reuse a sealed call | Each box has a fresh ephemeral key, nonce and 32-byte salt; a box made for one piece does not open as another. | `client/test/box.test.ts` |
 | Us, gone | Leave your money stuck | Your wallets come from your 12 words; the exit tool finds and empties them using OutLayer and Hyperliquid directly. | `exit/`, `client/test/exit.test.ts` |
