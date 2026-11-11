@@ -34,8 +34,11 @@ test("the owner sends the NEAR AI hunter and sees what it named against the trut
 
   await page.locator("nav.nav").evaluate((n) => ((n as HTMLElement).style.position = "static"));
   // measure the final colours, not a colour-scheme change halfway through its transition
-  await page.getByTestId("ai-hunter").evaluate((card) => {
-    for (const el of [card, ...card.querySelectorAll<HTMLElement>("*")]) (el as HTMLElement).style.transition = "none";
+  await page.evaluate(() => {
+    for (const el of document.querySelectorAll<HTMLElement>("*")) {
+      el.style.transition = "none";
+      el.style.animation = "none";
+    }
   });
   for (const colorScheme of ["dark", "light"] as const) {
     await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });

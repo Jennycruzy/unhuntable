@@ -50,8 +50,11 @@ test("hunter's view puts what you see beside what Hyperliquid shows anyone", asy
   // page flow first, so no row sits under it while the colours are measured
   await page.locator("nav.nav").evaluate((n) => ((n as HTMLElement).style.position = "static"));
   // measure the final colours, not a colour-scheme change halfway through its transition
-  await page.getByTestId("hunter-view").evaluate((view) => {
-    for (const el of [view, ...view.querySelectorAll<HTMLElement>("*")]) (el as HTMLElement).style.transition = "none";
+  await page.evaluate(() => {
+    for (const el of document.querySelectorAll<HTMLElement>("*")) {
+      el.style.transition = "none";
+      el.style.animation = "none";
+    }
   });
   for (const colorScheme of ["dark", "light"] as const) {
     await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
