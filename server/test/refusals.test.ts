@@ -17,6 +17,7 @@ const CODES = [
   "guard_unreachable",
   "guard_unlisted",
   "deposit_below_min",
+  "refund_wrong_chain",
   "quote_expired",
   "exit_needs_unlock",
   "exit_fee",

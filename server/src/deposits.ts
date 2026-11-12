@@ -87,8 +87,29 @@ function belowMin(min: string): ApiError {
   return new ApiError("deposit_below_min", { min: `${min} USDC` });
 }
 
+const NEAR_ACCOUNT = /^(([a-z\d]+[-_])*[a-z\d]+\.)*([a-z\d]+[-_])*[a-z\d]+$/;
+const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+const SOL_ADDRESS = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+const CHAIN_NAMES: Record<string, string> = { eth: "Ethereum", base: "Base", arb: "Arbitrum", sol: "Solana" };
+
+/** The refund must be an address on the chain the money comes from; 1Click only answers "bad request" otherwise. */
+function checkRefund(body: z.infer<typeof QuoteBody>): void {
+  const r = body.refundTo.trim();
+  if (body.route === "near") {
+    if (r.length < 2 || r.length > 64 || !NEAR_ACCOUNT.test(r)) throw new ApiError("refund_wrong_chain", { chain: "NEAR", example: "alice.near" });
+    return;
+  }
+  const chain = CHAIN_NAMES[body.chain] ?? body.chain;
+  if (body.chain === "sol") {
+    if (!SOL_ADDRESS.test(r)) throw new ApiError("refund_wrong_chain", { chain, example: "your Phantom address" });
+  } else if (!EVM_ADDRESS.test(r)) {
+    throw new ApiError("refund_wrong_chain", { chain, example: "0x… from MetaMask" });
+  }
+}
+
 export async function quote(ctx: Ctx, userId: string, body: z.infer<typeof QuoteBody>) {
   const u = userRow(ctx, userId);
+  checkRefund(body);
   const bal = balanceWallet(ctx, userId);
   const id = newId();
   const decimals = decimalsFor(body.chain, body.token);

@@ -123,7 +123,19 @@ export default function DepositPage() {
             </select>
           </div>
           <label htmlFor="refund">Refund to</label>
-          <input id="refund" required spellCheck={false} autoCapitalize="off" value={refundTo} onChange={(e) => setRefundTo(e.target.value)} />
+          <input
+            id="refund"
+            required
+            spellCheck={false}
+            autoCapitalize="off"
+            aria-describedby="refund-hint"
+            placeholder={route === "near" ? "alice.near" : chainDef.id === "sol" ? "Your Phantom address" : "0x… your MetaMask address"}
+            value={refundTo}
+            onChange={(e) => setRefundTo(e.target.value)}
+          />
+          <p className="small muted" id="refund-hint" data-testid="refund-hint">
+            {route === "near" ? "Your NEAR account." : `Your own address on ${chainDef.name}.`} If the deposit can&apos;t go through, it is sent back there.
+          </p>
           {error && (
             <Notice kind="error" testId="deposit-error">
               {error}

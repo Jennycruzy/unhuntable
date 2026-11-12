@@ -46,3 +46,15 @@ test("an expired quote offers a new one", async ({ page, apiRequests, signedIn }
   await expect(page.getByTestId("deposit-status")).toHaveText("That quote expired. Don't send to that address.", { timeout: 10_000 });
   await expect(page.getByRole("button", { name: "Get a new quote" })).toBeVisible();
 });
+
+test("the refund field says which address it needs on each route", async ({ page, signedIn }) => {
+  await signedIn();
+  await page.goto("/deposit/");
+  await expect(page.getByTestId("refund-hint")).toContainText("Your NEAR account.");
+  await expect(page.getByLabel("Refund to")).toHaveValue("alice.near");
+  await page.getByRole("radio", { name: "MetaMask or Phantom" }).check();
+  await expect(page.getByLabel("Refund to")).toHaveValue("");
+  await expect(page.getByLabel("Refund to")).toHaveAttribute("placeholder", /0x/);
+  await page.getByLabel("Chain").selectOption({ label: "Base" });
+  await expect(page.getByTestId("refund-hint")).toContainText("Your own address on Base.");
+});

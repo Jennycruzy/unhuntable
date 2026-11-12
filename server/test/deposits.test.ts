@@ -78,6 +78,21 @@ describe("deposit route near", () => {
   });
 });
 
+describe("refund address", () => {
+  it("must be on the chain the money comes from, with a sentence that says so", async () => {
+    const s = setup();
+    const ask = (route: string, chain: string, token: string, refundTo: string) =>
+      s.app.inject({ method: "POST", url: "/api/deposit/quote", headers: { cookie: s.alice.cookie }, payload: { route, chain, token, amount: "25.5", refundTo } });
+    const r = await ask("aurora", "base", "USDC", "jennycruzy.near");
+    expect(r.statusCode).toBe(400);
+    expect(r.json().error).toBe("refund_wrong_chain");
+    expect(r.json().message).toContain("on Base");
+    expect((await ask("aurora", "sol", "USDC", "0x" + "12".repeat(20))).json().error).toBe("refund_wrong_chain");
+    expect((await ask("near", "near", "USDC", "Jenny Cruzy!")).json().error).toBe("refund_wrong_chain");
+    expect(s.h.world.ofHost("oneclick.test")).toHaveLength(0);
+  });
+});
+
 describe("deposit route aurora", () => {
   it("quotes with confidentiality advanced, our 6 bps fee, refund to refundTo; status waiting -> seen -> done", async () => {
     const s = setup();
@@ -147,7 +162,7 @@ describe("deposit route aurora", () => {
         method: "POST",
         url: "/api/deposit/quote",
         headers: { cookie: s.alice.cookie },
-        payload: { route: "aurora", chain, token, amount: "50", refundTo: "0x" + "12".repeat(20) },
+        payload: { route: "aurora", chain, token, amount: "50", refundTo: chain === "sol" ? "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin" : "0x" + "12".repeat(20) },
       });
       expect(r.statusCode).toBe(200);
       const sent = s.h.world.ofHost("oneclick.test").filter((c) => c.path === "/v0/quote").at(-1)!;
