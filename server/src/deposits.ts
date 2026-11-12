@@ -102,7 +102,9 @@ export async function quote(ctx: Ctx, userId: string, body: z.infer<typeof Quote
     if (/usdc/i.test(body.token) && Number(body.amount) < Number(NEAR_MIN_USDC)) throw belowMin(NEAR_MIN_USDC);
     let d;
     try {
-      d = await ctx.wallet.depositCrossChain(bal.wallet_id, { chain: body.chain, token: body.token, amount: units.toString() });
+      // OutLayer names NEAR on the near chain "wNEAR"; the page shows it as NEAR.
+      const token = body.chain === "near" && body.token.toUpperCase() === "NEAR" ? "wNEAR" : body.token;
+      d = await ctx.wallet.depositCrossChain(bal.wallet_id, { chain: body.chain, token, amount: units.toString() });
     } catch (e) {
       if (e instanceof OutLayerWalletError && /too low/i.test(e.message)) throw belowMin(NEAR_MIN_USDC);
       if (e instanceof OutLayerWalletError && e.code !== "unreachable") throw new ApiError("bad_request");
