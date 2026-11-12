@@ -58,9 +58,15 @@ export function piecePolicy(p: { evmAddress: string; owner: string; walletAccoun
   return policy([...new Set([p.evmAddress.toLowerCase(), p.owner, p.walletAccount])], p.keyHash, p.evmSign ?? false);
 }
 
-/** The private balance: every piece's EVM address, the owner's exit addresses and its own NEAR account. */
+/**
+ * NEAR Intents. OutLayer runs every deposit into a wallet as a call to it, so a locked private balance
+ * must list it or no deposit can land after the first trade, money coming home included.
+ */
+export const INTENTS_CONTRACT = "intents.near";
+
+/** The private balance: every piece's EVM address, the owner's exit addresses, its own NEAR account and NEAR Intents. */
 export function balancePolicy(p: { pieceAddresses: string[]; exitAddresses: string[]; walletAccount: string; keyHash: string }): Policy {
-  const list = [...new Set([...p.pieceAddresses.map((a) => a.toLowerCase()), ...p.exitAddresses, p.walletAccount])];
+  const list = [...new Set([...p.pieceAddresses.map((a) => a.toLowerCase()), ...p.exitAddresses, p.walletAccount, INTENTS_CONTRACT])];
   return policy(list, p.keyHash, false);
 }
 

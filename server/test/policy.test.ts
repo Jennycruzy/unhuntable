@@ -37,7 +37,8 @@ describe("policy JSON", () => {
 
   it("the private balance lists every piece and the owner's exit addresses, with evm_sign off", () => {
     const p = balancePolicy({ pieceAddresses: [ADDR_ONE, ADDR_TWO, ADDR_ONE], exitAddresses: ["alice.near"], walletAccount: OWN, keyHash: HASH });
-    expect(p.rules.addresses.list).toEqual([ADDR_ONE, ADDR_TWO, "alice.near", OWN]);
+    // intents.near: OutLayer runs a deposit into the balance as a call to it (observed on mainnet)
+    expect(p.rules.addresses.list).toEqual([ADDR_ONE, ADDR_TWO, "alice.near", OWN, "intents.near"]);
     expect(p.capabilities.evm_sign.allowed).toBe(false);
     expect(p.authorized_key_hashes).toEqual([HASH]);
   });

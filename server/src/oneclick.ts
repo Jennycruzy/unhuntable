@@ -55,13 +55,24 @@ export class OneClick {
     this.f = f ?? ((...a) => fetch(...a));
   }
 
-  private async req(method: string, path: string, body?: unknown): Promise<any> {
+  /** Aurora's own Swap API takes the key in the path (/api/quote/{key}); 1Click itself takes it as a Bearer token (/v0/quote). */
+  private get aurora(): boolean {
+    return /(^|\.)aurora\.dev(\/|:|$)/.test(this.baseUrl.replace(/^https?:\/\//, ""));
+  }
+
+  private async req(method: string, call: "quote" | "status", query = "", body?: unknown): Promise<any> {
     if (!this.apiKey) throw new OneClickError("No Aurora API key is set.", 0);
+    const base = this.baseUrl.replace(/\/+$/, "");
+    const url = this.aurora ? `${base}/api/${call}/${encodeURIComponent(this.apiKey)}${query}` : `${base}/v0/${call}${query}`;
     let res: Response;
     try {
-      res = await this.f(`${this.baseUrl.replace(/\/+$/, "")}${path}`, {
+      res = await this.f(url, {
         method,
-        headers: { Authorization: `Bearer ${this.apiKey}`, Accept: "application/json", ...(body ? { "Content-Type": "application/json" } : {}) },
+        headers: {
+          ...(this.aurora ? {} : { Authorization: `Bearer ${this.apiKey}` }),
+          Accept: "application/json",
+          ...(body ? { "Content-Type": "application/json" } : {}),
+        },
         body: body === undefined ? undefined : JSON.stringify(body),
       });
     } catch {
@@ -79,7 +90,7 @@ export class OneClick {
   }
 
   async quote(q: QuoteRequest): Promise<{ quote: Quote; raw: unknown }> {
-    const j = await this.req("POST", "/v0/quote", q);
+    const j = await this.req("POST", "quote", "", q);
     const quote = j?.quote;
     if (!quote || typeof quote.depositAddress !== "string" || typeof quote.amountIn !== "string" || typeof quote.amountOut !== "string") {
       throw new OneClickError("Aurora's quote is not in the shape we expect.", 200);
@@ -88,7 +99,7 @@ export class OneClick {
   }
 
   async status(depositAddress: string): Promise<OneClickStatus> {
-    const j = await this.req("GET", `/v0/status?depositAddress=${encodeURIComponent(depositAddress)}`);
+    const j = await this.req("GET", "status", `?depositAddress=${encodeURIComponent(depositAddress)}`);
     if (typeof j?.status !== "string") throw new OneClickError("Aurora's status is not in the shape we expect.", 200);
     return j.status as OneClickStatus;
   }

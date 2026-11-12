@@ -1,7 +1,7 @@
 // Money coming in. Two routes into the user's private balance:
 //  near:   OutLayer cross-chain confidential deposit on the "balance" wallet.
 //  aurora: an Aurora Swap (1Click) quote with confidentiality "advanced", our app fee of 6 bps,
-//          paid out to the private balance account in INTENTS, refunds to refundTo.
+//          paid out to the private balance in Confidential Intents, refunds to refundTo.
 // A job polls every 15 s until the deposit is done, refunded or expired.
 import { USDC_NEAR, fromUnits, toUnits } from "unhuntable-client";
 import { z } from "zod";
@@ -138,7 +138,7 @@ export async function quote(ctx: Ctx, userId: string, body: z.infer<typeof Quote
         refundTo: body.refundTo,
         refundType: "ORIGIN_CHAIN",
         recipient: nearAddr.address,
-        recipientType: "INTENTS",
+        recipientType: "CONFIDENTIAL_INTENTS",
         deadline: new Date(ctx.now() + QUOTE_TTL_MS).toISOString(),
         confidentiality: "advanced",
         appFees: [{ recipient: ctx.appFeeAccount, fee: OUR_FEE_BPS }],

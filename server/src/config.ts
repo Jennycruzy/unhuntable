@@ -141,7 +141,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     version: env.GIT_SHA || "dev",
     walletKeysFile: env.WALLET_KEYS_FILE || undefined,
     hyperliquidUrl: (env.HYPERLIQUID_URL ?? "https://api.hyperliquid.xyz").replace(/\/+$/, ""),
-    oneClickUrl: (env.ONECLICK_URL ?? "https://1click.chaindefuser.com").replace(/\/+$/, ""),
+    // Aurora's Swap API, which the Aurora key belongs to; 1Click itself refuses that key.
+    oneClickUrl: (env.ONECLICK_URL ?? "https://intents-api.aurora.dev").replace(/\/+$/, ""),
     guardOwner: env.GUARD_OWNER ?? "",
     guardProject: env.GUARD_PROJECT ?? "",
     policyContract: env.POLICY_CONTRACT ?? "outlayer.near",

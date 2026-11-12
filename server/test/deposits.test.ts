@@ -111,7 +111,7 @@ describe("deposit route aurora", () => {
       refundTo: "0x" + "12".repeat(20),
       refundType: "ORIGIN_CHAIN",
       recipient: s.h.world.wallets.get(s.bal.walletId)!.near,
-      recipientType: "INTENTS",
+      recipientType: "CONFIDENTIAL_INTENTS",
       confidentiality: "advanced",
       appFees: [{ recipient: "fees.near", fee: 6 }],
     });

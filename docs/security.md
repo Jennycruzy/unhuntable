@@ -18,6 +18,8 @@ Who could cheat and why they cannot, who sees what, the attacks we ran on our ow
 | Anyone replaying a call | Reuse a sealed call | Each box has a fresh ephemeral key, nonce and 32-byte salt; a box made for one piece does not open as another. | `client/test/box.test.ts` |
 | Us, gone | Leave your money stuck | Your wallets come from your 12 words; the exit tool finds and empties them using OutLayer and Hyperliquid directly. | `exit/`, `client/test/exit.test.ts` |
 
+The private balance's policy also lists `intents.near`, because OutLayer runs every deposit into a wallet as a call to it; without it, no money could come back into a locked balance. That lets the server's key make calls to `intents.near` as the balance wallet, which reach only its public Intents balance. Deposits land in the confidential balance, so that public balance stays empty, and money in the confidential balance still moves only to your pieces and your own addresses.
+
 What you do trust: OutLayer's enclave holds the keys, and runs the guard build that our project names on `outlayer.near`. Which build that is, and every build we ever published, is public on NEAR: `get_project` answers the active build's hash and `list_versions` lists each build with its hash and the address of the exact file, so anyone can download the file OutLayer runs and check its hash. The active build is `9fcd15a7…`, built from [`guard/`](../guard/) at commit `045d307`. Steps: [Check it yourself](check-it-yourself.md), step 9.
 
 ## Privacy: who sees what
