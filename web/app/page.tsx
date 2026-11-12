@@ -5,11 +5,43 @@ import { Landing } from "../components/landing/Landing";
 import { Notice } from "../components/ui";
 import { sentence } from "../lib/api";
 import { usd } from "../lib/format";
+import { currentWallet } from "../lib/wallet";
 import { api, useInterval, useSession } from "../lib/session";
 import type { Balance } from "../lib/types";
 import "./landing.css";
 
 /* ------------------------------------------------------------------ signed in */
+
+/** Ends the session here and in the wallet, then shows the cover page. Your pieces key stays on this device. */
+function SignOut() {
+  const { refresh } = useSession();
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      type="button"
+      className="secondary"
+      data-testid="sign-out"
+      onClick={async () => {
+        setBusy(true);
+        try {
+          await api.logout();
+        } catch {
+          // the cookie may already be gone; the next check shows the cover page either way
+        }
+        try {
+          await (await currentWallet())?.signOut();
+        } catch {
+          // no wallet chosen in this browser
+        }
+        await refresh();
+        setBusy(false);
+        window.scrollTo(0, 0);
+      }}
+    >
+      {busy ? "Signing out…" : "Sign out"}
+    </button>
+  );
+}
 
 function Overview({ accountId, needsSetup }: { accountId: string; needsSetup: boolean }) {
   const [balance, setBalance] = useState<Balance | undefined>();
@@ -62,6 +94,7 @@ function Overview({ accountId, needsSetup }: { accountId: string; needsSetup: bo
           </p>
         </>
       )}
+      <SignOut />
     </main>
   );
 }

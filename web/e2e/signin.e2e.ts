@@ -29,3 +29,14 @@ test("signing in goes to the start screen", async ({ page, apiRequests }) => {
   await expect(page.getByTestId("account")).toHaveText("alice.near");
   await expect(page.getByTestId("private-balance")).toHaveText("$250.50");
 });
+
+test("signing out shows the cover page again", async ({ page, apiRequests }) => {
+  await page.goto("/signin/");
+  await page.getByRole("button", { name: "Sign in with Test wallet" }).click();
+  await expect(page.getByTestId("account")).toHaveText("alice.near");
+  await page.getByTestId("sign-out").click();
+  await expect(page.locator("h1")).toHaveText("Trade perps nobody can hunt.");
+  expect(apiRequests.some((r) => r.url.endsWith("/api/logout"))).toBe(true);
+  await page.reload();
+  await expect(page.locator("h1")).toHaveText("Trade perps nobody can hunt.");
+});
