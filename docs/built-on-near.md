@@ -26,12 +26,14 @@ The guard ([`guard/`](../guard/)) is a Rust program that runs inside OutLayer's 
 - A sealed-stop trade on a Chain Signatures piece: the public order list stayed empty (`[]`) while the position was open, and the stop fired as a reduce-only close.
 - Policy changes approved by the owner's NEAR wallet and read back from chain before any money moved.
 - We found and reported a privacy flaw in OutLayer's public call record ([out-layer/outlayer#35](https://github.com/out-layer/outlayer/issues/35)).
+- **Followers' track records.** Every piece is registered with the guard under its owner's tag the first time it trades, and a tag is never added later. The guard sums every piece under a trader's tag from Hyperliquid inside the TEE and signs the totals as an EAS attestation, so a trader's record cannot leave out a losing piece and never shows an address. On mainnet the active guard signed a trader record that the official EAS SDK verifies, recovering the guard's key as signer. [Followers](followers.md)
 
 ## NEAR Intents and Confidential Intents: money in, between pieces and home, with no trail
 
 Your private balance lives in NEAR Intents' confidential mode. Deposits arrive from any chain through 1Click; private transfers, private swaps and private withdrawals to each piece's own Hyperliquid account leave no public link between pieces. On Hyperliquid every piece is funded by 1Click's shared payer, the same sender as thousands of unrelated accounts a day.
 
 - 15 USDT from BNB Chain in; 2.5 USDC swapped privately to NEAR; 2.5 USDC sent privately to a piece's Hyperliquid account, arriving as 2.178894 USDC.
+- **Followers pay traders privately.** A key to a trader is paid day by day by a private transfer on the confidential shard (`/wallet/v1/confidential/transfer`), from the follower's private balance to the trader's. The follower's balance lock lists the trader, so the server's key can pay that trader and no one else. On mainnet, 0.05 USDC moved from one confidential balance to another, locked one in about 10 seconds, with no public NEAR transaction and both public Intents balances at zero. [Followers](followers.md)
 
 ## Aurora Intents: a second private door, and our revenue
 

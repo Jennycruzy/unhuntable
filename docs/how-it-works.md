@@ -13,6 +13,7 @@ Every step of a position, the parts that run it, and why they are built this way
 7. **Seal stops.** Your stop and take-profit are sealed in the browser, one box per piece, and forwarded unopened to the guard. The server never sees a level.
 8. **Watch and defend.** The guard is ticked per coin every 2 minutes, and at once when the price leaves a piece's wake band. It fires stops and take-profits, and runs the defence ladder.
 9. **Go home.** Your browser asks OutLayer for a deposit address of your own private balance and signs each piece's moves to it with the piece key; our server relays them through `unhuntable.near` and Hyperliquid gets them signed by NEAR. Pieces made as OutLayer wallets take one wallet approval to unlock and a second to lock again.
+10. **Follow, or be followed.** A trader sets a name and two prices on the Traders screen. A follower buys a key with one wallet approval that adds the trader to their balance lock; each day the key is on, the server pays its price by private transfer between the two private balances. When the trader's crypto position is open, each copy key opens a copy in the follower's own pieces at its own random time, a random 30 seconds to 5 minutes later, and closes it when the trader's closes. Viewing keys show closed trades only. [Followers](followers.md)
 
 ## Architecture
 
@@ -31,7 +32,7 @@ Every step of a position, the parts that run it, and why they are built this way
             ├──────────▶ OutLayer enclave: guard (guard/)
             │             ├─ one Hyperliquid agent key per piece, sealed
             │             ├─ sealed stops, VRF, up to 7 price sources
-            │             └─ signs orders and the EAS track record
+            │             └─ signs orders, the EAS track record and each trader's record
             │                          │
             ├──────────▶ OutLayer custody wallets ──▶ NEAR Intents confidential balance
             │                          │

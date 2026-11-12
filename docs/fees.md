@@ -10,6 +10,10 @@ Our Aurora key carries an integrator fee of 6 basis points on deposits through A
 
 Each AI agent call costs 0.002 USDC on NEAR by default, paid with x402 to `unhuntable.near` and settled before the call runs. Agents paying from another chain through PingPay pay 0.2 USDC per call (Ping's smallest payment), settled to `unhuntable.near` through NEAR Intents, less Ping's 0.5% fee. See [AI agents](ai-agents.md).
 
+## Follower keys
+
+Keys are paid by followers to traders: each day a key is on, its price moves by private transfer from the follower's private balance to the trader's, in full. Unhuntable takes no part of it. Copies are positions like any other, so their opening orders carry the builder fee when it is on. See [Followers](followers.md).
+
 ## Hyperliquid builder fee
 
 The second revenue line is Hyperliquid's builder fee: a fee a front end may add to the orders it sends, once the account has approved it. Unhuntable's is **0.01% of the size, on opening orders only**, and the rules sit in code nobody at Unhuntable can change:
