@@ -1,4 +1,4 @@
-import { keyFromMnemonic, piecesKeyProof } from "unhuntable-client";
+import { apiKeyBody, keyFromMnemonic, ownerAccount, piecesKeyProof } from "unhuntable-client";
 import { describe, expect, it } from "vitest";
 import { buildServer } from "../src/index.js";
 import { testConfig } from "./helpers.js";
@@ -164,5 +164,53 @@ describe("pieces key and wallets", () => {
     const shard = (h.db.prepare("SELECT shard_id FROM pieces WHERE label = 'piece:0'").get() as { shard_id: string }).shard_id;
     expect(r.json()).toEqual({ privateUsdc: "12.5", pieces: [{ label: "piece:0", shard, perpUsd: "14.68", spotUsd: "0.5" }] });
     expect(reply("hl-spot").balances[0]).toHaveProperty("total");
+  });
+});
+
+describe("carrying a signed key grant to OutLayer", () => {
+  async function setup() {
+    const h = harness();
+    const alice = addUser(h);
+    const a = app(h);
+    await a.inject({ method: "POST", url: "/api/pieces-key", headers: { cookie: alice.cookie }, payload: piecesKeyProof(KEY, "alice.near", h.ctx.now()) });
+    const k = (await a.inject({ method: "POST", url: "/api/wallets/key", headers: { cookie: alice.cookie }, payload: { label: "balance" } })).json();
+    const grant = apiKeyBody(KEY, ownerAccount(KEY), "unh-seed-1", k.keyHash, h.ctx.now());
+    return { h, alice, a, k, grant };
+  }
+
+  it("carries the user's own signed grant of the request's key, unchanged, with PUT", async () => {
+    const { h, alice, a, k, grant } = await setup();
+    const r = await a.inject({ method: "POST", url: "/api/wallets/grant", headers: { cookie: alice.cookie }, payload: { requestId: k.requestId, label: "balance", grant } });
+    expect(r.statusCode).toBe(200);
+    expect(r.json()).toEqual({ ok: true });
+    expect(h.world.grants).toEqual([grant]);
+    const call = h.world.calls.find((c) => c.path === "/wallet/v1/api-key");
+    expect(call?.method).toBe("PUT");
+  });
+
+  it("refuses a grant of another key, another label, or signed by another pieces key", async () => {
+    const { h, alice, a, k, grant } = await setup();
+    const send = (payload: Record<string, unknown>) => a.inject({ method: "POST", url: "/api/wallets/grant", headers: { cookie: alice.cookie }, payload });
+    expect((await send({ requestId: k.requestId, label: "balance", grant: { ...grant, key_hash: "ab".repeat(32) } })).statusCode).toBe(400);
+    expect((await send({ requestId: k.requestId, label: "piece:0", grant })).statusCode).toBe(400);
+    const other = keyFromMnemonic("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about");
+    const otherGrant = apiKeyBody(other, ownerAccount(other), "unh-seed-1", k.keyHash, h.ctx.now());
+    expect((await send({ requestId: k.requestId, label: "balance", grant: otherGrant })).statusCode).toBe(400);
+    expect(h.world.grants).toEqual([]);
+  });
+
+  it("refuses another user's request like an unknown one", async () => {
+    const { h, a, k, grant } = await setup();
+    const bob = addUser(h, "bob.near");
+    const r = await a.inject({ method: "POST", url: "/api/wallets/grant", headers: { cookie: bob.cookie }, payload: { requestId: k.requestId, label: "balance", grant } });
+    expect(r.json().error).toBe("unknown_request");
+    expect(h.world.grants).toEqual([]);
+  });
+
+  it("says so when OutLayer refuses the grant", async () => {
+    const { h, alice, a, k, grant } = await setup();
+    h.world.grantRefusal = { error: "invalid_signature", message: "bad signature" };
+    const r = await a.inject({ method: "POST", url: "/api/wallets/grant", headers: { cookie: alice.cookie }, payload: { requestId: k.requestId, label: "balance", grant } });
+    expect(r.json().error).toBe("wallet_key_refused");
   });
 });

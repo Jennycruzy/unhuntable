@@ -48,7 +48,7 @@ function walletRoutes(label: string, n: number): [string, { status?: number; bod
     ["GET /wallet/v1/address", { status: 404, body: { error: "not_found", message: "no such wallet" } }],
     ["POST /register", { body: { wallet_id: `w${n}`, near_account_id: `w${n}.near` } }],
     ["POST /api/wallets/key", { body: { requestId: `r${n}`, keyHash: String(n).repeat(64) } }],
-    ["PUT /wallet/v1/api-key", { body: { wallet_id: `w${n}`, near_account_id: `w${n}.near` } }],
+    ["POST /api/wallets/grant", { body: { ok: true } }],
     ["POST /api/wallets/confirm", { body: { ok: true, label, address: `0x${String(n).repeat(40)}` } }],
   ];
 }
@@ -92,12 +92,12 @@ describe("trade", () => {
       "GET /wallet/v1/address",
       "POST /register",
       "POST /api/wallets/key",
-      "PUT /wallet/v1/api-key",
+      "POST /api/wallets/grant",
       "POST /api/wallets/confirm",
       "GET /wallet/v1/address",
       "POST /register",
       "POST /api/wallets/key",
-      "PUT /wallet/v1/api-key",
+      "POST /api/wallets/grant",
       "POST /api/wallets/confirm",
       "POST /api/positions/p1/continue",
     ]);
@@ -105,6 +105,11 @@ describe("trade", () => {
     expect(confirms).toEqual([
       { requestId: "r1", label: "piece:0", seed: seedFor(key, "piece:0") },
       { requestId: "r2", label: "piece:1", seed: seedFor(key, "piece:1") },
+    ]);
+    const grants = sent.filter((s) => s.url.endsWith("/api/wallets/grant")).map((s) => JSON.parse(s.body));
+    expect(grants.map((g) => [g.requestId, g.label, g.grant.seed, g.grant.pubkey])).toEqual([
+      ["r1", "piece:0", seedFor(key, "piece:0"), key.publicKeyStr],
+      ["r2", "piece:1", seedFor(key, "piece:1"), key.publicKeyStr],
     ]);
     expect(JSON.parse(sent[0].body)).toEqual(REQ);
     expect((await loadRecord("carol.near")).addresses).toEqual({ "piece:0": "0x" + "1".repeat(40), "piece:1": "0x" + "2".repeat(40) });

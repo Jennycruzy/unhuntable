@@ -13,7 +13,7 @@ function outlayerAndApi() {
     ["GET /wallet/v1/address", { status: 404, body: { error: "not_found", message: "no such wallet" } }],
     ["POST /register", { body: { wallet_id: "w1", near_account_id: "w1.outlayer.near" } }],
     ["POST /api/wallets/key", { body: { requestId: "r1", keyHash: KEY_HASH } }],
-    ["PUT /wallet/v1/api-key", { body: { wallet_id: "w1", near_account_id: "w1.outlayer.near" } }],
+    ["POST /api/wallets/grant", { body: { ok: true } }],
     ["POST /api/wallets/confirm", { body: { ok: true, label: "balance", address: "w1.outlayer.near" } }],
   ]);
 }

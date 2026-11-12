@@ -1,7 +1,7 @@
 // Making one OutLayer wallet ("balance" or a piece) from the pieces key, in this browser.
 // The browser registers the wallet (if new) and lets the server's key act for it; the
 // server only ever learns the key's hash and the wallet's seed.
-import { OutLayerDeterministic, ownerAccount, seedFor, type PiecesKey } from "unhuntable-client/keys";
+import { OutLayerDeterministic, apiKeyBody, ownerAccount, seedFor, type PiecesKey } from "unhuntable-client/keys";
 import type { Api, Fetch } from "./api";
 
 export interface WalletDeps {
@@ -19,7 +19,9 @@ export async function makeWallet(d: WalletDeps, label: string): Promise<string> 
   const w = new OutLayerDeterministic({ key: d.key, account: ownerAccount(d.key), seed, fetch: d.outlayerFetch, now: d.now });
   if (!(await w.exists())) await w.register();
   const { requestId, keyHash } = await d.api.walletKey(label);
-  await w.addDelegateKey(keyHash);
+  // OutLayer takes this grant only as PUT, which it does not allow from a web page. The pieces key
+  // signs it here; our server carries it unchanged and OutLayer checks the signature.
+  await d.api.walletGrant(requestId, label, apiKeyBody(d.key, ownerAccount(d.key), seed, keyHash, (d.now ?? Date.now)()));
   const c = await d.api.walletConfirm(requestId, label, seed);
   return c.address;
 }

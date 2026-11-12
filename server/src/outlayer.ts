@@ -209,6 +209,16 @@ export interface CrossChainBody {
   amount: string;
 }
 
+/** A pieces-key-signed grant of an API key for one deterministic wallet (apiKeyBody in the client). */
+export interface KeyGrant {
+  account_id: string;
+  seed: string;
+  key_hash: string;
+  pubkey: string;
+  message: string;
+  signature: string;
+}
+
 export interface WalletClientOptions {
   baseUrl: string;
   walletKeys: Record<string, string>;
@@ -278,6 +288,34 @@ export class OutLayerWallet {
     const parsed = schema.safeParse(json);
     if (!parsed.success) throw new OutLayerWalletError("bad_reply", "OutLayer's answer is not in the shape we expect.", res.status);
     return parsed.data;
+  }
+
+  /**
+   * Hand OutLayer an API-key grant the pieces key signed (PUT /wallet/v1/api-key).
+   * OutLayer checks the signature itself; we only carry it, because OutLayer does not let browsers send PUT.
+   */
+  async grantKey(grant: KeyGrant): Promise<void> {
+    let res: Response;
+    try {
+      res = await this.f(`${this.opts.baseUrl.replace(/\/+$/, "")}/wallet/v1/api-key`, {
+        method: "PUT",
+        headers: { Accept: "application/json", "Content-Type": "application/json" },
+        body: JSON.stringify(grant),
+      });
+    } catch {
+      this.opts.log?.warn({ path: "/wallet/v1/api-key" }, "outlayer wallet unreachable");
+      throw new OutLayerWalletError("unreachable", "OutLayer did not answer.", 0);
+    }
+    const text = await res.text();
+    let json: unknown = {};
+    try {
+      json = text === "" ? {} : JSON.parse(text);
+    } catch {
+      if (!res.ok) throw new OutLayerWalletError("http_error", `OutLayer answered HTTP ${res.status}.`, res.status);
+    }
+    const err = ErrorReply.safeParse(json);
+    if (err.success) throw new OutLayerWalletError(err.data.error, plainMessage(err.data.message, err.data.error), res.status, REFUSAL_FOR[err.data.error]);
+    if (!res.ok) throw new OutLayerWalletError("http_error", `OutLayer answered HTTP ${res.status}.`, res.status);
   }
 
   /** The wallet's address on a chain. The Hyperliquid account is the base address. */

@@ -18,6 +18,18 @@ export const PiecesKeyBody = z.object({
 /** How far the time in a pieces-key proof may be from ours. */
 export const PROOF_WINDOW_MS = 5 * 60_000;
 export const KeyBody = z.object({ label: Label });
+export const GrantBody = z.object({
+  requestId: z.string().uuid(),
+  label: Label,
+  grant: z.object({
+    account_id: z.string().regex(/^[0-9a-f]{64}$/),
+    seed: z.string().min(1).max(200),
+    key_hash: z.string().regex(/^[0-9a-f]{64}$/),
+    pubkey: z.string().min(1).max(100),
+    message: z.string().min(1).max(300),
+    signature: z.string().min(1).max(300),
+  }),
+});
 export const ConfirmBody = z.object({ requestId: z.string().uuid(), label: Label, seed: z.string().min(1).max(200) });
 
 function keystore(ctx: Ctx) {
@@ -56,6 +68,36 @@ export function newKey(ctx: Ctx, userId: string, body: z.infer<typeof KeyBody>) 
   userRow(ctx, userId);
   const { requestId, keyHash } = keystore(ctx).newWalletKey(body.label, userId);
   return { requestId, keyHash };
+}
+
+/**
+ * Carry the browser's signed grant of our key to OutLayer. Browsers cannot send it themselves
+ * (OutLayer allows no PUT from a web page). Only a grant of this request's own key, signed by
+ * this user's own pieces key, is carried; OutLayer checks the signature.
+ */
+export async function grantWallet(ctx: Ctx, userId: string, body: z.infer<typeof GrantBody>) {
+  const u = userRow(ctx, userId);
+  let info;
+  try {
+    info = keystore(ctx).info(body.requestId);
+  } catch (e) {
+    if (e instanceof KeyStoreError) throw new ApiError("unknown_request");
+    throw e;
+  }
+  if (info.owner !== userId) throw new ApiError("unknown_request");
+  if (info.label !== body.label || info.walletId) throw new ApiError("bad_request");
+  if (body.grant.key_hash !== info.keyHash) throw new ApiError("bad_request");
+  if (!u.pieces_public_key || body.grant.pubkey !== u.pieces_public_key) throw new ApiError("bad_request");
+  try {
+    await ctx.wallet.grantKey(body.grant);
+  } catch (e) {
+    if (e instanceof OutLayerWalletError) {
+      ctx.log?.warn({ code: e.code, status: e.status }, "outlayer refused a key grant");
+      throw new ApiError("wallet_key_refused");
+    }
+    throw e;
+  }
+  return { ok: true };
 }
 
 /** Prove our key works for the wallet the browser made, then save the wallet. */

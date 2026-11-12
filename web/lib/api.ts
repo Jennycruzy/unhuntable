@@ -1,5 +1,6 @@
 // Our HTTP API. Every call sends the session cookie (credentials "include") and only JSON.
 // Every error answer is {"error": code, "message": plain sentence}; ApiError carries both.
+import type { apiKeyBody } from "unhuntable-client/keys";
 import { API_URL } from "./config";
 import type {
   Whale,
@@ -91,6 +92,9 @@ export class Api {
   }
   walletKey(label: string) {
     return this.call<WalletKey>("POST", "/api/wallets/key", { label });
+  }
+  walletGrant(requestId: string, label: string, grant: ReturnType<typeof apiKeyBody>) {
+    return this.call<{ ok: true }>("POST", "/api/wallets/grant", { requestId, label, grant });
   }
   walletConfirm(requestId: string, label: string, seed: string) {
     return this.call<WalletConfirmed>("POST", "/api/wallets/confirm", { requestId, label, seed });

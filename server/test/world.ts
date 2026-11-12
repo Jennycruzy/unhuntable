@@ -99,6 +99,10 @@ export class World {
     return w;
   }
 
+  /** Key grants carried to PUT /wallet/v1/api-key, and the refusal to answer them with (if any). */
+  grants: any[] = [];
+  grantRefusal: unknown = undefined;
+
   /** Give a wallet an API key the fake OutLayer accepts. */
   addKey(key: string, walletId: string): void {
     this.keys.set(key, this.wallets.get(walletId)!);
@@ -131,6 +135,11 @@ export class World {
     this.calls.push(call);
     const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status });
     if (url.host === "outlayer.test" && url.pathname.startsWith("/call/")) return this.guard(call, json);
+    if (url.host === "outlayer.test" && url.pathname === "/wallet/v1/api-key" && method === "PUT") {
+      this.grants.push(body);
+      if (this.grantRefusal) return json(this.grantRefusal, 401);
+      return json({ wallet_id: "00000000-0000-4000-8000-0000000000aa", near_account_id: "aa".repeat(32) });
+    }
     if (url.host === "outlayer.test") {
       const w = this.keys.get((headers.get("authorization") ?? "").replace(/^Bearer /, ""));
       if (!w) return json(reply("ol-key-refused"), 401);

@@ -26,7 +26,7 @@ import {
 } from "./positions.js";
 import { ApiError } from "./refusals.js";
 import { SettingsBody, getSettings, sendRefill, setSettings } from "./watch.js";
-import { ConfirmBody, KeyBody, PiecesKeyBody, balances, confirmWallet, me, newKey, setPiecesKey } from "./wallets.js";
+import { ConfirmBody, GrantBody, KeyBody, PiecesKeyBody, balances, confirmWallet, grantWallet, me, newKey, setPiecesKey } from "./wallets.js";
 
 const ConfirmPolicyBody = z
   .object({ positionId: z.string().uuid().optional(), homeId: z.string().uuid().optional(), txHashes: z.array(z.string().max(100)).max(64) })
@@ -51,6 +51,7 @@ export function registerMoneyRoutes(app: FastifyInstance, ctx: Ctx, aiHunter?: A
   app.get("/api/me", async (req) => me(ctx, user(req)));
   app.post("/api/pieces-key", async (req) => setPiecesKey(ctx, user(req), parse(PiecesKeyBody, req.body)));
   app.post("/api/wallets/key", async (req) => newKey(ctx, user(req), parse(KeyBody, req.body)));
+  app.post("/api/wallets/grant", async (req) => grantWallet(ctx, user(req), parse(GrantBody, req.body)));
   app.post("/api/wallets/confirm", async (req) => confirmWallet(ctx, user(req), parse(ConfirmBody, req.body)));
   app.get("/api/balance", async (req) => balances(ctx, user(req)));
   app.post("/api/chainsig/register", async (req) => registerPiece(ctx, user(req), parse(RegisterBody, req.body)));
