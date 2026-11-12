@@ -57,6 +57,19 @@ describe("deposit route near", () => {
     expect(s.h.world.calls.length).toBe(polls);
   });
 
+  it("NEAR from a NEAR wallet goes to OutLayer as wNEAR, with 24 decimals", async () => {
+    const s = setup();
+    const r = await s.app.inject({
+      method: "POST",
+      url: "/api/deposit/quote",
+      headers: { cookie: s.alice.cookie },
+      payload: { route: "near", chain: "near", token: "NEAR", amount: "20", refundTo: "alice.near" },
+    });
+    expect(r.statusCode).toBe(200);
+    const call = s.h.world.calls.find((c) => c.path === "/wallet/v1/confidential/deposit/cross-chain")!;
+    expect(call.body).toEqual({ chain: "near", token: "wNEAR", amount: "20" + "0".repeat(24) });
+  });
+
   it("below the minimum is refused with the minimum", async () => {
     const s = setup();
     const small = await s.app.inject({
