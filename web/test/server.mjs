@@ -16,6 +16,8 @@ export const TEST_BOX_PUB = "7b0d47d93427f8311160781c7c733fd89f88970aef490d8aa0e
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".txt": "text/plain", ".svg": "image/svg+xml", ".json": "application/json", ".ico": "image/x-icon", ".woff2": "font/woff2" };
 
 const homes = new Map();
+/** Sessions that sent a pieces-key proof. */
+const piecesSet = new Set();
 /** NEAR AI hunts per session: how many times its state was read since it started. */
 const aiHunts = new Map();
 
@@ -224,8 +226,14 @@ function api(method, path, body, c) {
   const home = homes.get(c.sid) ?? { state: "unlock_wait", steps: [] };
   homes.set(c.sid, home);
 
+  if (method === "POST" && path === "/api/pieces-key") {
+    const b = body ?? {};
+    if (!/^ed25519:/.test(b.publicKey) || !/^pieces-key:alice\.near:\d+$/.test(b.message) || !b.signature) return fail(400, "pieces_key_unproven", "This device could not prove it holds the pieces key. Restore from your 12 words and try again.");
+    piecesSet.add(c.sid);
+    return ok({ ok: true });
+  }
   if (method === "GET" && path === "/api/me")
-    return ok({ accountId: "alice.near", piecesKey: scenario === "setup" ? "missing" : "on_account", wallets: scenario === "setup" ? [] : [{ label: "balance", kind: "balance", ready: true }] });
+    return ok({ accountId: "alice.near", piecesKey: scenario === "setup" && !piecesSet.has(c.sid) ? "missing" : "set", wallets: scenario === "setup" ? [] : [{ label: "balance", kind: "balance", ready: true }] });
   if (method === "GET" && path === "/api/balance") return ok({ privateUsdc: "250.5", pieces: [] });
   if (method === "POST" && path === "/api/deposit/quote") {
     if (scenario === "deposit_min") return fail(422, "deposit_below_min", "The smallest deposit for this route is 10 USDC.");

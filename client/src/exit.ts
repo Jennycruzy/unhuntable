@@ -1,4 +1,4 @@
-// Exit without us: with only the 12 words, the NEAR account and OutLayer's public API,
+// Exit without us: with only the 12 words and OutLayer's public API,
 // find every wallet, close positions, bring the USDC into the private balance and send it
 // to the user's own destination. Used by the command line tool and the static page in exit/.
 //
@@ -51,6 +51,7 @@ import {
   keyFromMnemonic,
   keyHash,
   GAP_LIMIT,
+  ownerAccount,
   rediscover,
   type PiecesKey,
 } from "./keys.js";
@@ -79,7 +80,6 @@ export interface Destination {
 
 export interface ExitOptions {
   words: string;
-  account: string;
   destination: Destination;
   io: ExitIO;
   /** Hashes of our server's delegate keys; when given, the tool offers to revoke them. */
@@ -156,33 +156,30 @@ export async function runExit(o: ExitOptions): Promise<ExitResult> {
   const { io } = o;
   const result: ExitResult = { wallets: [], closed: 0, movedUsdc: "0", withdrawal: null, revoked: 0 };
 
-  // ---- the key from the words, checked against the account
+  // ---- the key from the words
   let key: PiecesKey;
   try {
     key = keyFromMnemonic(o.words);
   } catch {
     throw new ExitStopped("Those are not 12 valid words. Check each word and their order.");
   }
-  if (!/^[a-z0-9._-]{2,64}$/.test(o.account)) throw new ExitStopped("That NEAR account name does not look right.");
   if (!o.destination.chain || !o.destination.to) throw new ExitStopped("Name where the money should go: a chain and an address.");
 
-  io.say(`Checking that these words belong to ${o.account}.`);
-  await checkKeyOnAccount(f, o.nearRpc ?? NEAR_RPC, o.account, key.publicKeyStr);
-
-  const wallet = (seed: string) => new OutLayerDeterministic({ key, account: o.account, seed, fetch: f, baseUrl: o.outlayerUrl ?? OUTLAYER_API, now });
+  const owner = ownerAccount(key);
+  const wallet = (seed: string) => new OutLayerDeterministic({ key, account: owner, seed, fetch: f, baseUrl: o.outlayerUrl ?? OUTLAYER_API, now });
 
   // ---- 1. find the wallets
   io.say("Looking for your wallets on OutLayer. This asks about each one in turn.");
   let found;
   try {
-    found = await rediscover(o.account, key, (seed) => wallet(seed).exists());
+    found = await rediscover(owner, key, (seed) => wallet(seed).exists());
   } catch (e) {
     throw new ExitStopped(`OutLayer is not answering (${(e as Error).message}). Try again later.`);
   }
   const balanceFound = found.find((w) => w.label === "balance");
   const pieces: Piece[] = found.filter((w) => w.label !== "balance").map((w) => ({ label: w.label, wallet: wallet(w.seed) }));
   result.wallets = found.map((w) => w.label);
-  if (!balanceFound) throw new ExitStopped(`No private-balance wallet was found for ${o.account} with these words.`);
+  if (!balanceFound) throw new ExitStopped("No private-balance wallet was found for these words. Check each word and their order.");
   const balance = wallet(balanceFound.seed);
   io.say(`Found your private-balance wallet and ${pieces.length} piece wallet${pieces.length === 1 ? "" : "s"}.`);
 
@@ -395,29 +392,6 @@ export async function runExit(o: ExitOptions): Promise<ExitResult> {
   }
   io.say(`Our server's access is removed from your wallets.`);
   return result;
-}
-
-/** The pieces key must be an access key of the account, or these are the wrong words for it. */
-async function checkKeyOnAccount(f: typeof fetch, rpc: string, account: string, publicKey: string): Promise<void> {
-  let j: any;
-  try {
-    const res = await f(rpc, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: "exit",
-        method: "query",
-        params: { request_type: "view_access_key", finality: "final", account_id: account, public_key: publicKey },
-      }),
-    });
-    j = await res.json();
-  } catch {
-    throw new ExitStopped("The NEAR RPC is not answering, so the words could not be checked. Try again later.");
-  }
-  if (j?.result?.permission === undefined) {
-    throw new ExitStopped(`These words do not match a key on ${account}. Check the words and the account name.`);
-  }
 }
 
 // ------------------------------------------------------------ NEAR-controlled pieces

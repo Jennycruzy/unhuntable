@@ -15,7 +15,7 @@
 import { BUILDER_FEE_RATE, MPC_SIGNER, addressFromDerivedKey, chainSigPieceKey, mpcPath, readBuilder, signPieceAction, type ChainSigAction } from "unhuntable-client/chainsig";
 import { LADDER } from "unhuntable-client/planner";
 import { USDC_SPOT_TOKEN, XYZ_DEX } from "unhuntable-client/hyperliquid";
-import { OutLayerDeterministic, seedFor, type PiecesKey } from "unhuntable-client/keys";
+import { OutLayerDeterministic, ownerAccount, seedFor, type PiecesKey } from "unhuntable-client/keys";
 import { bytesToHex } from "@noble/hashes/utils";
 import type { Api, Fetch } from "./api";
 import { CHAINSIG_CONTRACT, NEAR_VIEW_RPC } from "./config";
@@ -131,7 +131,7 @@ export function usdcUnits8(amount: string): string {
 
 /** A deposit address of the user's own private balance, asked from OutLayer by this page with the pieces key. */
 export async function ownDepositAddress(d: ChainSigDeps, sendUsdc: string): Promise<string> {
-  const balance = new OutLayerDeterministic({ key: d.key, account: d.account, seed: seedFor(d.key, "balance"), fetch: d.outlayerFetch, now: d.now });
+  const balance = new OutLayerDeterministic({ key: d.key, account: ownerAccount(d.key), seed: seedFor(d.key, "balance"), fetch: d.outlayerFetch, now: d.now });
   const r = await balance.request<{ deposit_address?: unknown }>("POST", "/wallet/v1/confidential/deposit/cross-chain", {
     chain: "hypercore",
     token: "USDC",

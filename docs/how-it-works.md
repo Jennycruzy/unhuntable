@@ -5,7 +5,7 @@ Every step of a position, the parts that run it, and why they are built this way
 ## The life of one position
 
 1. **Sign in** with a NEAR wallet (Meteor, HOT or MyNearWallet). The wallet signs a NEP-413 message; the server checks the signature and that the key is a full-access key of the account.
-2. **Make your pieces key.** The browser makes 12 words and a key from them, and your wallet adds that key to your NEAR account as a limited key that can only call `outlayer.near`. Every wallet you have with us is an OutLayer deterministic wallet made from your account and this key, so the same 12 words always find them again.
+2. **Make your pieces key.** The browser makes 12 words and a key from them, then signs a short note with that key so our server learns its public key. Nothing is added to your NEAR account. Every wallet you have with us is an OutLayer deterministic wallet owned by this key's own NEAR implicit account, so the same 12 words always find them again.
 3. **Deposit** from any chain. NEAR or Aurora Swap (1Click) sends the money into your confidential balance on NEAR Intents.
 4. **Trade.** Pick market, side, size, leverage and hiding level. *Normal* is one piece. *Whale* is 2 to 12 pieces. Review shows each piece, every fee, and the accounts as the world will see them. The plan comes from VRF bytes drawn by the guard, so anyone can check it was not chosen by hand.
 5. **Lock.** New pieces are NEAR-controlled: your browser makes each piece key from your 12 words, registers it on `unhuntable.near`, checks the piece's account with NEAR's MPC network, and signs the guard's agent approval. The contract is their lock. Your wallet signs one `store_wallet_policy` call on `outlayer.near` for your private balance, so it can send only to your pieces and to you; the server reads it back from chain before use.
@@ -60,7 +60,7 @@ Each rung is saved before the order goes out and fires once, so a cut is not rep
 - **Seal the whole call, not just the stop.** After we recovered inputs from public hashes, every op except `addr` and `box_pub` became one sealed box: X25519, a SHA-256 key step and ChaCha20-Poly1305 with aad `unhuntable-call-v1`, plus a 32-byte salt. The op name is inside too.
 - **One agent per piece.** Hyperliquid publishes which account an agent trades for. A shared agent would tie every piece together in one lookup.
 - **The guard never touches money.** Funding, refills and going home run through OutLayer custody wallets under your on-chain policy. The guard only trades.
-- **Deterministic wallets.** Wallets come from your account and your 12 words, so the exit tool can always find them.
+- **Deterministic wallets.** Wallets come from your 12 words alone, so the exit tool can always find them.
 - **VRF for every random choice.** Piece sizes, entry times, stop jitter and wake-band edges come from OutLayer VRF, with the proof kept, so a plan can be checked later.
 - **Hyperliquid's $10 minimum applies to closes too.** Every piece starts at $12 or more, and a defence cut that would go under $10 closes the piece instead of leaving dust nobody can close.
 - **Exits cost about $1.20 per piece.** Hyperliquid charges 1 USDC to send to a new address, and each deposit address is new. The app shows this before you go home, and pieces under 3 USDC are left in place.

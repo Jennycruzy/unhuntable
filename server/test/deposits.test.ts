@@ -134,6 +134,36 @@ describe("deposit route aurora", () => {
     expect(statusCalls.length).toBe(4);
   });
 
+  it("the token names the page shows are sent to 1Click as asset ids; an unknown one is refused", async () => {
+    const s = setup();
+    const cases: [string, string, string][] = [
+      ["base", "USDC", "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near"],
+      ["arb", "USDT", "nep141:arb-0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9.omft.near"],
+      ["sol", "SOL", "nep141:sol.omft.near"],
+      ["eth", "ETH", "nep141:eth.omft.near"],
+    ];
+    for (const [chain, token, asset] of cases) {
+      const r = await s.app.inject({
+        method: "POST",
+        url: "/api/deposit/quote",
+        headers: { cookie: s.alice.cookie },
+        payload: { route: "aurora", chain, token, amount: "50", refundTo: "0x" + "12".repeat(20) },
+      });
+      expect(r.statusCode).toBe(200);
+      const sent = s.h.world.ofHost("oneclick.test").filter((c) => c.path === "/v0/quote").at(-1)!;
+      expect((sent.body as { originAsset: string }).originAsset).toBe(asset);
+    }
+    const before = s.h.world.ofHost("oneclick.test").length;
+    const bad = await s.app.inject({
+      method: "POST",
+      url: "/api/deposit/quote",
+      headers: { cookie: s.alice.cookie },
+      payload: { route: "aurora", chain: "base", token: "DOGE", amount: "50", refundTo: "0x" + "12".repeat(20) },
+    });
+    expect(bad.statusCode).toBe(400);
+    expect(s.h.world.ofHost("oneclick.test").length).toBe(before);
+  });
+
   it("an expired quote ends as expired with quote_expired", async () => {
     const s = setup();
     s.h.world.ocQuote = reply("oc-quote");

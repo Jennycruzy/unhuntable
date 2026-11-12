@@ -43,7 +43,6 @@ $("start-form").addEventListener("submit", async (e) => {
   try {
     const r = await runExit({
       words: words.value,
-      account: $<HTMLInputElement>("account").value.trim(),
       destination: { chain: $<HTMLSelectElement>("chain").value, to: $<HTMLInputElement>("to").value.trim() },
       serverKeyHashes: $<HTMLInputElement>("server-key").value.trim() ? [$<HTMLInputElement>("server-key").value.trim().toLowerCase()] : [],
       relay: $<HTMLInputElement>("relay-account").value.trim() && $<HTMLInputElement>("relay-key").value.trim()

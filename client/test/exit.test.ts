@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ExitStopped, USDC_NEAR, fromUnits, runExit, sendableUsdc, toUnits, type ExitIO } from "../src/exit.js";
-import { keyFromMnemonic, keyHash, readAuthHeader, seedFor } from "../src/keys.js";
+import { keyFromMnemonic, keyHash, ownerAccount, readAuthHeader, seedFor } from "../src/keys.js";
 import { ed25519 } from "@noble/curves/ed25519";
 import { secp256k1 } from "@noble/curves/secp256k1";
 import { bytesToHex } from "@noble/hashes/utils";
@@ -11,7 +11,6 @@ import { USDC_SPOT_TOKEN, l1TypedData, typedDataDigest } from "../src/hyperliqui
 // Test-only phrase, never used for money.
 const WORDS = "legal winner thank year wave sausage worth useful legal winner thank yellow";
 const KEY = keyFromMnemonic(WORDS);
-const ACCOUNT = "alice.near";
 const BALANCE_SEED = seedFor(KEY, "balance");
 const PIECE_SEED = seedFor(KEY, "piece:0");
 const PIECE_ADDR = "0x" + "11".repeat(20);
@@ -25,7 +24,6 @@ interface World {
   /** withdraw answers policy_denied this many times first */
   deniedWithdraws?: number;
   spotTotal?: string;
-  keyOnAccount?: boolean;
   lastKeyOnce?: boolean;
   /** No OutLayer piece wallet exists (only NEAR-controlled pieces). */
   noOutlayerPiece?: boolean;
@@ -70,7 +68,7 @@ function world(w: World = {}) {
       }
       // no NEAR-controlled pieces: the signer contract knows none of these keys
       if (body?.params?.request_type === "call_function") return json({ result: { result: [0], logs: [] } });
-      return json(w.keyOnAccount === false ? { error: { name: "HANDLER_ERROR" } } : { result: { permission: "FullAccess", nonce: 1 } });
+      return json({ result: { permission: "FullAccess", nonce: 1 } });
     }
     if (url.startsWith("https://api.hyperliquid.xyz/info")) {
       if (body.type === "allMids") return json(body.dex === "xyz" ? { "xyz:NVDA": "178.0" } : { ETH: "2000.0", BTC: "100000.0" });
@@ -163,7 +161,6 @@ function io(answers: string[]) {
 
 const base = (f: typeof fetch, i: ExitIO) => ({
   words: WORDS,
-  account: ACCOUNT,
   destination: { chain: "near", to: "alice.near" },
   io: i,
   fetch: f,
@@ -273,10 +270,13 @@ describe("exit flow", () => {
     expect(t.said.some((m) => m.includes("too little to move") && m.includes("1 USDC"))).toBe(true);
   });
 
-  it("stops when the words do not match the account", async () => {
-    const w = world({ keyOnAccount: false });
-    await expect(runExit(base(w.f, io([]).io))).rejects.toThrow(/do not match a key on alice.near/);
-    expect(w.calls).toHaveLength(1);
+  it("finds the wallets under the words' own implicit account, with no NEAR account asked", async () => {
+    const w = world();
+    await runExit(base(w.f, io(["yes"]).io));
+    const outlayer = w.calls.filter((c) => c.url.startsWith("https://api.outlayer.ai/") && c.auth);
+    expect(outlayer.length).toBeGreaterThan(0);
+    for (const c of outlayer) expect(readAuthHeader(c.auth!).account_id).toBe(ownerAccount(KEY));
+    expect(ownerAccount(KEY)).toMatch(/^[0-9a-f]{64}$/);
   });
 
   it("stops on bad words before any request", async () => {

@@ -1,9 +1,12 @@
+import { keyFromMnemonic, piecesKeyProof } from "unhuntable-client";
 import { describe, expect, it } from "vitest";
 import { buildServer } from "../src/index.js";
 import { testConfig } from "./helpers.js";
 import { addUser, addWallet, harness, reply, type Harness } from "./world.js";
 
-const PK = "ed25519:29d2S7vB453rNYFdR5Ycwt7y9haRT5fwVwL9zTmBhfV2";
+// Test-only phrase, never used for money.
+const KEY = keyFromMnemonic("legal winner thank year wave sausage worth useful legal winner thank yellow");
+const PK = KEY.publicKeyStr;
 
 function app(h: Harness) {
   return buildServer({ config: testConfig(), db: h.db, now: h.ctx.now, money: h.ctx });
@@ -29,36 +32,43 @@ describe("pieces key and wallets", () => {
     let r = await a.inject({ method: "GET", url: "/api/me", headers: { cookie: alice.cookie } });
     expect(r.json()).toEqual({ accountId: "alice.near", piecesKey: "missing", wallets: [] });
 
-    h.world.accessKeys.add(`alice.near ${PK}`);
-    const set = await a.inject({ method: "POST", url: "/api/pieces-key", headers: { cookie: alice.cookie }, payload: { publicKey: PK } });
+    const set = await a.inject({ method: "POST", url: "/api/pieces-key", headers: { cookie: alice.cookie }, payload: piecesKeyProof(KEY, "alice.near", h.ctx.now()) });
     expect(set.json()).toEqual({ ok: true });
     await makeWallet(h, alice.cookie, "balance", 0x71);
     await makeWallet(h, alice.cookie, "piece:0", 0x72);
     r = await a.inject({ method: "GET", url: "/api/me", headers: { cookie: alice.cookie } });
     expect(r.json()).toEqual({
       accountId: "alice.near",
-      piecesKey: "on_account",
+      piecesKey: "set",
       wallets: [
         { label: "balance", kind: "balance", ready: true },
         { label: "piece:0", kind: "piece", ready: true },
       ],
     });
-    // the key was later removed from the account
-    h.world.accessKeys.clear();
-    r = await a.inject({ method: "GET", url: "/api/me", headers: { cookie: alice.cookie } });
-    expect(r.json().piecesKey).toBe("missing");
+    // nothing about the pieces key is read from the NEAR account
+    expect(h.world.calls.filter((c) => JSON.stringify(c.body ?? "").includes("view_access_key"))).toEqual([]);
   });
 
-  it("POST /api/pieces-key refuses a key that is not on the account and stores only the public key", async () => {
+  it("POST /api/pieces-key needs a fresh proof for this account signed by the key, and stores only the public key", async () => {
     const h = harness();
     const alice = addUser(h);
-    const r = await app(h).inject({ method: "POST", url: "/api/pieces-key", headers: { cookie: alice.cookie }, payload: { publicKey: PK } });
-    expect(r.statusCode).toBe(409);
-    expect(r.json().error).toBe("pieces_key_missing");
-    const bad = await app(h).inject({ method: "POST", url: "/api/pieces-key", headers: { cookie: alice.cookie }, payload: { publicKey: "secp256k1:abc" } });
-    expect(bad.json().error).toBe("bad_request");
-    h.world.accessKeys.add(`alice.near ${PK}`);
-    await app(h).inject({ method: "POST", url: "/api/pieces-key", headers: { cookie: alice.cookie }, payload: { publicKey: PK } });
+    const post = (payload: unknown) => app(h).inject({ method: "POST", url: "/api/pieces-key", headers: { cookie: alice.cookie }, payload: payload as object });
+    const now = h.ctx.now();
+    const good = piecesKeyProof(KEY, "alice.near", now);
+    const other = keyFromMnemonic("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about");
+    for (const [payload, why] of [
+      [piecesKeyProof(KEY, "bob.near", now), "another account"],
+      [piecesKeyProof(KEY, "alice.near", now - 6 * 60_000), "too old"],
+      [{ ...good, publicKey: other.publicKeyStr }, "signed by another key"],
+      [{ ...good, message: good.message + "0" }, "message changed"],
+    ] as const) {
+      const r = await post(payload);
+      expect(r.statusCode, why).toBe(400);
+      expect(r.json().error, why).toBe("pieces_key_unproven");
+    }
+    expect((await post({ ...good, publicKey: "secp256k1:abc" })).json().error).toBe("bad_request");
+    expect(h.db.prepare("SELECT pieces_public_key FROM users").get()).toEqual({ pieces_public_key: null });
+    expect((await post(good)).json()).toEqual({ ok: true });
     expect(h.db.prepare("SELECT pieces_public_key FROM users").get()).toEqual({ pieces_public_key: PK });
   });
 

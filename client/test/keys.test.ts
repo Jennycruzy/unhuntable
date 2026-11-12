@@ -20,6 +20,8 @@ import {
   registerBody,
   seedFor,
   verifyText,
+  ownerAccount,
+  piecesKeyProof,
 } from "../src/keys.js";
 
 // Test-only phrases, never used for money.
@@ -69,6 +71,21 @@ describe("pieces key", () => {
     });
     expect(addKeyAction(KEY.publicKeyStr, { fullAccess: true }).params.accessKey).toEqual({ permission: "FullAccess" });
     expect(() => addKeyAction("ed25519:0OIl")).toThrow();
+  });
+});
+
+describe("wallet owner and key proof", () => {
+  it("the owner is the pieces key's implicit account: the hex of its public key", () => {
+    expect(ownerAccount(KEY)).toBe(Buffer.from(KEY.publicKey).toString("hex"));
+    expect(ownerAccount(KEY)).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("the proof signs the NEAR account and the time with the pieces key", () => {
+    const p = piecesKeyProof(KEY, "alice.near", NOW);
+    expect(p.publicKey).toBe(KEY.publicKeyStr);
+    expect(p.message).toBe(`pieces-key:alice.near:${NOW / 1000}`);
+    expect(verifyText(KEY.publicKeyStr, p.message, p.signature)).toBe(true);
+    expect(verifyText(KEY.publicKeyStr, "pieces-key:bob.near:" + NOW / 1000, p.signature)).toBe(false);
   });
 });
 

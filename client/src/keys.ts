@@ -80,6 +80,21 @@ export function keyFromSecret(secret: Uint8Array): PiecesKey {
   };
 }
 
+/**
+ * The owner of every OutLayer wallet the pieces key makes: the key's own NEAR implicit account
+ * (the hex of its public key). OutLayer takes the key of an implicit account that does not exist
+ * on chain yet, so nothing is added to the user's NEAR account and the words alone find the wallets.
+ */
+export function ownerAccount(key: PiecesKey): string {
+  return bytesToHex(key.publicKey);
+}
+
+/** Proof for our server that this browser holds the pieces key, tied to the signed-in NEAR account. */
+export function piecesKeyProof(key: PiecesKey, account: string, nowMs: number): { publicKey: string; message: string; signature: string } {
+  const message = `pieces-key:${account}:${unixSeconds(nowMs)}`;
+  return { publicKey: key.publicKeyStr, message, signature: signText(key, message) };
+}
+
 /** Raw ed25519 signature (not NEP-413) over the UTF-8 bytes of message, in base58. */
 export function signText(key: PiecesKey, message: string): string {
   return base58.encode(ed25519.sign(utf8ToBytes(message), key.secret));

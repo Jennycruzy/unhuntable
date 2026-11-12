@@ -59,6 +59,8 @@ export class World {
   noPolicy = new Set<string>();
   policyOwner = "alice.near";
   accessKeys = new Set<string>();
+  /** The policy version each wallet's next signature names, as OutLayer counts it. */
+  policyVersions = new Map<string, number>();
   perp = new Map<string, any>();
   /** Hyperliquid: an account's resting orders, as its public list shows them. */
   openOrders = new Map<string, any[]>();
@@ -177,8 +179,19 @@ export class World {
       const d = { ...this.depositReply, amount: call.body.amount };
       return json(d);
     }
-    if (p === "/wallet/v1/encrypt-policy") return json({ ...reply("ol-encrypt-policy"), wallet_pubkey: w.pubkey });
-    if (p === "/wallet/v1/sign-policy") return json({ ...reply("ol-sign-policy"), wallet_pubkey: w.pubkey });
+    if (p === "/wallet/v1/encrypt-policy") {
+      // OutLayer refuses a body without the wallet id ("missing field `wallet_id`")
+      if (call.body?.wallet_id !== w.id) return json({ error: "invalid_request", message: "Invalid request body: missing field `wallet_id`" }, 400);
+      return json({ ...reply("ol-encrypt-policy"), wallet_pubkey: w.id });
+    }
+    if (p === "/wallet/v1/sign-policy") {
+      if (typeof call.body?.encrypted_data !== "string" || typeof call.body?.caller !== "string") {
+        return json({ error: "invalid_request", message: "Invalid request body" }, 400);
+      }
+      const version = (this.policyVersions.get(w.id) ?? 0) + 1;
+      this.policyVersions.set(w.id, version);
+      return json({ ...reply("ol-sign-policy"), public_key_hex: w.pubkey.slice("ed25519:".length), version });
+    }
     if (p === "/wallet/v1/policy") {
       const r = reply(this.evmOn.has(w.id) ? "ol-policy-unlocked" : "ol-policy-locked");
       r.wallet_id = w.id;

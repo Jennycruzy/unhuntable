@@ -87,18 +87,36 @@ describe("policy batch", () => {
           type: "FunctionCall",
           params: {
             methodName: "store_wallet_policy",
-            args: { wallet_pubkey: p0.pubkey, encrypted_data: "ZW5jcnlwdGVkLXBvbGljeS1ieXRlcw==", wallet_signature: "c2lnbmVkLXBvbGljeS1ieXRlcw==", storage_refund_to: "alice.near" },
+            args: {
+              wallet_pubkey: p0.pubkey,
+              encrypted_data: "ZW5jcnlwdGVkLXBvbGljeS1ieXRlcw==",
+              wallet_signature:
+                "7d2dd50b91f996b9f4f8186f36a2dd575f603e23ba3bc675a228c3aec2555381daa9726c0e45c2a9e1b1fa1df5b3ab9e3e2e7b9c11d3c6e1d3e8a1f0e7c3b2a10f",
+              version: 1,
+              locked: false,
+              valid_until: 1900000000,
+              storage_refund_to: "alice.near",
+            },
             gas: STORE_GAS,
             deposit: STORE_DEPOSIT,
           },
         },
       ],
     });
-    // the policy went to encrypt-policy as built; sign-policy names the owner as caller
+    // the policy went to encrypt-policy as built, with the wallet id; sign-policy names the owner as caller
     const enc = h.world.calls.filter((c) => c.path === "/wallet/v1/encrypt-policy");
-    expect(enc.map((c) => c.body)).toEqual(items.map((i) => i.policy));
+    expect(enc.map((c) => c.body)).toEqual(items.map((i) => ({ wallet_id: i.wallet.wallet_id, ...i.policy })));
     const sign = h.world.calls.filter((c) => c.path === "/wallet/v1/sign-policy");
-    expect(sign.map((c) => c.body.caller)).toEqual(["alice.near", "alice.near"]);
+    expect(sign.map((c) => c.body)).toEqual([
+      { encrypted_data: "ZW5jcnlwdGVkLXBvbGljeS1ieXRlcw==", caller: "alice.near" },
+      { encrypted_data: "ZW5jcnlwdGVkLXBvbGljeS1ieXRlcw==", caller: "alice.near" },
+    ]);
+
+    // an update names the next version and leaves storage_refund_to out: the contract refuses it there
+    const again = await buildBatch(h.ctx, "alice.near", items.slice(0, 1));
+    const args = again.transactions[0].actions[0].params.args;
+    expect(args.version).toBe(2);
+    expect(args).not.toHaveProperty("storage_refund_to");
   });
 
   it("read back: wrong owner and evm_sign on are refused", async () => {

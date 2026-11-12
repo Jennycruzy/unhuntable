@@ -4,10 +4,9 @@ import { keyFromMnemonic, type PiecesKey } from "unhuntable-client/keys";
 import { Notice, Screen, SignedIn } from "../../components/ui";
 import { sentence } from "../../lib/api";
 import { api, useSession } from "../../lib/session";
-import { addKeyWords, balanceReady, checkWords, makeBalanceWallet, newMnemonic, pickPositions, putKeyOnAccount, restoreKey } from "../../lib/setup";
+import { balanceReady, checkWords, linkPiecesKey, makeBalanceWallet, newMnemonic, pickPositions, restoreKey } from "../../lib/setup";
 import { usePiecesKey } from "../../lib/usekey";
 import { forgetPiecesKey, savePiecesKey } from "../../lib/vault";
-import { currentWallet } from "../../lib/wallet";
 import type { Me } from "../../lib/types";
 
 type Step = "intro" | "words" | "check" | "key" | "balance" | "done" | "restore";
@@ -91,7 +90,7 @@ function SetupFlow({ me }: { me: Me }) {
 
   const key: PiecesKey | undefined = keyState.status === "ok" ? keyState.key : undefined;
 
-  // Where to pick up: the server knows if the key is on the account and if the balance wallet is ready.
+  // Where to pick up: the server knows if it has the key's public key and if the balance wallet is ready.
   useEffect(() => {
     if (keyState.status === "loading" || step === "words" || step === "check" || step === "restore") return;
     if (!key) setStep("intro");
@@ -101,19 +100,26 @@ function SetupFlow({ me }: { me: Me }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [keyState.status, me.piecesKey, me.wallets]);
 
-  async function keep(k: PiecesKey) {
+  /** Keep the key on this device and tell the server its public key. Answers the next step. */
+  async function keep(k: PiecesKey): Promise<Step> {
     await savePiecesKey(me.accountId, k);
     await reload();
+    try {
+      await linkPiecesKey({ api, key: k, account: me.accountId });
+    } catch (e) {
+      setError(sentence(e));
+      return "key";
+    }
+    await refresh();
+    return balanceReady(me) ? "done" : "balance";
   }
 
-  async function addKey() {
+  async function link() {
     if (!key) return;
     setBusy(true);
     setError(undefined);
     try {
-      const wallet = await currentWallet();
-      if (!wallet) throw new Error("Sign in with your wallet again first.");
-      await putKeyOnAccount({ api, wallet, key, account: me.accountId });
+      await linkPiecesKey({ api, key, account: me.accountId });
       await refresh();
       setStep("balance");
     } catch (e) {
@@ -143,7 +149,7 @@ function SetupFlow({ me }: { me: Me }) {
       {error && <Notice kind="error">{error}</Notice>}
       {info && <Notice kind="ok">{info}</Notice>}
 
-      {step === "intro" && me.piecesKey === "on_account" && (
+      {step === "intro" && me.piecesKey === "set" && (
         <>
           <p>Your account already has a pieces key.</p>
           <button type="button" onClick={() => setStep("restore")}>
@@ -178,8 +184,7 @@ function SetupFlow({ me }: { me: Me }) {
           onOk={async () => {
             const k = keyFromMnemonic(words);
             setWords("");
-            await keep(k);
-            setStep(me.piecesKey === "missing" ? "key" : balanceReady(me) ? "done" : "balance");
+            setStep(await keep(k));
           }}
         />
       )}
@@ -193,9 +198,9 @@ function SetupFlow({ me }: { me: Me }) {
             try {
               const k = restoreKey(restoreText);
               setRestoreText("");
-              await keep(k);
+              const next = await keep(k);
               setInfo("Your pieces key is back on this device.");
-              setStep(me.piecesKey === "missing" ? "key" : balanceReady(me) ? "done" : "balance");
+              setStep(next);
             } catch (err) {
               setError(sentence(err));
             }
@@ -212,14 +217,10 @@ function SetupFlow({ me }: { me: Me }) {
 
       {step === "key" && key && (
         <>
-          <h2>Add the pieces key to your account</h2>
-          <ul className="plain" data-testid="addkey-words">
-            {addKeyWords(me.accountId, key).map((l) => (
-              <li key={l}>{l}</li>
-            ))}
-          </ul>
-          <button type="button" disabled={busy} onClick={addKey}>
-            {busy ? "Waiting for your wallet…" : "Open my wallet"}
+          <h2>Link your pieces key</h2>
+          <p data-testid="link-words">This device signs a short note with your pieces key so we know its public key. Nothing is added to your NEAR account.</p>
+          <button type="button" disabled={busy} onClick={link}>
+            {busy ? "Linking…" : "Link my pieces key"}
           </button>
         </>
       )}

@@ -11,7 +11,6 @@ Anyone with money in unhuntable who cannot use our app, or does not want to.
 
 - Your 12 words: the pieces key phrase you wrote down when you set up
   unhuntable.
-- Your NEAR account, for example `alice.near`.
 - An address to send the money to, on NEAR, Base or Arbitrum.
 - OutLayer (`api.outlayer.ai`) and Hyperliquid (`api.hyperliquid.xyz`) being
   up. Your wallets live on OutLayer, and your positions live on Hyperliquid.
@@ -23,21 +22,20 @@ them and sends only those signatures. It talks to three places only:
 
 ## What it does
 
-1. Checks that your words belong to your NEAR account.
-2. Finds your wallets on OutLayer: your private-balance wallet and one wallet
-   per position piece. Every wallet comes from your account and your words,
-   so nothing else is needed to find them.
-3. For each piece wallet, reads its Hyperliquid account.
-4. Closes any open position with a reduce-only order 3% through the market
+1. Finds your wallets on OutLayer: your private-balance wallet and one wallet
+   per position piece. Every wallet belongs to the NEAR implicit account of the
+   key your words make, so nothing else is needed to find them.
+2. For each piece wallet, reads its Hyperliquid account.
+3. Closes any open position with a reduce-only order 3% through the market
    price.
    Stock positions on trade.xyz are closed the same way, and their USDC is
    moved back from trade.xyz to the main balance first.
-5. Moves all USDC from perps to spot.
-6. Sends the spot USDC to a deposit address that lands in your private
+4. Moves all USDC from perps to spot.
+5. Sends the spot USDC to a deposit address that lands in your private
    balance, and waits until it arrives.
-7. Sends your private balance to the address you named. It shows you what will
+6. Sends your private balance to the address you named. It shows you what will
    arrive first and only sends after you type `yes`.
-8. If you give it our server key hash, offers to remove our server's access to
+7. If you give it our server key hash, offers to remove our server's access to
    all your wallets.
 
 Each step says in plain words what it is doing. If a step cannot go on, the
@@ -62,7 +60,7 @@ tells you so.
 ## Run it from the page
 
 Open `index.html` in a browser, from disk or from any static host. It needs
-`exit.js` next to it. Enter your words, account and destination, then press
+`exit.js` next to it. Enter your words and destination, then press
 Start.
 
 `exit.js` is built from `page.ts` and the client library. To check that it
@@ -89,6 +87,6 @@ cd .. && npx tsx exit/cli.ts
 ```
 
 The tool asks for your words, which are not shown as you type, then your
-account and destination. You can also pass
-`--account alice.near --chain near --to alice.near` and
+destination. You can also pass
+`--chain near --to alice.near` and
 `--server-key-hash <hash>`.

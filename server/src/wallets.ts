@@ -1,17 +1,22 @@
 // The pieces key and the user's wallets: the private balance ("balance") and one wallet per
 // piece ("piece:<n>"). The browser registers each OutLayer deterministic wallet and adds our
 // key's hash as a delegate key; we make the key, keep it encrypted, and prove it works.
-import { USDC_NEAR, fromUnits } from "unhuntable-client";
+import { USDC_NEAR, fromUnits, verifyText } from "unhuntable-client";
 import { z } from "zod";
 import { balanceWallet, userRow, walletByLabel, type Ctx, type WalletRow } from "./ctx.js";
 import { newId, newShardId } from "./db.js";
 import { KeyStoreError } from "./keystore.js";
-import { NearRpcError } from "./near.js";
 import { OutLayerWalletError } from "./outlayer.js";
 import { ApiError } from "./refusals.js";
 
 export const Label = z.string().regex(/^(balance|piece:(0|[1-9]\d{0,5}))$/);
-export const PiecesKeyBody = z.object({ publicKey: z.string().regex(/^ed25519:[1-9A-HJ-NP-Za-km-z]{32,44}$/) });
+export const PiecesKeyBody = z.object({
+  publicKey: z.string().regex(/^ed25519:[1-9A-HJ-NP-Za-km-z]{32,44}$/),
+  message: z.string().max(200),
+  signature: z.string().min(1).max(120),
+});
+/** How far the time in a pieces-key proof may be from ours. */
+export const PROOF_WINDOW_MS = 5 * 60_000;
 export const KeyBody = z.object({ label: Label });
 export const ConfirmBody = z.object({ requestId: z.string().uuid(), label: Label, seed: z.string().min(1).max(200) });
 
@@ -20,31 +25,29 @@ function keystore(ctx: Ctx) {
   return ctx.keystore;
 }
 
-async function keyOnAccount(ctx: Ctx, account: string, publicKey: string): Promise<boolean> {
-  try {
-    return (await ctx.near.accessKey(account, publicKey)) !== null;
-  } catch (e) {
-    if (e instanceof NearRpcError) throw new ApiError("near_unreachable");
-    throw e;
-  }
-}
-
 export async function me(ctx: Ctx, userId: string) {
   const u = userRow(ctx, userId);
-  const onAccount = u.pieces_public_key ? await keyOnAccount(ctx, u.near_account, u.pieces_public_key) : false;
   const rows = ctx.db
     .prepare("SELECT label, kind, wallet_id FROM pieces WHERE user_id = ? AND label IS NOT NULL ORDER BY kind = 'piece', created_ms, label")
     .all(userId) as { label: string; kind: "balance" | "piece"; wallet_id: string | null }[];
   return {
     accountId: u.near_account,
-    piecesKey: onAccount ? ("on_account" as const) : ("missing" as const),
+    piecesKey: u.pieces_public_key ? ("set" as const) : ("missing" as const),
     wallets: rows.map((r) => ({ label: r.label, kind: r.kind, ready: r.wallet_id !== null })),
   };
 }
 
+/**
+ * Save the pieces key's public key. The browser proves it holds the key by signing
+ * "pieces-key:<the signed-in NEAR account>:<unix seconds>" with it. Nothing goes on the NEAR
+ * account: the key's own implicit account owns the user's OutLayer wallets.
+ */
 export async function setPiecesKey(ctx: Ctx, userId: string, body: z.infer<typeof PiecesKeyBody>) {
   const u = userRow(ctx, userId);
-  if (!(await keyOnAccount(ctx, u.near_account, body.publicKey))) throw new ApiError("pieces_key_missing");
+  const m = /^pieces-key:(.+):(\d{1,12})$/.exec(body.message);
+  if (!m || m[1] !== u.near_account) throw new ApiError("pieces_key_unproven");
+  if (Math.abs(ctx.now() - Number(m[2]) * 1000) > PROOF_WINDOW_MS) throw new ApiError("pieces_key_unproven");
+  if (!verifyText(body.publicKey, body.message, body.signature)) throw new ApiError("pieces_key_unproven");
   ctx.db.prepare("UPDATE users SET pieces_public_key = ? WHERE id = ?").run(body.publicKey, userId);
   return { ok: true as const };
 }

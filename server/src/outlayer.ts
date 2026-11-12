@@ -160,11 +160,24 @@ const SignReply = z
   .object({ signature: z.string().regex(/^0x[0-9a-fA-F]{130}$/), chain: z.string(), wallet_id: z.string() })
   .transform((r) => ({ signature: r.signature, chain: r.chain, walletId: r.wallet_id }));
 
-// The fields store_wallet_policy takes (outlayer contract/src/wallet.rs).
+const EncryptedPolicyReply = z.object({ encrypted_base64: z.string().min(1) }).transform((r) => r.encrypted_base64);
+
+// What store_wallet_policy needs from the wallet's signature (outlayer contract/src/wallet.rs).
 const SignedPolicyReply = z
-  .object({ wallet_pubkey: z.string().optional(), encrypted_data: z.string().min(1), wallet_signature: z.string().min(1) })
-  .passthrough()
-  .transform((r) => ({ walletPubkey: r.wallet_pubkey, encryptedData: r.encrypted_data, walletSignature: r.wallet_signature }));
+  .object({
+    signature_hex: z.string().regex(/^[0-9a-f]+$/),
+    public_key_hex: z.string().regex(/^[0-9a-f]{64}$/),
+    version: z.number().int().positive(),
+    locked: z.boolean(),
+    valid_until: z.number().int().positive(),
+  })
+  .transform((r) => ({
+    walletPubkey: "ed25519:" + r.public_key_hex,
+    walletSignature: r.signature_hex,
+    version: r.version,
+    locked: r.locked,
+    validUntil: r.valid_until,
+  }));
 
 export type SignedPolicy = z.output<typeof SignedPolicyReply>;
 export type WalletAddress = z.output<typeof AddressReply>;
@@ -311,14 +324,14 @@ export class OutLayerWallet {
     return this.call(walletId, "GET", "/wallet/v1/policy", PolicyReply);
   }
 
-  /** Encrypt a policy for this wallet. The answer is passed on to signPolicy unchanged. */
-  encryptPolicy(walletId: string, policy: unknown): Promise<Record<string, unknown>> {
-    return this.call(walletId, "POST", "/wallet/v1/encrypt-policy", z.record(z.unknown()), policy);
+  /** Encrypt a policy for this wallet. Answers the encrypted policy (base64) for signPolicy and the chain. */
+  encryptPolicy(walletId: string, policy: object): Promise<string> {
+    return this.call(walletId, "POST", "/wallet/v1/encrypt-policy", EncryptedPolicyReply, { wallet_id: walletId, ...policy });
   }
 
-  /** Sign an encrypted policy for store_wallet_policy sent by `caller`. */
-  signPolicy(walletId: string, encrypted: Record<string, unknown>, caller: string): Promise<SignedPolicy> {
-    return this.call(walletId, "POST", "/wallet/v1/sign-policy", SignedPolicyReply, { ...encrypted, caller });
+  /** Sign an encrypted policy for store_wallet_policy sent by `caller`: the signature names the caller and the next version. */
+  signPolicy(walletId: string, encryptedData: string, caller: string): Promise<SignedPolicy> {
+    return this.call(walletId, "POST", "/wallet/v1/sign-policy", SignedPolicyReply, { encrypted_data: encryptedData, caller });
   }
 
   signTypedData(walletId: string, chain: string, typedData: unknown): Promise<TypedDataSignature> {

@@ -26,6 +26,36 @@ export const QuoteBody = z.object({
   refundTo: z.string().min(2).max(200),
 });
 
+/** 1Click asset ids for the tokens the deposit page offers on the MetaMask or Phantom route. */
+export const AURORA_ASSETS: Record<string, Record<string, string>> = {
+  eth: {
+    USDC: "nep141:eth-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.omft.near",
+    USDT: "nep141:eth-0xdac17f958d2ee523a2206206994597c13d831ec7.omft.near",
+    ETH: "nep141:eth.omft.near",
+  },
+  base: {
+    USDC: "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near",
+    ETH: "nep141:base.omft.near",
+  },
+  arb: {
+    USDC: "nep141:arb-0xaf88d065e77c8cc2239327c5edb3a432268e5831.omft.near",
+    // USDT on Arbitrum is USDT0 on 1Click
+    USDT: "nep141:arb-0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9.omft.near",
+    ETH: "nep141:arb.omft.near",
+  },
+  sol: {
+    USDC: "nep141:sol-5ce3bf3a31af18be40ba30f721101b4341690186.omft.near",
+    USDT: "nep141:sol-c800a4bd850783ccb82c2b2c7e84175443606352.omft.near",
+    SOL: "nep141:sol.omft.near",
+  },
+};
+
+/** The 1Click asset id for a chain and token: a token name the page shows, or an asset id as is. */
+export function auroraAsset(chain: string, token: string): string | undefined {
+  if (token.startsWith("nep141:") || token.startsWith("nep245:")) return token;
+  return AURORA_ASSETS[chain]?.[token.toUpperCase()];
+}
+
 /** Decimals of an amount for a chain and token. Hypercore USDC carries 8. */
 export function decimalsFor(chain: string, token: string): number {
   if (chain === "hypercore") return 8;
@@ -93,13 +123,15 @@ export async function quote(ctx: Ctx, userId: string, body: z.infer<typeof Quote
     quoteJson = { ...d, refundTo: body.refundTo };
   } else {
     const nearAddr = await ctx.wallet.address(bal.wallet_id, "near");
+    const originAsset = auroraAsset(body.chain, body.token);
+    if (!originAsset) throw new ApiError("bad_request");
     let q;
     try {
       q = await ctx.oneClick.quote({
         dry: false,
         swapType: "EXACT_INPUT",
         slippageTolerance: 100,
-        originAsset: body.token,
+        originAsset,
         depositType: "ORIGIN_CHAIN",
         destinationAsset: USDC_NEAR,
         amount: units.toString(),

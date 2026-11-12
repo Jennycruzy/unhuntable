@@ -86,8 +86,8 @@ export class Api {
   me() {
     return this.call<Me>("GET", "/api/me");
   }
-  piecesKey(publicKey: string) {
-    return this.call<{ ok: true }>("POST", "/api/pieces-key", { publicKey });
+  piecesKey(proof: { publicKey: string; message: string; signature: string }) {
+    return this.call<{ ok: true }>("POST", "/api/pieces-key", proof);
   }
   walletKey(label: string) {
     return this.call<WalletKey>("POST", "/api/wallets/key", { label });

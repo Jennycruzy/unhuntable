@@ -87,8 +87,6 @@ export async function buildBatch(ctx: Ctx, owner: string, items: BatchItem[]): P
     if (!it.wallet.wallet_id) throw new ApiError("wallet_missing");
     const encrypted = await ctx.wallet.encryptPolicy(it.wallet.wallet_id, it.policy);
     const signed = await ctx.wallet.signPolicy(it.wallet.wallet_id, encrypted, owner);
-    const pubkey = signed.walletPubkey ?? it.wallet.wallet_pubkey;
-    if (!pubkey) throw new ApiError("wallet_missing");
     batch.summary.push(it.sentence);
     batch.transactions.push({
       receiverId: ctx.policyContract,
@@ -97,7 +95,16 @@ export async function buildBatch(ctx: Ctx, owner: string, items: BatchItem[]): P
           type: "FunctionCall",
           params: {
             methodName: "store_wallet_policy",
-            args: { wallet_pubkey: pubkey, encrypted_data: signed.encryptedData, wallet_signature: signed.walletSignature, storage_refund_to: owner },
+            args: {
+              wallet_pubkey: signed.walletPubkey,
+              encrypted_data: encrypted,
+              wallet_signature: signed.walletSignature,
+              version: signed.version,
+              locked: signed.locked,
+              valid_until: signed.validUntil,
+              // named only when the policy is made; the contract refuses it on an update
+              ...(signed.version === 1 ? { storage_refund_to: owner } : {}),
+            },
             gas: STORE_GAS,
             deposit: STORE_DEPOSIT,
           },

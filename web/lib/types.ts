@@ -13,7 +13,7 @@ export interface ApiFailure {
 
 export interface Me {
   accountId: string;
-  piecesKey: "missing" | "on_account";
+  piecesKey: "missing" | "set";
   wallets: { label: string; kind: "balance" | "piece"; ready: boolean }[];
 }
 

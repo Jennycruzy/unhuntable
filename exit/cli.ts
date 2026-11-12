@@ -1,8 +1,8 @@
 // Exit without us, from a terminal:  npx tsx exit/cli.ts
-// Asks for the 12 words, the NEAR account and a destination, then runs the same steps as
+// Asks for the 12 words and a destination, then runs the same steps as
 // the static page. The words are not echoed, not written to disk and not sent anywhere.
 //
-// Optional flags: --account <id> --chain <near|base|arbitrum> --to <address> --server-key-hash <hex>
+// Optional flags: --chain <near|base|arbitrum> --to <address> --server-key-hash <hex>
 //   --relay-account <id>: a NEAR account that pays gas for NEAR-controlled pieces (its key is asked for, not shown)
 import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
@@ -41,7 +41,6 @@ async function main(): Promise<number> {
   console.log("Exit without us: bring your money home with only your 12 words.");
   console.log("This talks only to OutLayer, Hyperliquid and a NEAR RPC. Your words stay on this computer.\n");
   const words = await askHidden("Your 12 words (not shown as you type):");
-  const account = flag("account") ?? (await ask("Your NEAR account (for example alice.near):"));
   const chain = flag("chain") ?? ((await ask("Send to which chain? near, base or arbitrum [near]:")) || "near");
   const to = flag("to") ?? (await ask(`Your address on ${chain}:`));
   const serverKey = flag("server-key-hash");
@@ -50,7 +49,6 @@ async function main(): Promise<number> {
   try {
     const r = await runExit({
       words,
-      account,
       destination: { chain, to },
       serverKeyHashes: serverKey ? [serverKey.toLowerCase()] : [],
       relay: relayAccount ? { account: relayAccount, key: relayKey.trim() } : undefined,

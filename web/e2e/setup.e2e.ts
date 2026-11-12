@@ -20,8 +20,12 @@ test("the 3-word check refuses a wrong word and accepts the right ones", async (
 
   await page.getByTestId("check-1").fill(words[positions[1]]);
   await page.getByRole("button", { name: "Check" }).click();
-  await expect(page.getByTestId("addkey-words")).toContainText("it can only call outlayer.near");
+  // no wallet opens: the key is linked with a signed note, then the private balance is next
+  await expect(page.getByRole("heading", { name: "Make your private balance" })).toBeVisible();
   await shot(page, "setup-key", info.project.name);
+  const proof = JSON.parse(apiRequests.find((r) => r.url.endsWith("/api/pieces-key"))!.body ?? "{}");
+  expect(Object.keys(proof).sort()).toEqual(["message", "publicKey", "signature"]);
+  expect(proof.message).toMatch(/^pieces-key:alice\.near:\d+$/);
 
   // the words never went to our API, alone or in a row
   const sentText = apiRequests.map((r) => `${r.url} ${JSON.stringify(r.headers)} ${r.body ?? ""}`).join("\n");

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { keyFromMnemonic } from "unhuntable-client/keys";
+import { keyFromMnemonic, ownerAccount, readAuthHeader, verifyText } from "unhuntable-client/keys";
 import { Api } from "../lib/api";
-import { addKeyTransaction, checkWords, makeBalanceWallet, newMnemonic, pickPositions, putKeyOnAccount, restoreKey } from "../lib/setup";
+import { checkWords, linkPiecesKey, makeBalanceWallet, newMnemonic, pickPositions, restoreKey } from "../lib/setup";
 import { forgetPiecesKey, loadPiecesKey, savePiecesKey } from "../lib/vault";
-import { scriptedFetch, testWallet } from "./helpers";
+import { scriptedFetch } from "./helpers";
 
 const KEY_HASH = "ab".repeat(32);
 
@@ -23,31 +23,34 @@ describe("pieces key setup", () => {
   it.each(["legal winner thank year wave sausage worth useful legal winner thank yellow", newMnemonic()])("never sends the 12 words or the secret key anywhere", async (words) => {
     const key = keyFromMnemonic(words);
     const { fetch, sent, left } = outlayerAndApi();
-    const { wallet, calls } = testWallet();
     const api = new Api(fetch, "https://api.example");
     await savePiecesKey("alice.near", key);
-    await putKeyOnAccount({ api, wallet, key, account: "alice.near" });
+    await linkPiecesKey({ api, key, account: "alice.near", now: () => 1_800_000_000_000 });
     const address = await makeBalanceWallet({ api, key, account: "alice.near", outlayerFetch: fetch });
     expect(address).toBe("w1.outlayer.near");
     expect(left).toHaveLength(0);
 
-    // the add-key transaction: a function-call key on outlayer.near, not full access
-    const tx = calls.find((c) => c.kind === "signAndSendTransaction")!.arg as ReturnType<typeof addKeyTransaction>;
-    expect(tx.receiverId).toBe("alice.near");
-    expect(tx.actions).toHaveLength(1);
-    expect(JSON.stringify(tx.actions[0])).toContain('"receiverId":"outlayer.near"');
-    expect(JSON.stringify(tx.actions[0])).not.toContain("FullAccess");
+    // the wallets belong to the key's own implicit account, not to alice.near
+    const signed = sent.filter((s) => s.headers?.authorization);
+    expect(signed.length).toBeGreaterThan(0);
+    for (const s of signed) expect(readAuthHeader(s.headers.authorization).account_id).toBe(ownerAccount(key));
+    const reg = JSON.parse(sent.find((s) => s.url.endsWith("/register"))!.body);
+    expect(reg.account_id).toBe(ownerAccount(key));
 
     const secrets = [key.secretKeyStr, key.secretKeyStr.slice(8), Buffer.from(key.secret).toString("hex"), Buffer.from(key.secret).toString("base64")];
-    const everything = sent.map((s) => `${s.url}\n${JSON.stringify(s.headers)}\n${s.body}`).join("\n") + JSON.stringify(calls);
+    const everything = sent.map((s) => `${s.url}\n${JSON.stringify(s.headers)}\n${s.body}`).join("\n");
     const list = words.split(" ");
     expect(everything).not.toContain(words);
     // no two words of the phrase in a row, joined any way
     for (let i = 0; i + 1 < list.length; i++) expect(everything).not.toMatch(new RegExp(`\\b${list[i]}\\W{1,4}${list[i + 1]}\\b`));
     if (words.startsWith("legal")) for (const w of list) expect(everything).not.toMatch(new RegExp(`\\b${w}\\b`));
     for (const s of secrets) expect(everything).not.toContain(s);
-    // the server got only the public key and the wallet's seed
-    expect(JSON.parse(sent.find((s) => s.url.endsWith("/api/pieces-key"))!.body)).toEqual({ publicKey: key.publicKeyStr });
+    // the server got only the public key, a signed note for alice.near, and the wallet's seed
+    const proof = JSON.parse(sent.find((s) => s.url.endsWith("/api/pieces-key"))!.body);
+    expect(Object.keys(proof).sort()).toEqual(["message", "publicKey", "signature"]);
+    expect(proof.publicKey).toBe(key.publicKeyStr);
+    expect(proof.message).toBe("pieces-key:alice.near:1800000000");
+    expect(verifyText(key.publicKeyStr, proof.message, proof.signature)).toBe(true);
   });
 
   it("the 3-word check refuses a wrong word", () => {
