@@ -353,7 +353,7 @@ export function Book({ coin, asOfMs }: { coin: MapCoin | null; asOfMs: number | 
             <line x1={0} x2={0} y1={-36} y2={-28} />
             <line x1={0} x2={0} y1={28} y2={36} />
             {stamp && (
-              <text className="stamp" x={0} y={dir < 0 ? 50 : -42} textAnchor="middle">
+              <text className="stamp" x={0} y={dir < 0 || narrow ? 50 : -42} textAnchor="middle">
                 {stamp}
               </text>
             )}
