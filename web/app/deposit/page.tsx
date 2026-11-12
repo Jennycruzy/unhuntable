@@ -129,12 +129,16 @@ export default function DepositPage() {
             spellCheck={false}
             autoCapitalize="off"
             aria-describedby="refund-hint"
-            placeholder={route === "near" ? "alice.near" : chainDef.id === "sol" ? "Your Phantom address" : "0x… your MetaMask address"}
             value={refundTo}
             onChange={(e) => setRefundTo(e.target.value)}
           />
           <p className="small muted" id="refund-hint" data-testid="refund-hint">
-            {route === "near" ? "Your NEAR account." : `Your own address on ${chainDef.name}.`} If the deposit can&apos;t go through, it is sent back there.
+            {route === "near"
+              ? "Your NEAR account, like alice.near."
+              : chainDef.id === "sol"
+                ? "Your own address on Solana, from Phantom."
+                : `Your own address on ${chainDef.name}, starting with 0x, from MetaMask.`}{" "}
+            If the deposit can&apos;t go through, it is sent back there.
           </p>
           {error && (
             <Notice kind="error" testId="deposit-error">

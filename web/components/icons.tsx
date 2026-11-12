@@ -53,6 +53,14 @@ export const IconPositions = () => (
   </Icon>
 );
 
+export const IconTraders = () => (
+  <Icon>
+    <circle cx="9" cy="8" r="3" />
+    <path d="M3.5 19.5c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5" />
+    <path d="M14.5 10.5l2.5-2.5 2 2 2.5-3" />
+  </Icon>
+);
+
 export const IconHome = () => (
   <Icon>
     <path d="M20 12a8 8 0 1 1-2.3-5.7" />

@@ -279,7 +279,23 @@ cookie.
   runs: `GET /api/agent/positions` (its own positions, with shard ids and sizes but no
   addresses or levels), `POST /api/agent/positions` (open on ready pieces only,
   crypto only), `POST /api/agent/positions/:id/stop` `{ boxes }` and
-  `POST /api/agent/positions/:id/close` `{ now? }`. `GET /api/agent/box-pub` is free.
+  `POST /api/agent/positions/:id/close` `{ now? }`, `GET /api/agent/traders/:handle/trades`
+  (closed trades of a trader the owner holds a key to) and `POST /api/agent/follow`
+  `{ handle, kind, copyUsd? }` (a key that waits for the owner's approval in the app).
+  `GET /api/agent/box-pub` is free.
+- Followers ([docs/followers.md](../docs/followers.md)). Public: `GET /api/traders` and
+  `GET /api/traders/:handle` (prices, counts, closed results, the guard-signed record; no
+  position, address or level). Signed in: `POST /api/traders/:handle/record` (ask the guard
+  for a fresh record, at most every 10 minutes), `GET /api/traders/:handle/trades` (closed
+  trades, for the trader and holders of a key that is on), `GET`/`POST /api/trader`
+  `{ handle, copyUsdDay, viewUsdDay, open }`, `GET /api/follow` (your keys),
+  `POST /api/follow` `{ handle, kind, copyUsd? }` → `{ keyId, policyBatch }` (the balance
+  lock listing the trader), `POST /api/follow/:id/batch` (the same for a key an agent asked
+  for), `POST /api/follow/:id/confirm` (reads the lock back, switches the key on, pays the
+  first day), `POST /api/follow/:id/stop` and `POST /api/follow/:id/resume`. Jobs: copies
+  start a random 30 s to 5 min after the trader's position opens and close with it; each
+  day of a key is paid by `POST /wallet/v1/confidential/transfer` and read until it
+  settles; a closed position's result is read from Hyperliquid's fills.
 - `GET /api/hunt-us` → `{ challenge }`: the market, how many pieces, and the one
   piece shown, or `null`. `POST /api/hunt-us/start` → `{ token, revealAtMs }`, a
   signed start time. `GET /api/hunt-us/reveal?token=` answers `hunt_wait` until 90

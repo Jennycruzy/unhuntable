@@ -563,3 +563,15 @@ html[data-session] .cover:not(.open), html[data-session] .lp { visibility: hidde
 /* the brand reads the same everywhere: the landing's display face */
 nav.nav .brand, .cover-top .mark, .cover-foot .mark { font-family: var(--disp); font-weight: 800; font-size: 1.25rem; letter-spacing: 0.04em; text-transform: uppercase; }
 nav.nav .brand svg, .cover-top .mark svg { color: var(--primary); }
+
+/* Traders */
+.record { margin: 14px 0 0; padding: 12px 0 0; border-top: 1px solid var(--line); }
+.record code { font-family: var(--mono); overflow-wrap: anywhere; }
+.record button { margin-top: 10px; }
+.buy { margin: 16px 0 0; padding: 16px 0 0; border-top: 1px solid var(--line); }
+.trades-wrap { overflow-x: auto; }
+table.trades { width: 100%; border-collapse: collapse; margin: 14px 0 0; font-size: 0.8125rem; font-variant-numeric: tabular-nums; }
+table.trades th { text-align: left; font-weight: 500; color: var(--fg-3); padding: 6px 8px 6px 0; border-bottom: 1px solid var(--line); }
+table.trades td { padding: 8px 8px 8px 0; border-bottom: 1px solid var(--line); color: var(--fg); vertical-align: top; }
+table.trades td:last-child, table.trades th:last-child { text-align: right; padding-right: 0; }
+table.trades td.down { color: var(--danger); }

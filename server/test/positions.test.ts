@@ -2,6 +2,7 @@ import { plan } from "unhuntable-client";
 import { describe, expect, it } from "vitest";
 import { buildServer } from "../src/index.js";
 import { advancePosition } from "../src/positions.js";
+import { traderTag } from "../src/tags.js";
 import { testConfig } from "./helpers.js";
 import { addUser, addWallet, harness, runFor, type Harness } from "./world.js";
 
@@ -141,6 +142,8 @@ describe("open: planned -> funding -> policy_wait -> opening -> open", () => {
     const ops = s.h.world.calls.filter((c) => c.inner).map((c) => c.inner.op);
     expect(ops).toEqual(["vrf", "agent", "register", "leverage", "open"]);
     expect(s.h.world.calls.find((c) => c.inner?.op === "register")!.inner.master).toBe(pieceAddr);
+    // every piece counts toward its owner's track record from its first registration
+    expect(s.h.world.calls.find((c) => c.inner?.op === "register")!.inner.owner).toBe(traderTag(s.userId));
     // the fill is recorded
     expect(s.h.db.prepare("SELECT kind, size, px FROM piece_orders").all()).toEqual([{ kind: "open", size: p.pieces[0].size, px: 2500.5 }]);
     const list = (await s.app.inject({ method: "GET", url: "/api/positions", headers: { cookie: s.cookie } })).json();

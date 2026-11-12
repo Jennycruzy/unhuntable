@@ -230,6 +230,41 @@ mod guest {
     }
 
     /// clearinghouseState on a market list: "" for Hyperliquid's own, "xyz" for trade.xyz.
+    /// Equity now and net deposits ever, summed over shards: perps (main and trade.xyz), spot
+    /// USDC, and every USDC sent in or out per Hyperliquid's ledger. pnl = equity - net.
+    fn totals(list: &[String]) -> Result<(f64, f64), String> {
+        let (mut equity, mut net) = (0f64, 0f64);
+        for sh in list {
+            let m = String::from_utf8(sealed::get(ENC, None, &format!("master:{sh}")).map_err(e)?.ok_or("master missing")?.into_plaintext()).map_err(e)?;
+            let perp: Value = serde_json::from_str(&clearinghouse(&m, "")?.1).map_err(e)?;
+            equity += num(&perp["marginSummary"]["accountValue"]).ok_or("perp equity")?;
+            let xyz: Value = serde_json::from_str(&clearinghouse(&m, "xyz")?.1).map_err(e)?;
+            equity += num(&xyz["marginSummary"]["accountValue"]).unwrap_or(0.0);
+            let spot: Value = serde_json::from_str(&post_json(&format!("{HL}/info"), &json!({"type":"spotClearinghouseState","user": m}))?.1).map_err(e)?;
+            for b in spot["balances"].as_array().cloned().unwrap_or_default() {
+                if b["coin"] == "USDC" {
+                    equity += num(&b["total"]).unwrap_or(0.0);
+                }
+            }
+            let led: Value = serde_json::from_str(&post_json(&format!("{HL}/info"), &json!({"type":"userNonFundingLedgerUpdates","user": m,"startTime":0}))?.1).map_err(e)?;
+            for u in led.as_array().cloned().unwrap_or_default() {
+                let d = &u["delta"];
+                let amt = num(&d["amount"]).or_else(|| num(&d["usdc"])).unwrap_or(0.0);
+                let fee = num(&d["fee"]).unwrap_or(0.0);
+                let from = d["user"].as_str().unwrap_or("").to_lowercase();
+                let to = d["destination"].as_str().unwrap_or("").to_lowercase();
+                match d["type"].as_str().unwrap_or("") {
+                    "send" | "spotTransfer" if to == m && from != m => net += amt,
+                    "send" | "spotTransfer" if from == m && to != m => net -= amt + fee,
+                    "deposit" => net += amt,
+                    "withdraw" => net -= amt + fee,
+                    _ => {}
+                }
+            }
+        }
+        Ok((equity, net))
+    }
+
     fn clearinghouse(master: &str, dex: &str) -> Result<(u16, String), String> {
         let body = if dex.is_empty() { json!({"type": "clearinghouseState", "user": master}) } else { json!({"type": "clearinghouseState", "user": master, "dex": dex}) };
         post_json(&format!("{HL}/info"), &body)
@@ -467,13 +502,51 @@ mod guest {
             }
 
             // Records which Hyperliquid master account a shard trades for (sealed; never echoed).
+            // With "owner", the shard is counted in that trader's track record ("record") from now on.
+            // A tag is taken only when the shard is first registered, so no piece can be added to or
+            // left out of a record after its trades are known.
             "register" => {
                 let shard = shard_of(input)?;
                 let m = input["master"].as_str().ok_or("master")?.to_lowercase();
                 if m.len() != 42 || !m.starts_with("0x") || hex::decode(&m[2..]).is_err() {
                     return Err("master must be a 0x address".into());
                 }
+                let owner = match input.get("owner") {
+                    None | Some(Value::Null) => None,
+                    Some(v) => Some(v.as_str().filter(|t| valid_trader_tag(t)).ok_or("owner must be 64 lowercase hex characters")?.to_string()),
+                };
+                let known: Vec<String> = sealed::get(ENC, None, "shards").map_err(e)?
+                    .and_then(|r| serde_json::from_slice(r.plaintext()).ok()).unwrap_or_default();
+                let had = sealed::get(ENC, None, &format!("owner:{shard}")).map_err(e)?
+                    .map(|r| String::from_utf8_lossy(r.plaintext()).to_string());
+                if let (Some(o), Some(h)) = (&owner, &had) {
+                    if h != o {
+                        return Err("shard belongs to another trader".into());
+                    }
+                }
+                // A shard first registered without a tag stays untagged: nothing joins a record late.
+                let tag_now = owner.is_some() && had.is_none() && !known.contains(&shard);
                 sealed::set(ENC, None, &format!("master:{shard}"), m.as_bytes()).map_err(e)?;
+                if let (true, Some(o)) = (tag_now, &owner) {
+                    sealed::set(ENC, None, &format!("owner:{shard}"), o.as_bytes()).map_err(e)?;
+                    let key = format!("trader:{o}");
+                    loop {
+                        let cur = sealed::get(ENC, None, &key).map_err(e)?;
+                        let mut list: Vec<String> = cur.as_ref().and_then(|r| serde_json::from_slice(r.plaintext()).ok()).unwrap_or_default();
+                        if list.contains(&shard) {
+                            break;
+                        }
+                        list.push(shard.clone());
+                        let bytes = serde_json::to_vec(&list).unwrap();
+                        let won = match &cur {
+                            Some(c) => sealed::set_if_equals(ENC, None, &key, c, &bytes).map_err(e)?.0,
+                            None => sealed::set_if_absent(ENC, None, &key, &bytes).map_err(e)?,
+                        };
+                        if won {
+                            break;
+                        }
+                    }
+                }
                 loop {
                     let cur = sealed::get(ENC, None, "shards").map_err(e)?;
                     let mut list: Vec<String> = cur.as_ref().and_then(|r| serde_json::from_slice(r.plaintext()).ok()).unwrap_or_default();
@@ -490,7 +563,7 @@ mod guest {
                         break;
                     }
                 }
-                json!({ "registered": true })
+                json!({ "registered": true, "trader": if tag_now { owner.clone() } else { had.clone() } })
             }
 
             // Track-record proof: totals across all registered shards, signed by the guard's keystore
@@ -498,35 +571,7 @@ mod guest {
             "proof" => {
                 let list: Vec<String> = sealed::get(ENC, None, "shards").map_err(e)?
                     .and_then(|r| serde_json::from_slice(r.plaintext()).ok()).unwrap_or_default();
-                let (mut equity, mut net) = (0f64, 0f64);
-                for sh in &list {
-                    let m = String::from_utf8(sealed::get(ENC, None, &format!("master:{sh}")).map_err(e)?.ok_or("master missing")?.into_plaintext()).map_err(e)?;
-                    let perp: Value = serde_json::from_str(&clearinghouse(&m, "")?.1).map_err(e)?;
-                    equity += num(&perp["marginSummary"]["accountValue"]).ok_or("perp equity")?;
-                    let xyz: Value = serde_json::from_str(&clearinghouse(&m, "xyz")?.1).map_err(e)?;
-                    equity += num(&xyz["marginSummary"]["accountValue"]).unwrap_or(0.0);
-                    let spot: Value = serde_json::from_str(&post_json(&format!("{HL}/info"), &json!({"type":"spotClearinghouseState","user": m}))?.1).map_err(e)?;
-                    for b in spot["balances"].as_array().cloned().unwrap_or_default() {
-                        if b["coin"] == "USDC" {
-                            equity += num(&b["total"]).unwrap_or(0.0);
-                        }
-                    }
-                    let led: Value = serde_json::from_str(&post_json(&format!("{HL}/info"), &json!({"type":"userNonFundingLedgerUpdates","user": m,"startTime":0}))?.1).map_err(e)?;
-                    for u in led.as_array().cloned().unwrap_or_default() {
-                        let d = &u["delta"];
-                        let amt = num(&d["amount"]).or_else(|| num(&d["usdc"])).unwrap_or(0.0);
-                        let fee = num(&d["fee"]).unwrap_or(0.0);
-                        let from = d["user"].as_str().unwrap_or("").to_lowercase();
-                        let to = d["destination"].as_str().unwrap_or("").to_lowercase();
-                        match d["type"].as_str().unwrap_or("") {
-                            "send" | "spotTransfer" if to == m && from != m => net += amt,
-                            "send" | "spotTransfer" if from == m && to != m => net -= amt + fee,
-                            "deposit" => net += amt,
-                            "withdraw" => net -= amt + fee,
-                            _ => {}
-                        }
-                    }
-                }
+                let (equity, net) = totals(&list)?;
                 let micro = |x: f64| (x * 1e6).round() as i64;
                 let p = Proof {
                     as_of: now_ms() / 1000,
@@ -547,6 +592,39 @@ mod guest {
                              "data": format!("0x{}", hex::encode(&data)), "salt": format!("0x{}", hex::encode(salt)),
                              "signature": sig_json(&sig), "signer": signer },
                     "totals": { "shards": p.shards, "equity_usd": equity, "net_deposits_usd": net, "pnl_usd": equity - net, "outlayer_call": p.call }
+                })
+            }
+
+            // One trader's track record: every shard registered under the tag, summed and signed
+            // like "proof". No address leaves the guard.
+            "record" => {
+                let tag = input["trader"].as_str().filter(|t| valid_trader_tag(t)).ok_or("trader must be 64 lowercase hex characters")?.to_string();
+                let list: Vec<String> = sealed::get(ENC, None, &format!("trader:{tag}")).map_err(e)?
+                    .and_then(|r| serde_json::from_slice(r.plaintext()).ok()).unwrap_or_default();
+                let (equity, net) = totals(&list)?;
+                let micro = |x: f64| (x * 1e6).round() as i64;
+                let mut trader = [0u8; 32];
+                trader.copy_from_slice(&hex::decode(&tag).map_err(e)?);
+                let p = TraderProof {
+                    as_of: now_ms() / 1000,
+                    trader,
+                    shards: list.len() as u32,
+                    equity_micro: micro(equity),
+                    net_deposits_micro: micro(net),
+                    pnl_micro: micro(equity - net),
+                    call: std::env::var("OUTLAYER_CALL_ID").unwrap_or_default(),
+                };
+                let data = trader_eas_data(&p);
+                let salt: [u8; 32] = wasi::random::random::get_random_bytes(32).try_into().unwrap();
+                let time = p.as_of;
+                let sig = sign(eas_digest_for(&trader_schema_uid(), time, &data, &salt))?;
+                let signer = evm_address(&signing_keys::public_key(KEY, None).map_err(e)?);
+                json!({
+                    "eas": { "chainId": EAS_CHAIN_ID, "contract": EAS_CONTRACT, "version": EAS_VERSION, "schema": TRADER_SCHEMA,
+                             "schemaUid": format!("0x{}", hex::encode(trader_schema_uid())), "time": time,
+                             "data": format!("0x{}", hex::encode(&data)), "salt": format!("0x{}", hex::encode(salt)),
+                             "signature": sig_json(&sig), "signer": signer },
+                    "totals": { "trader": tag, "shards": p.shards, "equity_usd": equity, "net_deposits_usd": net, "pnl_usd": equity - net, "outlayer_call": p.call }
                 })
             }
 

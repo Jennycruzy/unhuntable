@@ -37,6 +37,7 @@ test("a pieces key left on this device can be swapped for new 12 words", async (
   await signedIn("setup");
   await page.goto("/setup/");
   await page.getByRole("button", { name: "Make my 12 words" }).click();
+  await expect(page.getByTestId("words").locator("li")).toHaveCount(12);
   const first = await page.getByTestId("words").locator("li").allInnerTexts();
   await page.getByRole("button", { name: "I wrote them down" }).click();
   const labels = await page.locator("form label").allInnerTexts();
@@ -51,6 +52,8 @@ test("a pieces key left on this device can be swapped for new 12 words", async (
   await page.reload();
   await expect(page.getByRole("heading", { name: "Link your pieces key" })).toBeVisible();
   await page.getByTestId("new-words").click();
+  await expect(page.getByTestId("words").locator("li")).toHaveCount(12);
+  await expect.poll(async () => (await page.getByTestId("words").locator("li").allInnerTexts()).join(" ")).not.toBe(first.join(" "));
   const second = await page.getByTestId("words").locator("li").allInnerTexts();
   expect(second).toHaveLength(12);
   expect(second).not.toEqual(first);

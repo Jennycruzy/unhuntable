@@ -11,7 +11,7 @@ import { pieceAddress } from "../../lib/pieces";
 import { derivedAccount, pieceNumber } from "../../lib/chainsig";
 import { chainSigPieceKey } from "unhuntable-client/chainsig";
 import { ticker } from "unhuntable-client/hyperliquid";
-import { finishPieces } from "../../lib/trade";
+import { approveBatch, finishPieces } from "../../lib/trade";
 import { currentWallet } from "../../lib/wallet";
 import { api, useInterval } from "../../lib/session";
 import { GUARD_UNREACHABLE, hyperliquidPage, sealLevels, sealOpened, stopCopy } from "../../lib/stops";
@@ -75,6 +75,11 @@ function PositionCard({ p, account, record, onRecord }: { p: Position; account: 
           <h2>
             {ticker(p.coin)} {p.side === "long" ? "Long" : "Short"} {usd(p.notionalUsd)}
           </h2>
+          {p.copyOf && (
+            <p className="small" data-testid="copy-of">
+              Copy of @{p.copyOf.handle}: it closes when theirs closes.
+            </p>
+          )}
           <p className="muted small">
             {p.leverage}x · {p.pieces.length} {p.pieces.length === 1 ? "piece" : "pieces"}
             {p.fillSavingsUsd !== undefined && <> · saved {usd(p.fillSavingsUsd)} on fills</>}
@@ -247,6 +252,30 @@ function Positions({ me }: { me: Me }) {
               }}
             >
               Sign again
+            </button>
+          </Notice>
+        ))}
+      {positions
+        ?.filter((p) => p.copyOf && (p.state === "planned" || p.state === "policy_wait"))
+        .map((p) => (
+          <Notice key={`copy-${p.id}`} kind="warn" testId="start-copy">
+            Your copy of @{p.copyOf!.handle}&rsquo;s {ticker(p.coin)} {p.side} ({usd(p.notionalUsd)}) needs your approval once
+            {p.state === "planned" ? ": new pieces are made in this browser, then your wallet locks them." : ": your wallet locks its new pieces."}{" "}
+            <button
+              type="button"
+              disabled={!key}
+              onClick={async () => {
+                try {
+                  const w = await currentWallet();
+                  if (!w || !key) throw new Error("Sign in with your wallet again first.");
+                  const a = await finishPieces({ api, wallet: w, key, account: me.accountId }, await api.continuePosition(p.id));
+                  if (a.policyBatch) await approveBatch(api, w, a.policyBatch, { positionId: p.id });
+                } catch (e) {
+                  setError(sentence(e));
+                }
+              }}
+            >
+              Start my copy
             </button>
           </Notice>
         ))}

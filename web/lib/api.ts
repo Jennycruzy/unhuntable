@@ -28,6 +28,12 @@ import type {
   WalletConfirmed,
   WalletKey,
   Alert,
+  ClosedTrade,
+  FollowKey,
+  KeyKind,
+  MyTrader,
+  PolicyBatch,
+  TraderCard,
 } from "./types";
 
 export class ApiError extends Error {
@@ -200,6 +206,42 @@ export class Api {
   }
   newAgent(body: { name: string; maxNotionalUsd: number; coins: string[]; dailyOpens: number }) {
     return this.call<NewAgentKey>("POST", "/api/agents", body);
+  }
+  traders() {
+    return this.call<{ traders: TraderCard[] }>("GET", "/api/traders");
+  }
+  trader(handle: string) {
+    return this.call<{ trader: TraderCard }>("GET", `/api/traders/${encodeURIComponent(handle)}`);
+  }
+  refreshRecord(handle: string) {
+    return this.call<{ trader: TraderCard }>("POST", `/api/traders/${encodeURIComponent(handle)}/record`, {});
+  }
+  closedTrades(handle: string) {
+    return this.call<{ handle: string; trades: ClosedTrade[] }>("GET", `/api/traders/${encodeURIComponent(handle)}/trades`);
+  }
+  myTrader() {
+    return this.call<MyTrader>("GET", "/api/trader");
+  }
+  setTrader(body: { handle: string; copyUsdDay: number; viewUsdDay: number; open: boolean }) {
+    return this.call<MyTrader>("POST", "/api/trader", body);
+  }
+  myKeys() {
+    return this.call<{ keys: FollowKey[] }>("GET", "/api/follow");
+  }
+  follow(body: { handle: string; kind: KeyKind; copyUsd?: number }) {
+    return this.call<{ keyId: string; state: "pending"; policyBatch: PolicyBatch }>("POST", "/api/follow", body);
+  }
+  keyBatch(id: string) {
+    return this.call<{ policyBatch: PolicyBatch }>("POST", `/api/follow/${encodeURIComponent(id)}/batch`, {});
+  }
+  confirmKey(id: string) {
+    return this.call<{ ok: true; keyId: string; state: "active" }>("POST", `/api/follow/${encodeURIComponent(id)}/confirm`, {});
+  }
+  stopKey(id: string) {
+    return this.call<{ ok: true; state: "stopped" }>("POST", `/api/follow/${encodeURIComponent(id)}/stop`, {});
+  }
+  resumeKey(id: string) {
+    return this.call<{ ok: true; state: "active" }>("POST", `/api/follow/${encodeURIComponent(id)}/resume`, {});
   }
   revokeAgent(id: string) {
     return this.call<{ ok: true }>("POST", `/api/agents/${encodeURIComponent(id)}/revoke`, {});

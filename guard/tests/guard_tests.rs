@@ -212,6 +212,39 @@ fn eas_offchain_attestation_matches_sdk() {
     assert_eq!(ours["v"], s["v"]);
 }
 
+#[test]
+fn trader_record_matches_sdk() {
+    let r: serde_json::Value = serde_json::from_str(include_str!("ref_eas_trader.json")).unwrap();
+    assert_eq!(format!("0x{}", hex::encode(trader_schema_uid())), r["schemaUid"].as_str().unwrap());
+    let p = TraderProof { as_of: 1794500000, trader: [0x5a; 32], shards: 3, equity_micro: 36120000, net_deposits_micro: 36000000,
+                          pnl_micro: 120000, call: "00000000-0000-4000-8000-000000000002".into() };
+    let data = trader_eas_data(&p);
+    assert_eq!(format!("0x{}", hex::encode(&data)), r["data"].as_str().unwrap());
+    let sig = sign_with(&[0x22u8; 32], &eas_digest_for(&trader_schema_uid(), 1794500100, &data, &[0xcd; 32])).unwrap();
+    let s = &r["signature"];
+    let n = |v: &serde_json::Value| v.as_str().unwrap().trim_start_matches("0x").trim_start_matches('0').to_string();
+    let ours = sig_json(&sig);
+    assert_eq!(n(&ours["r"]), n(&s["r"]));
+    assert_eq!(n(&ours["s"]), n(&s["s"]));
+    assert_eq!(ours["v"], s["v"]);
+}
+
+#[test]
+fn trader_tags_are_64_lowercase_hex() {
+    assert!(valid_trader_tag(&"0a".repeat(32)));
+    assert!(!valid_trader_tag(&"0A".repeat(32)));
+    assert!(!valid_trader_tag(&"0a".repeat(31)));
+    assert!(!valid_trader_tag(&"zz".repeat(32)));
+}
+
+#[test]
+fn system_proof_digest_is_unchanged() {
+    // the refactor to eas_digest_for keeps the system-wide proof byte for byte
+    let d = [1u8; 64];
+    assert_eq!(eas_digest(5, &d, &[2; 32]), eas_digest_for(&eas_schema_uid(), 5, &d, &[2; 32]));
+    assert_ne!(eas_schema_uid(), trader_schema_uid());
+}
+
 // ---------------------------------------------------------------- trading and defence
 
 /// Small fixed-seed generator so property loops are the same on every run.

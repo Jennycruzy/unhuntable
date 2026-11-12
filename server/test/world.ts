@@ -99,6 +99,17 @@ export class World {
     return w;
   }
 
+  /** Private transfers (POST /wallet/v1/confidential/transfer) by wallet id; refusal to answer with; status requests read. */
+  transfers: { walletId: string; body: any; requestId: string }[] = [];
+  transferRefusal: unknown = undefined;
+  transferStatus = "success";
+  /** Hyperliquid fills by lower-case address (userFillsByTime). */
+  fills = new Map<string, any[]>();
+  /** Trader tags the guard was given at registration, by shard. */
+  guardOwners = new Map<string, string>();
+  /** Totals the fake guard signs for a trader record. */
+  recordTotals = { shards: 2, equity_usd: 0, net_deposits_usd: -0.42, pnl_usd: 0.42 };
+
   /** Key grants carried to PUT /wallet/v1/api-key, and the refusal to answer them with (if any). */
   grants: any[] = [];
   grantRefusal: unknown = undefined;
@@ -166,6 +177,24 @@ export class World {
       a.address = chain === "near" ? w.near : w.evm;
       if (chain === "near") a.public_key = w.pubkey;
       return json(a);
+    }
+    if (p === "/wallet/v1/confidential/transfer") {
+      if (this.transferRefusal) return json(this.transferRefusal, 403);
+      const requestId = `t-${this.transfers.length + 1}`;
+      this.transfers.push({ walletId: w.id, body: call.body, requestId });
+      this.privateUnits -= BigInt(call.body.amount);
+      return json({ request_id: requestId, status: "pending_deposit", intent_hash: "GP2ZQbythFcBBjSfGxCrmoKaoLfzsRLU4zR2YhEGcqXS", deposit_address: "1d".repeat(32) });
+    }
+    if (p.startsWith("/wallet/v1/requests/")) {
+      const id = decodeURIComponent(p.slice("/wallet/v1/requests/".length));
+      const t = this.transfers.find((x) => x.requestId === id);
+      if (!t) return json({ error: "not_found", message: "Request not found" }, 404);
+      return json({
+        request_id: id,
+        type: "confidential_transfer",
+        status: this.transferStatus,
+        result: { amount: t.body.amount, recipient: t.body.to, submitted: true, amount_out: t.body.amount, confidential: true, origin_asset: t.body.token, swap_details: { amountIn: null, amountOut: null, intentHashes: [] } },
+      });
     }
     if (p === "/wallet/v1/confidential/balance") {
       const b = reply("ol-balance");
@@ -266,6 +295,7 @@ export class World {
     if (b.type === "meta") return json(b.dex === "xyz" ? this.xyzMeta : reply("hl-meta"));
     if (b.type === "clearinghouseState") return json(this.perpOf(b.user, b.dex ?? ""));
     if (b.type === "frontendOpenOrders") return json(this.openOrders.get(String(b.user).toLowerCase()) ?? []);
+    if (b.type === "userFillsByTime") return json(this.fills.get(String(b.user).toLowerCase()) ?? []);
     if (b.type === "spotClearinghouseState") {
       const s = reply("hl-spot");
       s.balances[0].total = this.spot.get(String(b.user).toLowerCase()) ?? "0.0";
@@ -298,7 +328,15 @@ export class World {
       case "agent":
         return json({ output: { ...reply("guard-agent").output, shard: inner.shard } });
       case "register":
+        if (inner.owner !== undefined && !this.guardOwners.has(inner.shard)) this.guardOwners.set(inner.shard, inner.owner);
         return json(reply("guard-register"));
+      case "record":
+        return json({
+          output: {
+            eas: { chainId: 8453, schema: "uint64 asOf,bytes32 trader,uint32 shards,int64 equityMicroUsd,int64 netDepositsMicroUsd,int64 pnlMicroUsd,string outlayerCall", signature: { r: "0x1", s: "0x2", v: 27 }, signer: "0x" + "77".repeat(20) },
+            totals: { trader: inner.trader, ...this.recordTotals, outlayer_call: "call-1" },
+          },
+        });
       case "leverage":
         return json(reply("guard-leverage"));
       case "open": {

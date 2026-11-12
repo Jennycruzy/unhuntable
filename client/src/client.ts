@@ -43,6 +43,12 @@ export type Answer = Record<string, unknown>;
 
 // Checks below match the guard's own, so a bad request fails here before it costs a call.
 
+/** A trader tag: 64 lowercase hex characters. */
+export function checkTraderTag(t: string): string {
+  if (typeof t !== "string" || !/^[0-9a-f]{64}$/.test(t)) throw new TypeError("trader tag must be 64 lowercase hex characters");
+  return t;
+}
+
 export function checkShard(shard: string): string {
   if (typeof shard !== "string" || !/^[a-z0-9]{1,16}$/.test(shard)) {
     throw new TypeError("shard must be 1-16 lowercase letters/digits");
@@ -223,8 +229,15 @@ export class GuardClient {
   }
 
   /** Record which Hyperliquid master account the shard trades for. */
-  async register(p: { shard: string; master: string } & Routing): Promise<Answer> {
-    return this.sealed({ op: "register", shard: checkShard(p.shard), master: checkAddress(p.master) }, p);
+  /** owner: the trader tag the shard counts toward ("record"). The guard takes it only at a shard's first registration. */
+  async register(p: { shard: string; master: string; owner?: string } & Routing): Promise<Answer> {
+    const owner = p.owner === undefined ? {} : { owner: checkTraderTag(p.owner) };
+    return this.sealed({ op: "register", shard: checkShard(p.shard), master: checkAddress(p.master), ...owner }, p);
+  }
+
+  /** One trader's signed track record: every shard registered under the tag (EAS off-chain attestation). */
+  async record(p: { trader: string }): Promise<Answer> {
+    return this.sealed({ op: "record", trader: checkTraderTag(p.trader) });
   }
 
   /** Signed track-record totals across all registered shards (EAS off-chain attestation). */

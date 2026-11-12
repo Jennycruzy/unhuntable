@@ -9,6 +9,7 @@
 //     account, and posts the action to Hyperliquid.
 // It cannot make or change a request: the contract refuses anything the piece key did not
 // sign. The destinations of money moves are chosen in the browser (see web/lib/home.ts).
+import { traderTag } from "./tags.js";
 import {
   ADD_PIECE_DEPOSIT,
   BUILDER_FEE_RATE,
@@ -370,7 +371,7 @@ export async function approveAgentNow(ctx: Ctx, w: WalletRow): Promise<void> {
   }
   await runRequest(ctx, w, r);
   const agent = (JSON.parse(r.action_json) as { agentAddress: string }).agentAddress;
-  await ctx.guard.register(w.shard_id!, w.hl_address!);
+  await ctx.guard.register(w.shard_id!, w.hl_address!, traderTag(w.user_id));
   ctx.db.prepare("UPDATE pieces SET agent = ? WHERE id = ?").run(agent, w.id);
 }
 

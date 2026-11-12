@@ -12,6 +12,7 @@
 //              A piece whose policy is not locked is never opened.
 // closing:     the guard closes each piece, at VRF-staggered times inside 0-90 s unless now.
 
+import { traderTag } from "./tags.js";
 import {
   USDC_NEAR,
   VrfStream,
@@ -36,6 +37,7 @@ import { approveAgentNow, approveBuilderNow, isChainSig, moveToXyzNow, needsBrow
 import { BUILDER_FEE_SHARE, activeBuilder } from "./builder.js";
 import { OutLayerWalletError } from "./outlayer.js";
 import { balancePolicy, balanceSentence, buildBatch, lockSentence, piecePolicy, readBack, walletAccount, type BatchItem, type PolicyBatch } from "./policy.js";
+import { positionEvent } from "./events.js";
 import { ApiError, sentence, type RefusalCode } from "./refusals.js";
 
 export const EXIT_FEE_PER_PIECE = 1.2;
@@ -92,6 +94,8 @@ interface PositionRow {
   start_ms: number | null;
   error: string | null;
   created_ms: number;
+  copy_of: string | null;
+  result_json: string | null;
 }
 
 interface PieceRow {
@@ -249,8 +253,30 @@ export function balanceItem(ctx: Ctx, userId: string): BatchItem {
       hl_address: string;
     }[]
   ).map((r) => r.hl_address);
-  const policy = balancePolicy({ pieceAddresses: addrs, exitAddresses: ownerExitAddresses(ctx, userId, u.near_account), walletAccount: walletAccount(bal.wallet_pubkey), keyHash: bal.key_hash ?? "" });
-  return { wallet: bal, policy, sentence: balanceSentence(addrs.length, u.near_account) };
+  const payees = keyPayees(ctx, userId);
+  const policy = balancePolicy({
+    pieceAddresses: addrs,
+    exitAddresses: ownerExitAddresses(ctx, userId, u.near_account),
+    walletAccount: walletAccount(bal.wallet_pubkey),
+    keyHash: bal.key_hash ?? "",
+    payees: payees.map((p) => p.account),
+  });
+  const pays = payees.length ? ` It may also pay ${payees.map((p) => "@" + p.handle).join(", ")} for the keys you hold, day by day.` : "";
+  return { wallet: bal, policy, sentence: balanceSentence(addrs.length, u.near_account) + pays };
+}
+
+/** Traders whose keys this user pays: their private balance account (a wallet's own NEAR account). */
+export function keyPayees(ctx: Ctx, userId: string): { handle: string; account: string }[] {
+  const rows = ctx.db
+    .prepare(
+      `SELECT DISTINCT t.handle, p.wallet_pubkey FROM follow_keys k
+       JOIN traders t ON t.user_id = k.trader_id
+       JOIN pieces p ON p.user_id = k.trader_id AND p.kind = 'balance'
+       WHERE k.holder_id = ? AND k.state IN ('pending', 'active', 'paused') AND p.wallet_pubkey IS NOT NULL
+       ORDER BY t.handle`,
+    )
+    .all(userId) as { handle: string; wallet_pubkey: string }[];
+  return rows.map((r) => ({ handle: r.handle, account: walletAccount(r.wallet_pubkey) }));
 }
 
 /** True when the private balance is locked but its stored list misses a piece of this position. */
@@ -307,7 +333,7 @@ async function answer(ctx: Ctx, pos: PositionRow) {
 // ------------------------------------------------------------ confirm and continue
 
 /** reuseOnly: only pieces the owner already set up (agents cannot make pieces). agentKeyId: the agent that opened it. */
-export async function createPosition(ctx: Ctx, userId: string, body: PlanBody, opts: { reuseOnly?: boolean; agentKeyId?: string } = {}) {
+export async function createPosition(ctx: Ctx, userId: string, body: PlanBody, opts: { reuseOnly?: boolean; agentKeyId?: string; copyOf?: string } = {}) {
   userRow(ctx, userId);
   balanceWallet(ctx, userId);
   const id = newId();
@@ -325,10 +351,10 @@ export async function createPosition(ctx: Ctx, userId: string, body: PlanBody, o
     if (opts.reuseOnly && free.length < p.pieces.length) throw new ApiError("agent_needs_pieces", { need: p.pieces.length, have: free.length });
     ctx.db
       .prepare(
-        `INSERT INTO positions (id, user_id, coin, side, notional_usd, leverage, hiding, state, plan_json, vrf_hex, vrf_proof, vrf_alpha, created_ms, network, agent_key_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'planned', ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO positions (id, user_id, coin, side, notional_usd, leverage, hiding, state, plan_json, vrf_hex, vrf_proof, vrf_alpha, created_ms, network, agent_key_id, copy_of)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'planned', ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(id, userId, body.coin, body.side, body.notionalUsd, body.leverage, body.hiding, JSON.stringify(p), draw.outputHex, draw.proof, draw.alpha, ctx.now(), ctx.network, opts.agentKeyId ?? null);
+      .run(id, userId, body.coin, body.side, body.notionalUsd, body.leverage, body.hiding, JSON.stringify(p), draw.outputHex, draw.proof, draw.alpha, ctx.now(), ctx.network, opts.agentKeyId ?? null, opts.copyOf ?? null);
     let n = nextPieceNumber(ctx, userId);
     p.pieces.forEach((x, i) => {
       let pieceId: string;
@@ -464,7 +490,7 @@ async function approvePiece(ctx: Ctx, pos: PositionRow, pp: PieceRow): Promise<b
     const a = approveAgent(agent, `unhuntable ${piece.shard_id}`, ctx.now());
     const sig = await ctx.wallet.signTypedData(piece.wallet_id!, "arbitrum", typedDataJson(a.typed));
     await ctx.hl.exchange(exchangeBody(a.action as unknown as Value, a.nonce, splitSignature(sig.signature), false));
-    await ctx.guard.register(piece.shard_id!, piece.hl_address!);
+    await ctx.guard.register(piece.shard_id!, piece.hl_address!, traderTag(piece.user_id));
     ctx.db.prepare("UPDATE pieces SET agent = ?, hl_master = ? WHERE id = ?").run(agent, piece.hl_address, piece.id);
     guardOk(ctx, pos.id);
   }
@@ -561,6 +587,7 @@ async function step(ctx: Ctx, pos: PositionRow): Promise<void> {
     const pps = pieceRows(ctx, pos.id);
     if (pps.every((pp) => pp.state === "open")) {
       ctx.db.prepare("UPDATE positions SET state = 'open', error = NULL WHERE id = ?").run(pos.id);
+      positionEvent(ctx, pos.id, "open");
       return;
     }
     const later = pps.filter((pp) => pp.state === "funded").map((pp) => (pos.start_ms ?? 0) + pp.entry_offset_ms);
@@ -590,6 +617,7 @@ async function step(ctx: Ctx, pos: PositionRow): Promise<void> {
     if (pps.every((pp) => pp.state === "closed")) {
       setState(ctx, pos.id, "closed");
       addAlert(ctx, pos.user_id, `Your ${pos.coin} position is closed.`, pos.id);
+      positionEvent(ctx, pos.id, "closed");
       return;
     }
     const left = pps.filter((pp) => pp.state !== "closed").map((pp) => pp.close_at_ms ?? now);
@@ -620,7 +648,14 @@ export function closePosition(ctx: Ctx, userId: string, id: string, now?: boolea
     ctx.db.prepare("UPDATE positions SET state = 'closing', close_now = ? WHERE id = ?").run(now ? 1 : 0, id);
   })();
   schedule(ctx, id, ctx.now());
+  positionEvent(ctx, id, "closing");
   return { ok: true as const, state: "closing" as const };
+}
+
+/** Who a copy copies: the trader's name only. */
+function copiedFrom(ctx: Ctx, leaderPositionId: string): { handle: string } | null {
+  const r = ctx.db.prepare("SELECT t.handle FROM positions x JOIN traders t ON t.user_id = x.user_id WHERE x.id = ?").get(leaderPositionId) as { handle: string } | undefined;
+  return r ? { handle: r.handle } : null;
 }
 
 export function listPositions(ctx: Ctx, userId: string) {
@@ -633,6 +668,8 @@ export function listPositions(ctx: Ctx, userId: string) {
       notionalUsd: p.notional_usd,
       leverage: p.leverage,
       hiding: p.hiding,
+      copyOf: p.copy_of ? copiedFrom(ctx, p.copy_of) : null,
+      result: p.result_json ? (JSON.parse(p.result_json) as { pnlUsd: number; feesUsd: number }) : null,
       state: p.state,
       createdMs: p.created_ms,
       pieces: pieceRows(ctx, p.id).map((pp) => {

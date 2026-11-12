@@ -24,6 +24,33 @@ export interface AgentPosition {
   pieces: AgentPiece[];
 }
 
+/** What anyone may see of a trader: no position, address, stop or level. */
+export interface TraderCard {
+  handle: string;
+  copyUsdDay: number;
+  viewUsdDay: number;
+  open: boolean;
+  copiers: number;
+  viewers: number;
+  closedTrades: number;
+  wins: number;
+  resultUsd: string;
+  record: { shards: number; pnlUsd: number; asOfMs: number } | null;
+}
+
+export interface ClosedTrade {
+  coin: string;
+  side: "long" | "short";
+  notionalUsd: number;
+  leverage: number;
+  openedMs: number;
+  closedMs: number | null;
+  entryPx: number | null;
+  exitPx: number | null;
+  pnlUsd: string | null;
+  feesUsd: string | null;
+}
+
 export interface OpenRequest {
   coin: string;
   side: "long" | "short";
@@ -105,6 +132,24 @@ export class AgentApi {
     const { boxPub } = await this.boxPub();
     const boxes = stopBoxes(boxPub, p, trigger, jitterBps, random);
     return this.call<{ ok: true; sealed: number }>(this.paidFetch, "POST", `/api/agent/positions/${encodeURIComponent(positionId)}/stop`, { boxes });
+  }
+
+  /** Public trader cards: prices, counts, closed results and the guard's signed record. Free. */
+  async traders(): Promise<{ traders: TraderCard[] }> {
+    const res = await this.plainFetch(this.base + "/api/traders", { headers: { Accept: "application/json" } });
+    const j = (await res.json().catch(() => null)) as { traders?: TraderCard[]; error?: string; message?: string } | null;
+    if (!res.ok || !j || !Array.isArray(j.traders)) throw new AgentApiError(String(j?.error ?? "bad_reply"), String(j?.message ?? `HTTP ${res.status}`), res.status);
+    return { traders: j.traders };
+  }
+
+  /** Closed trades of a trader the owner holds a key to. One paid call. */
+  trades(handle: string) {
+    return this.call<{ handle: string; trades: ClosedTrade[] }>(this.paidFetch, "GET", `/api/agent/traders/${encodeURIComponent(handle)}/trades`);
+  }
+
+  /** Ask the owner for a key; it waits for their approval in the app. One paid call. */
+  askKey(r: { handle: string; kind: "copy" | "view"; copyUsd?: number }) {
+    return this.call<{ keyId: string; state: string }>(this.paidFetch, "POST", "/api/agent/follow", r);
   }
 
   close(positionId: string, now = false) {

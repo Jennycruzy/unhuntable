@@ -121,9 +121,56 @@ function positions(scenario) {
             ? [{ text: "The guard isn't answering. Your positions are open on Hyperliquid; stops can't fire until it's back. You can close now.", ms: 1767226200000 }]
             : [{ text: "Both pieces are open.", ms: 1767225900000 }],
       },
+      ...(scenario === "copy_wait"
+        ? [
+            {
+              id: "pos2",
+              coin: "ETH",
+              side: "long",
+              notionalUsd: 30,
+              leverage: 3,
+              hiding: "whale",
+              state: "policy_wait",
+              createdMs: 1767226000000,
+              copyOf: { handle: "alice_trades" },
+              pieces: [
+                { label: "piece:2", shard: "s2", size: 0.0045, entryPx: null, liqDistance: null, hasStop: false, hasTp: false, guard },
+                { label: "piece:3", shard: "s3", size: 0.0045, entryPx: null, liqDistance: null, hasStop: false, hasTp: false, guard },
+              ],
+              alerts: [{ text: "Copying @alice_trades: your ETH long of $30.00 needs your approval once.", ms: 1767226000000 }],
+            },
+          ]
+        : []),
     ],
   };
 }
+
+// Followers: one trader everyone sees, and the keys bought in this test run, by session.
+const TRADER_CARD = {
+  handle: "alice_trades",
+  tag: "ab".repeat(32),
+  copyUsdDay: 0.5,
+  viewUsdDay: 0.1,
+  open: true,
+  sinceMs: 1767225600000,
+  copiers: 2,
+  viewers: 3,
+  closedTrades: 4,
+  wins: 3,
+  resultUsd: "2.40",
+  record: {
+    trader: "ab".repeat(32),
+    shards: 6,
+    equityUsd: 0,
+    netDepositsUsd: -2.1,
+    pnlUsd: 2.1,
+    outlayerCall: "call-1",
+    asOfMs: 1767226000000,
+    eas: { chainId: 8453, schema: "uint64 asOf,bytes32 trader,uint32 shards,int64 equityMicroUsd,int64 netDepositsMicroUsd,int64 pnlMicroUsd,string outlayerCall", signer: "0x" + "77".repeat(20) },
+  },
+};
+const followKeys = new Map();
+const traderProfiles = new Map();
 
 function api(method, path, body, c) {
   const scenario = c.scenario ?? "ok";
@@ -141,6 +188,9 @@ function api(method, path, body, c) {
           ? null
           : { address: "0x5b5d51203a0f9079f8aeb098a6523a13f298c060", coin: "ETH", side: "short", sizeUsd: 213452000, entryPx: 2322.71, liqPx: 3893.16, markPx: 3401.2, stopPx: null, asOfMs: Date.now() - 120_000 },
     });
+  // public: traders
+  if (method === "GET" && path === "/api/traders") return ok({ traders: scenario === "no_traders" ? [] : [TRADER_CARD] });
+  if (method === "GET" && path === "/api/traders/alice_trades") return ok({ trader: TRADER_CARD });
   // public: the Hunt us challenge
   if (method === "GET" && path === "/api/hunt-us")
     return ok({ challenge: scenario === "no_hunt" ? null : { coin: "ETH", count: 3, shown: "0x" + "a1".repeat(20), seconds: 90 } });
@@ -278,6 +328,38 @@ function api(method, path, body, c) {
     return ok({ ok: true, locked: ["piece:0", "piece:1"], unlocked: [] });
   }
   if (method === "GET" && path === "/api/positions") return ok(positions(scenario));
+  if (method === "POST" && path === "/api/traders/alice_trades/record") return ok({ trader: TRADER_CARD });
+  if (method === "GET" && path === "/api/traders/alice_trades/trades") {
+    const on = (followKeys.get(c.sid) ?? []).some((k) => k.state === "active");
+    if (!on) return fail(403, "key_needed", "Closed trades are shown to holders of a key to this trader that is on.");
+    return ok({ handle: "alice_trades", trades: [{ coin: "BTC", side: "short", notionalUsd: 101, leverage: 5, openedMs: 1767225000000, closedMs: 1767226000000, entryPx: 70000, exitPx: 69100, pnlUsd: "1.25", feesUsd: "0.10" }] });
+  }
+  if (method === "GET" && path === "/api/trader") return ok({ trader: traderProfiles.get(c.sid) ?? null });
+  if (method === "POST" && path === "/api/trader") {
+    if (body.handle === "alice_trades") return fail(409, "handle_taken", "Another trader already uses that name. Pick another.");
+    const t = { ...TRADER_CARD, handle: body.handle, copyUsdDay: body.copyUsdDay, viewUsdDay: body.viewUsdDay, open: body.open, copiers: 0, viewers: 0, closedTrades: 0, wins: 0, resultUsd: "0.00", record: null, earnedUsd: "0.00", payments: 0 };
+    traderProfiles.set(c.sid, t);
+    return ok({ trader: t });
+  }
+  if (method === "GET" && path === "/api/follow") return ok({ keys: followKeys.get(c.sid) ?? [] });
+  if (method === "POST" && path === "/api/follow") {
+    const keys = followKeys.get(c.sid) ?? [];
+    const k = { id: `key${keys.length + 1}`, handle: body.handle, kind: body.kind, state: "pending", on: false, usdDay: body.kind === "copy" ? 0.5 : 0.1, copyUsd: body.copyUsd ?? null, paidThroughMs: null, pauseReason: null, paidUsd: "0.00", copies: [] };
+    followKeys.set(c.sid, [k, ...keys]);
+    return ok({ keyId: k.id, state: "pending", policyBatch: policyBatch("lock") });
+  }
+  {
+    const m = /^\/api\/follow\/([^/]+)\/(confirm|stop|resume|batch)$/.exec(path);
+    if (method === "POST" && m) {
+      const k = (followKeys.get(c.sid) ?? []).find((x) => x.id === m[1]);
+      if (!k) return fail(404, "not_found", "There is nothing here.");
+      if (m[2] === "batch") return ok({ policyBatch: policyBatch("lock") });
+      if (m[2] === "confirm") Object.assign(k, { state: "active", on: true, paidUsd: String(k.usdDay.toFixed(2)), paidThroughMs: Date.now() + 86_400_000 });
+      if (m[2] === "stop") Object.assign(k, { state: "stopped", on: false });
+      if (m[2] === "resume") Object.assign(k, { state: "active", on: true });
+      return ok({ ok: true, keyId: k.id, state: k.state });
+    }
+  }
   if (method === "GET" && /^\/api\/positions\/[^/]+\/hunter$/.test(path)) {
     if (scenario === "hunter_down") return fail(500, "internal", "Something went wrong on our side. Try again.");
     const account = (address, valueUsd, liqPx) => ({ address, side: "long", size: 0.0456, valueUsd, entryPx: 3290.5, liqPx, leverage: 3, restingOrders: 0, triggerPxs: [] });

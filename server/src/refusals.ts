@@ -65,6 +65,12 @@ export const API_ERRORS = {
   ai_hunt_needs_pieces: "The AI hunter needs a position split across at least two pieces.",
   ai_hunt_busy: "Another AI hunt is running right now. Try again in a minute.",
   ai_hunt_limit: "You have used today's {perDay} AI hunts. More open in 24 hours.",
+  trader_not_found: "There is no trader with that name.",
+  handle_taken: "Another trader already uses that name. Pick another.",
+  follow_self: "You can't buy a key to your own trading.",
+  trader_closed: "This trader is not selling keys right now.",
+  key_exists: "You already hold this kind of key to this trader. Stop it first to buy it again.",
+  key_needed: "Closed trades are shown to holders of a key to this trader that is on.",
 } as const;
 
 export type RefusalCode = keyof typeof REFUSALS;
@@ -111,6 +117,12 @@ export const HTTP_STATUS: Record<ErrorCode, number> = {
   ai_hunt_needs_pieces: 409,
   ai_hunt_busy: 409,
   ai_hunt_limit: 429,
+  trader_not_found: 404,
+  handle_taken: 409,
+  follow_self: 400,
+  trader_closed: 409,
+  key_exists: 409,
+  key_needed: 403,
   bad_request: 400,
   not_found: 404,
   not_signed_in: 401,

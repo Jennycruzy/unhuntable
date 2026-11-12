@@ -33,6 +33,9 @@ costs nothing.
 | `unhuntable_set_stop` | `{positionId, stopPrice}`: seal the stop for every piece | 2 (status, then the seal) |
 | `unhuntable_status` | This agent's positions, with no stop levels | 1 |
 | `unhuntable_close` | `{positionId, now}`: close, spread over 90 s or at once | 1 |
+| `unhuntable_traders` | Traders who sell keys: prices, counts, closed results, the guard-signed record | 0 |
+| `unhuntable_trader_trades` | `{handle}`: closed trades of a trader the owner holds a key to | 1 |
+| `unhuntable_follow` | `{handle, kind, copyUsd?}`: ask the owner for a copy or viewing key; it waits for their approval in the app | 1 |
 
 ## Paying per call
 

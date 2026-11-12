@@ -64,9 +64,12 @@ export function piecePolicy(p: { evmAddress: string; owner: string; walletAccoun
  */
 export const INTENTS_CONTRACT = "intents.near";
 
-/** The private balance: every piece's EVM address, the owner's exit addresses, its own NEAR account and NEAR Intents. */
-export function balancePolicy(p: { pieceAddresses: string[]; exitAddresses: string[]; walletAccount: string; keyHash: string }): Policy {
-  const list = [...new Set([...p.pieceAddresses.map((a) => a.toLowerCase()), ...p.exitAddresses, p.walletAccount, INTENTS_CONTRACT])];
+/**
+ * The private balance: every piece's EVM address, the owner's exit addresses, its own NEAR account,
+ * NEAR Intents, and the private balances of the traders whose keys the owner pays (payees).
+ */
+export function balancePolicy(p: { pieceAddresses: string[]; exitAddresses: string[]; walletAccount: string; keyHash: string; payees?: string[] }): Policy {
+  const list = [...new Set([...p.pieceAddresses.map((a) => a.toLowerCase()), ...p.exitAddresses, p.walletAccount, INTENTS_CONTRACT, ...(p.payees ?? [])])];
   return policy(list, p.keyHash, false);
 }
 

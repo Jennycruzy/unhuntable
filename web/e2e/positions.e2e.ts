@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, shot, test } from "./fixtures";
+import { expect, restoreKey, shot, test } from "./fixtures";
 
 test("guard unreachable shows the sentence and a Close now button", async ({ page, apiRequests, signedIn }, info) => {
   await signedIn("guard_down");
@@ -86,4 +86,17 @@ test("the owner switches auto-refill on with a daily limit", async ({ page, apiR
   const sent = apiRequests.find((r) => r.method === "POST" && r.url.endsWith("/api/settings"))!;
   expect(JSON.parse(sent.body!)).toEqual({ autoRefill: true, refillCapUsdPerDay: 40 });
   await shot(page, "positions-refills", info.project.name);
+});
+
+test("a copy says whose trade it copies, and a first copy starts with one wallet approval", async ({ page, apiRequests, signedIn, walletCalls }) => {
+  await signedIn("copy_wait");
+  await restoreKey(page);
+  await page.goto("/positions/");
+  await expect(page.getByTestId("copy-of")).toHaveText("Copy of @alice_trades: it closes when theirs closes.");
+  const start = page.getByTestId("start-copy");
+  await expect(start).toContainText("Your copy of @alice_trades");
+  await start.getByRole("button", { name: "Start my copy" }).click();
+  await expect.poll(async () => (await walletCalls(page)).filter((c) => c.kind === "send").length).toBe(1);
+  expect(apiRequests.some((r) => r.url.endsWith("/api/positions/pos2/continue"))).toBe(true);
+  await expect.poll(() => apiRequests.some((r) => r.url.endsWith("/api/policy/confirm"))).toBe(true);
 });

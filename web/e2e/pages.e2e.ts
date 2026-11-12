@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { ORIGIN, expect, shot, test } from "./fixtures";
 
-const PAGES = ["/", "/signin/", "/setup/", "/deposit/", "/trade/", "/positions/", "/home/", "/hunt-map/", "/agents/", "/hunt-us/"];
+const PAGES = ["/", "/signin/", "/setup/", "/deposit/", "/trade/", "/positions/", "/home/", "/hunt-map/", "/agents/", "/hunt-us/", "/traders/"];
 
 test("every page loads scripts only from our own origin, under a strict CSP", async ({ page, apiRequests, signedIn, outside }, info) => {
   void apiRequests;

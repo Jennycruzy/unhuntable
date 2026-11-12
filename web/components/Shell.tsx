@@ -4,13 +4,14 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { localRelock } from "../lib/relock";
 import { SessionProvider, useSession } from "../lib/session";
-import { IconDeposit, IconHome, IconPositions, IconStart, IconTrade, Mark } from "./icons";
+import { IconDeposit, IconHome, IconPositions, IconStart, IconTrade, IconTraders, Mark } from "./icons";
 
 const LINKS = [
   { href: "/", name: "Start", icon: IconStart },
   { href: "/deposit/", name: "Deposit", icon: IconDeposit },
   { href: "/trade/", name: "Trade", icon: IconTrade },
   { href: "/positions/", name: "Positions", icon: IconPositions },
+  { href: "/traders/", name: "Traders", icon: IconTraders },
   { href: "/home/", name: "Send home", icon: IconHome },
 ];
 

@@ -54,6 +54,12 @@ export interface VrfDraw {
   alpha: string;
 }
 
+/** A trader's totals as the guard signed them, and the attestation itself. */
+export interface TraderRecord {
+  eas: Record<string, unknown>;
+  totals: { trader: string; shards: number; equityUsd: number; netDepositsUsd: number; pnlUsd: number; outlayerCall: string };
+}
+
 /** Where an order belongs, so the fill is recorded against the right piece. */
 export interface OrderContext {
   positionId: string;
@@ -63,7 +69,10 @@ export interface OrderContext {
 export interface GuardOps {
   boxPub(): Promise<string>;
   agent(shard: string): Promise<string>;
-  register(shard: string, master: string): Promise<void>;
+  /** owner: the trader tag this shard counts toward; the guard takes it only at first registration. */
+  register(shard: string, master: string, owner?: string): Promise<void>;
+  /** One trader's signed track record (EAS off-chain attestation). */
+  traderRecord(trader: string): Promise<TraderRecord>;
   leverage(shard: string, coin: Coin, leverage: number): Promise<void>;
   open(shard: string, coin: Coin, side: Side, size: number, ctx: OrderContext, opts?: { builder?: boolean }): Promise<Fill>;
   /** The builder address the guard was built with, or null. */
@@ -218,9 +227,25 @@ export class GuardAdapter implements GuardOps {
     return out.agent.toLowerCase();
   }
 
-  async register(shard: string, master: string): Promise<void> {
+  async register(shard: string, master: string, owner?: string): Promise<void> {
     await this.boxPub();
-    await this.run("register", shard, () => this.client.register({ shard, master }));
+    await this.run("register", shard, () => this.client.register({ shard, master, ...(owner ? { owner } : {}) }));
+  }
+
+  async traderRecord(trader: string): Promise<TraderRecord> {
+    return this.run("record", null, async () => {
+      const out = await this.sealed({ op: "record", trader });
+      const eas = out.eas as Record<string, unknown> | undefined;
+      const t = out.totals as Record<string, unknown> | undefined;
+      const n = (x: unknown) => (typeof x === "number" && Number.isFinite(x) ? x : NaN);
+      if (!eas || typeof eas.signature !== "object" || !t || t.trader !== trader || [t.shards, t.equity_usd, t.net_deposits_usd, t.pnl_usd].some((x) => Number.isNaN(n(x)))) {
+        throw new GuardUnreachable("guard record answer is not in the expected shape");
+      }
+      return {
+        eas,
+        totals: { trader, shards: n(t.shards), equityUsd: n(t.equity_usd), netDepositsUsd: n(t.net_deposits_usd), pnlUsd: n(t.pnl_usd), outlayerCall: String(t.outlayer_call ?? "") },
+      };
+    });
   }
 
   async leverage(shard: string, coin: Coin, leverage: number): Promise<void> {

@@ -10,7 +10,7 @@ No keys, no wallet, no money, no network. Each step is "do this → you see that
 cd guard && cargo test --lib --test guard_tests
 ```
 
-→ `test result: ok. 41 passed`. These include `moving_the_xyz_book_alone_cannot_fire_a_stock_stop`, `stocks_need_two_outside_sources`, `trade_xyz_leverage_and_open_match_reference_sdk`, `one_bad_feed_cannot_fire`, `real_crash_fires_once`, `stop_level_never_in_output`, `guard_has_no_transfer_path`, `defence_ladder_steps`, and signature tests that match Hyperliquid's official Python SDK byte for byte (`order_signatures_match_reference_sdk`, `usd_send_digest_matches_reference_sdk`) and EAS's official SDK (`eas_offchain_attestation_matches_sdk`).
+→ `test result: ok. 44 passed`. These include `moving_the_xyz_book_alone_cannot_fire_a_stock_stop`, `stocks_need_two_outside_sources`, `trade_xyz_leverage_and_open_match_reference_sdk`, `one_bad_feed_cannot_fire`, `real_crash_fires_once`, `stop_level_never_in_output`, `guard_has_no_transfer_path`, `defence_ladder_steps`, and signature tests that match Hyperliquid's official Python SDK byte for byte (`order_signatures_match_reference_sdk`, `usd_send_digest_matches_reference_sdk`) and EAS's official SDK (`eas_offchain_attestation_matches_sdk`, and `trader_record_matches_sdk` for one trader's record).
 
 **2. The client library, the planner and the exit tool** (Node 20+):
 
@@ -18,7 +18,7 @@ cd guard && cargo test --lib --test guard_tests
 cd client && npm ci && npm test
 ```
 
-→ `174 passed`. The sealed-box tests open a box made by the Rust guard's reference and make one the guard opens (`sealed_call_from_ts_client_opens` on the Rust side). The planner's property tests check hundreds of random positions: sizes add up exactly, every piece is above Hyperliquid's $10 minimum, and no piece needs money from another. The exit tests check that the 12 words and the private key are never sent anywhere. The Chain Signatures tests (`chainsig.test.ts`) match the signer contract's hashes, rebuild the exact message piece C signed on mainnet, and recover NEAR's real MPC signature for it to piece C's Hyperliquid account.
+→ `179 passed`. The sealed-box tests open a box made by the Rust guard's reference and make one the guard opens (`sealed_call_from_ts_client_opens` on the Rust side). The planner's property tests check hundreds of random positions: sizes add up exactly, every piece is above Hyperliquid's $10 minimum, and no piece needs money from another. The exit tests check that the 12 words and the private key are never sent anywhere. The Chain Signatures tests (`chainsig.test.ts`) match the signer contract's hashes, rebuild the exact message piece C signed on mainnet, and recover NEAR's real MPC signature for it to piece C's Hyperliquid account.
 
 **3. The server and its money flows:**
 
@@ -26,7 +26,7 @@ cd client && npm ci && npm test
 cd client && npm run build && cd ../server && npm ci && npm test
 ```
 
-→ `232 passed`. Sign-in with a NEP-413 signature, encrypted wallet keys, deposits, funding, policy batches and read-back, ticks, refills and going home, with fake clocks and recorded replies. `chainsig.test.ts` runs a position and a trip home on NEAR-controlled pieces against a fake contract and MPC network that check signatures the way the real ones do; it refuses another key's signature, a wrong counter, a send back to perps and any token but USDC, and its relay transactions match near-api-js byte for byte.
+→ `256 passed`. Sign-in with a NEP-413 signature, encrypted wallet keys, deposits, funding, policy batches and read-back, ticks, refills and going home, with fake clocks and recorded replies. `chainsig.test.ts` runs a position and a trip home on NEAR-controlled pieces against a fake contract and MPC network that check signatures the way the real ones do; it refuses another key's signature, a wrong counter, a send back to perps and any token but USDC, and its relay transactions match near-api-js byte for byte. `followers.test.ts` buys keys with one wallet approval that lists the trader in the balance lock, pays each day by private transfer to the trader's private balance only, pauses on a refused payment, copies a trader's crypto position into the follower's own pieces after a random delay and closes it with the trader's, never copies stocks or for a key that is off, shows closed trades only to key holders, and reads results from Hyperliquid's fills.
 
 **4. The signer contract** (Rust, needs `rustup`):
 
@@ -42,7 +42,7 @@ cd signer && cargo test
 cd web && npm ci && npm test && npm run build && npx playwright test
 ```
 
-→ 55 unit tests, then every screen in headless Chromium at 360×780 and 1280×800, with all outside requests blocked. Screenshots land in `web/screenshots/`.
+→ 59 unit tests, then every screen in headless Chromium at 360×780 and 1280×800, with all outside requests blocked. Screenshots land in `web/screenshots/`.
 
 **6. The MCP server for AI agents:**
 
@@ -50,7 +50,7 @@ cd web && npm ci && npm test && npm run build && npx playwright test
 cd client && npm run build && cd ../agent && npm ci && npm test
 ```
 
-→ `12 passed`. Stops sealed on the agent's machine open only with the guard's key; a full MCP session opens, seals, reads status and closes; no tool answer and no request ever carries the stop price; the PingPay payer quotes, deposits once and retries while NEAR Intents settles.
+→ `13 passed`. Stops sealed on the agent's machine open only with the guard's key; a full MCP session opens, seals, reads status and closes; no tool answer and no request ever carries the stop price; the PingPay payer quotes, deposits once and retries while NEAR Intents settles; the follower tools read traders for free, closed trades as a paid call, and ask the owner for a key.
 
 **7. The exit tool is exactly its source:**
 

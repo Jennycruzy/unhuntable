@@ -340,6 +340,10 @@ export interface Position {
   needChainSig?: string[];
   fillSavingsUsd?: string | number;
   alerts: Alert[];
+  /** A copy of a trader's position: the trader's name. */
+  copyOf?: { handle: string } | null;
+  /** Realized result once closed, read from Hyperliquid's fills. */
+  result?: { pnlUsd: number; feesUsd: number } | null;
 }
 
 export interface SealedBox {
@@ -375,4 +379,67 @@ export interface HomeState {
   relockBatch: PolicyBatch | null;
   needChainSig?: boolean;
   arrivedUsdc?: string;
+}
+
+// ------------------------------------------------------------ followers
+
+/** The guard's signed totals for one trader (EAS off-chain attestation). */
+export interface TraderRecord {
+  trader: string;
+  shards: number;
+  equityUsd: number;
+  netDepositsUsd: number;
+  pnlUsd: number;
+  outlayerCall: string;
+  asOfMs: number;
+  eas: Record<string, unknown>;
+}
+
+/** What anyone may see of a trader: no position, address, stop or level. */
+export interface TraderCard {
+  handle: string;
+  tag: string;
+  copyUsdDay: number;
+  viewUsdDay: number;
+  open: boolean;
+  sinceMs: number;
+  copiers: number;
+  viewers: number;
+  closedTrades: number;
+  wins: number;
+  resultUsd: string;
+  record: TraderRecord | null;
+}
+
+export interface MyTrader {
+  trader: (TraderCard & { earnedUsd: string; payments: number }) | null;
+}
+
+export interface ClosedTrade {
+  coin: string;
+  side: Side;
+  notionalUsd: number;
+  leverage: number;
+  openedMs: number;
+  closedMs: number | null;
+  entryPx: number | null;
+  exitPx: number | null;
+  pnlUsd: string | null;
+  feesUsd: string | null;
+}
+
+export type KeyKind = "copy" | "view";
+
+export interface FollowKey {
+  id: string;
+  handle: string;
+  kind: KeyKind;
+  state: "pending" | "active" | "paused" | "stopped";
+  on: boolean;
+  usdDay: number;
+  copyUsd: number | null;
+  paidThroughMs: number | null;
+  pauseReason: string | null;
+  paidUsd: string;
+  copies: { state: string; positionId: string | null; reason: string | null; ms: number }[];
 }

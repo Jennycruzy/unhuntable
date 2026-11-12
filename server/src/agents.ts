@@ -18,6 +18,7 @@ import type { Ctx } from "./ctx.js";
 import { newId } from "./db.js";
 import { GuardUnreachable } from "./guard.js";
 import { CloseBody, PlanBody, StopBody, closePosition, createPosition, forwardStops, freePieces, listPositions, previewPlan } from "./positions.js";
+import { FollowBody, HANDLE, agentAskKey, closedTrades, traderCard } from "./followers.js";
 import { ApiError } from "./refusals.js";
 import type { Paid, Paywall } from "./x402.js";
 
@@ -254,6 +255,26 @@ export function registerAgentRoutes(app: FastifyInstance, ctx: Ctx, paywall?: Pa
   };
 
   app.get("/api/agent/positions", async (req, reply) => paidCall(req, reply, "status", () => undefined, async (k) => ({ out: agentStatus(ctx, k) })));
+
+  // Followers: closed trades of a trader the owner holds a key to, and asking the owner for a key.
+  const handleOf = (req: FastifyRequest): string => parse(z.string().regex(HANDLE), (req.params as { handle?: string }).handle);
+  app.get("/api/agent/traders/:handle/trades", async (req, reply) => {
+    const h = handleOf(req);
+    return paidCall(req, reply, "trades", () => void traderCard(ctx, h), async (k) => ({ out: closedTrades(ctx, k.user_id, h) }));
+  });
+  app.post("/api/agent/follow", async (req, reply) => {
+    const body = parse(FollowBody, req.body);
+    return paidCall(
+      req,
+      reply,
+      "follow",
+      (k) => {
+        traderCard(ctx, body.handle);
+        if (body.kind === "copy" && body.copyUsd! > k.max_notional_usd) throw new ApiError("agent_limit", { reason: `its largest size is $${k.max_notional_usd}` });
+      },
+      async (k) => ({ out: agentAskKey(ctx, k.user_id, k.name, k.max_notional_usd, body) }),
+    );
+  });
 
   app.post("/api/agent/positions", async (req, reply) => {
     const body = parse(AgentOpen, req.body);

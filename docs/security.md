@@ -20,6 +20,8 @@ Who could cheat and why they cannot, who sees what, the attacks we ran on our ow
 
 The private balance's policy also lists `intents.near`, because OutLayer runs every deposit into a wallet as a call to it; without it, no money could come back into a locked balance. That lets the server's key make calls to `intents.near` as the balance wallet, which reach only its public Intents balance. Deposits land in the confidential balance, so that public balance stays empty, and money in the confidential balance still moves only to your pieces and your own addresses.
 
+When you buy a key to a trader, the lock also lists that trader's private balance, and your wallet signs it. That lets the server's key send private transfers to that trader, which is how a key is paid day by day. It can pay no other trader, and none at all you did not approve; stopping a key stops the payments, and the trader leaves the list the next time your lock is rebuilt. [Followers](followers.md)
+
 What you do trust: OutLayer's enclave holds the keys, and runs the guard build that our project names on `outlayer.near`. Which build that is, and every build we ever published, is public on NEAR: `get_project` answers the active build's hash and `list_versions` lists each build with its hash and the address of the exact file, so anyone can download the file OutLayer runs and check its hash. The active build is `9fcd15a7…`, built from [`guard/`](../guard/) at commit `045d307`. Steps: [Check it yourself](check-it-yourself.md), step 9.
 
 ## Privacy: who sees what

@@ -47,6 +47,17 @@ function fakeApi() {
       if (s.body.notionalUsd > 100) return json({ error: "agent_limit", message: "This agent key does not allow that: its largest size is $100." }, 403);
       return json({ positionId: POS_ID, state: "funding", ...paid });
     }
+    if (s.url === "/api/traders") {
+      return json({
+        traders: [
+          { handle: "alice_trades", copyUsdDay: 0.5, viewUsdDay: 0.1, open: true, copiers: 2, viewers: 3, closedTrades: 4, wins: 3, resultUsd: "2.40", record: { shards: 6, pnlUsd: 2.1, asOfMs: 1 } },
+        ],
+      });
+    }
+    if (s.url === "/api/agent/traders/alice_trades/trades") {
+      return json({ handle: "alice_trades", trades: [{ coin: "BTC", side: "short", notionalUsd: 101, leverage: 5, openedMs: 1, closedMs: 2, entryPx: 70000, exitPx: 69100, pnlUsd: "1.25", feesUsd: "0.10" }], ...paid });
+    }
+    if (s.url === "/api/agent/follow") return json({ keyId: "k1", state: "pending", ...paid });
     if (s.url.endsWith("/stop")) return json({ ok: true, sealed: s.body.boxes.length, ...paid });
     if (s.url.endsWith("/close")) return json({ ok: true, state: "closing", ...paid });
     return json({ error: "not_found", message: "There is nothing here." }, 404);
@@ -72,7 +83,7 @@ describe("sealing a stop on the agent's machine", () => {
     const boxes = stopBoxes(GUARD_PUB, position(), STOP, 20);
     expect(boxes.map((b) => b.shard)).toEqual(["0123456789abcdef", "fedcba9876543210"]);
     for (const b of boxes) {
-      expect(JSON.stringify(b)).not.toContain("2987");
+      expect(JSON.stringify(b)).not.toContain(String(STOP));
       const inner = JSON.parse(boxOpen(GUARD_SECRET, b.box, CALL_AAD).toString("utf8"));
       expect(inner).toMatchObject({ op: "seal", shard: b.shard, stop: { coin: "ETH", side: "long", trigger: STOP, size: 0.006 }, jitter_bps: 20 });
     }
@@ -86,10 +97,32 @@ describe("sealing a stop on the agent's machine", () => {
 });
 
 describe("the MCP server", () => {
-  it("lists four tools, none of which reads a stop back", async () => {
+  it("lists seven tools, none of which reads a stop back", async () => {
     const { client } = await connect();
     const tools = (await client.listTools()).tools.map((t) => t.name).sort();
-    expect(tools).toEqual(["unhuntable_close", "unhuntable_open", "unhuntable_set_stop", "unhuntable_status"]);
+    expect(tools).toEqual([
+      "unhuntable_close",
+      "unhuntable_follow",
+      "unhuntable_open",
+      "unhuntable_set_stop",
+      "unhuntable_status",
+      "unhuntable_trader_trades",
+      "unhuntable_traders",
+    ]);
+  });
+
+  it("reads traders for free, closed trades as a paid call, and asks the owner for a key", async () => {
+    const { call, seen } = await connect();
+    const t = await call("unhuntable_traders");
+    expect(t.isError).toBe(false);
+    expect(t.text).toContain("@alice_trades: 4 closed trades, 3 won, result $2.40; guard-signed record over 6 pieces: $2.10");
+    expect(seen.at(-1)!.headers.authorization).toBeUndefined();
+    const tr = await call("unhuntable_trader_trades", { handle: "alice_trades" });
+    expect(tr.text).toContain("short $101 BTC at 5x: entry 70000, exit 69100, result $1.25");
+    expect(tr.text).toContain("Paid 0.002 USDC");
+    const f = await call("unhuntable_follow", { handle: "alice_trades", kind: "copy", copyUsd: 20 });
+    expect(f.text).toContain("It waits for their approval in the app.");
+    expect(seen.at(-1)!.body).toEqual({ handle: "alice_trades", kind: "copy", copyUsd: 20 });
   });
 
   it("opens, seals, reads status and closes with the agent key; the stop never comes back out", async () => {
@@ -103,7 +136,7 @@ describe("the MCP server", () => {
     expect(sealed.text).toBe("Stop sealed for 2 pieces. It is not on Hyperliquid's book and cannot be read back. Paid 0.002 USDC on NEAR (tx tx4).");
     const sent = seen.find((s) => s.url.endsWith("/stop"))!;
     // what left the machine: shard ids and sealed boxes, never the price
-    expect(JSON.stringify(sent.body)).not.toContain("2987");
+    expect(JSON.stringify(sent.body)).not.toContain(String(STOP));
     expect(sent.body.boxes).toHaveLength(2);
 
     const status = await call("unhuntable_status");
@@ -113,7 +146,7 @@ describe("the MCP server", () => {
     expect(seen.find((s) => s.url.endsWith("/close"))!.body).toEqual({ now: true });
 
     // no tool answer anywhere holds the level
-    for (const t of [opened, sealed, status, closed]) expect(t.text).not.toContain("2987");
+    for (const t of [opened, sealed, status, closed]) expect(t.text).not.toContain(String(STOP));
   });
 
   it("passes the server's refusal on in its own words", async () => {

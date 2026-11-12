@@ -896,18 +896,63 @@ pub const EAS_CHAIN_ID: u64 = 8453; // Base
 pub const EAS_CONTRACT: &str = "0x4200000000000000000000000000000000000021";
 pub const EAS_VERSION: &str = "1.0.1"; // as reported by the Base EAS contract
 
-pub fn eas_schema_uid() -> [u8; 32] {
-    // keccak256(abi.encodePacked(schema, resolver = 0x0, revocable = false))
-    let mut d = EAS_SCHEMA.as_bytes().to_vec();
+/// One trader's track record: every shard registered under the trader's tag, nothing chosen later.
+pub const TRADER_SCHEMA: &str = "uint64 asOf,bytes32 trader,uint32 shards,int64 equityMicroUsd,int64 netDepositsMicroUsd,int64 pnlMicroUsd,string outlayerCall";
+
+/// keccak256(abi.encodePacked(schema, resolver = 0x0, revocable = false))
+pub fn schema_uid(schema: &str) -> [u8; 32] {
+    let mut d = schema.as_bytes().to_vec();
     d.extend_from_slice(&[0u8; 20]);
     d.push(0);
     keccak(&d)
+}
+
+pub fn eas_schema_uid() -> [u8; 32] {
+    schema_uid(EAS_SCHEMA)
+}
+
+pub fn trader_schema_uid() -> [u8; 32] {
+    schema_uid(TRADER_SCHEMA)
+}
+
+/// A trader tag: 64 lowercase hex characters (the server's sha256 of the trader's id).
+pub fn valid_trader_tag(s: &str) -> bool {
+    s.len() == 64 && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
 fn i256(x: i64) -> [u8; 32] {
     let mut o = if x < 0 { [0xffu8; 32] } else { [0u8; 32] };
     o[24..].copy_from_slice(&x.to_be_bytes());
     o
+}
+
+pub struct TraderProof {
+    pub as_of: u64,
+    pub trader: [u8; 32],
+    pub shards: u32,
+    pub equity_micro: i64,
+    pub net_deposits_micro: i64,
+    pub pnl_micro: i64,
+    pub call: String,
+}
+
+/// ABI encoding of a TraderProof in TRADER_SCHEMA order.
+pub fn trader_eas_data(p: &TraderProof) -> Vec<u8> {
+    let mut d = Vec::new();
+    d.extend_from_slice(&u256(p.as_of));
+    d.extend_from_slice(&p.trader);
+    d.extend_from_slice(&u256(p.shards as u64));
+    d.extend_from_slice(&i256(p.equity_micro));
+    d.extend_from_slice(&i256(p.net_deposits_micro));
+    d.extend_from_slice(&i256(p.pnl_micro));
+    d.extend_from_slice(&u256(7 * 32)); // offset of the string
+    let s = p.call.as_bytes();
+    d.extend_from_slice(&u256(s.len() as u64));
+    d.extend_from_slice(s);
+    while d.len() % 32 != 0 {
+        d.push(0);
+    }
+    d
 }
 
 pub struct Proof {
@@ -937,13 +982,18 @@ pub fn eas_data(p: &Proof) -> Vec<u8> {
     d
 }
 
-/// EIP-712 digest of an EAS off-chain attestation (version 2, with salt).
+/// EIP-712 digest of an EAS off-chain attestation (version 2, with salt) for the system-wide proof.
 pub fn eas_digest(time: u64, data: &[u8], salt: &[u8; 32]) -> [u8; 32] {
+    eas_digest_for(&eas_schema_uid(), time, data, salt)
+}
+
+/// EIP-712 digest of an EAS off-chain attestation (version 2, with salt) under any schema.
+pub fn eas_digest_for(schema: &[u8; 32], time: u64, data: &[u8], salt: &[u8; 32]) -> [u8; 32] {
     let th = keccak(b"Attest(uint16 version,bytes32 schema,address recipient,uint64 time,uint64 expirationTime,bool revocable,bytes32 refUID,bytes data,bytes32 salt)");
     let mut m = Vec::new();
     m.extend_from_slice(&th);
     m.extend_from_slice(&u256(2));
-    m.extend_from_slice(&eas_schema_uid());
+    m.extend_from_slice(schema);
     m.extend_from_slice(&[0u8; 32]); // recipient 0x0
     m.extend_from_slice(&u256(time));
     m.extend_from_slice(&u256(0)); // expirationTime

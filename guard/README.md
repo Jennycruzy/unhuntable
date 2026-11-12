@@ -36,7 +36,7 @@ A side is `long` or `short` and always means the side of the position.
 | `addr` | `{}` | `{hl_address, vrf_public_key, builder}`: `builder` is the address it was built with, or null |
 | `box_pub` | `{}` | `{box_pub}` |
 | `agent` | `{shard}` | `{shard, agent}`: the agent address to approve once on Hyperliquid |
-| `register` | `{shard, master}` | `{registered}`: stores the shard's master account, sealed |
+| `register` | `{shard, master, owner?}` | `{registered, trader}`: stores the shard's master account, sealed; `owner` (64 hex) puts the shard in that trader's record, taken only at its first registration |
 | `leverage` | `{shard, coin, leverage}` | `{hl}` |
 | `open` | `{shard, coin, side, size, builder?}` | `{mid, prices, action, hl}` |
 | `seal` | `{shard, stop: {coin, side, trigger, size}, jitter_bps?}` | `{sealed}` |
@@ -47,6 +47,7 @@ A side is `long` or `short` and always means the side of the position.
 | `close` | `{shard, coin}` | `{done: "closed", size, hl}` or `{done: "nothing_open"}` |
 | `vrf` | `{label}` | `{output_hex, proof, alpha}` |
 | `proof` | `{}` | `{eas, totals}`: signed track-record totals across all shards |
+| `record` | `{trader}` | `{eas, totals}`: one trader's signed totals over every shard registered under the tag, schema `uint64 asOf,bytes32 trader,uint32 shards,int64 equityMicroUsd,int64 netDepositsMicroUsd,int64 pnlMicroUsd,string outlayerCall` |
 | `withdraw_probe` | `{shard}` | `{agent, http, body}`: Hyperliquid's refusal of a transfer signed by the agent |
 
 `done` in a tick is one of `no_agreement`, `watch`, `fired`, `would_fire`,

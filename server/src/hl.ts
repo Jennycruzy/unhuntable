@@ -37,6 +37,18 @@ const num = (v: unknown): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 
+export interface Fill {
+  coin: string;
+  px: number;
+  sz: number;
+  side: "buy" | "sell";
+  closedPnl: number;
+  fee: number;
+  time: number;
+  /** "Open Long", "Close Short", … */
+  dir: string;
+}
+
 export class Hyperliquid {
   private readonly f: typeof fetch;
   private readonly base: string;
@@ -102,6 +114,22 @@ export class Hyperliquid {
   async spotUsdc(user: string): Promise<string> {
     const j = await this.info({ type: "spotClearinghouseState", user });
     return String((j?.balances ?? []).find((b: any) => b?.coin === "USDC")?.total ?? "0");
+  }
+
+  /** Fills of an account since a time (closedPnl and fee are in USDC). */
+  async fills(user: string, startMs: number): Promise<Fill[]> {
+    const j = await this.info({ type: "userFillsByTime", user, startTime: startMs, aggregateByTime: true });
+    if (!Array.isArray(j)) throw new HyperliquidError("Hyperliquid's fills are not a list.");
+    return j.map((f: any) => ({
+      coin: String(f?.coin ?? ""),
+      px: Number(f?.px),
+      sz: Number(f?.sz),
+      side: f?.side === "B" ? ("buy" as const) : ("sell" as const),
+      closedPnl: Number(f?.closedPnl ?? 0),
+      fee: Number(f?.fee ?? 0),
+      time: Number(f?.time ?? 0),
+      dir: String(f?.dir ?? ""),
+    }));
   }
 
   /** Post a signed action. Throws with Hyperliquid's reason when it is refused. */

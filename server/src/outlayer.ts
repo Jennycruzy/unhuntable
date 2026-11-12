@@ -85,7 +85,7 @@ const RequestReply = z
         confidential: z.boolean().optional(),
         origin_asset: z.string().optional(),
         submitted_at: z.string().optional(),
-        swap_details: z.object({ amountIn: Amount, amountOut: Amount, intentHashes: z.array(z.string()) }).partial().optional(),
+        swap_details: z.object({ amountIn: Amount.nullable(), amountOut: Amount.nullable(), intentHashes: z.array(z.string()) }).partial().passthrough().optional(),
       })
       .passthrough()
       .nullable()
@@ -340,6 +340,14 @@ export class OutLayerWallet {
 
   withdraw(walletId: string, body: WithdrawBody): Promise<Submitted> {
     return this.call(walletId, "POST", "/wallet/v1/confidential/withdraw", SubmittedReply, body);
+  }
+
+  /**
+   * Private transfer from this wallet's confidential balance to another confidential account
+   * (a wallet's own NEAR account id). The wallet's policy whitelist applies to `to`.
+   */
+  confidentialTransfer(walletId: string, body: { to: string; amount: string; token: string }): Promise<Submitted> {
+    return this.call(walletId, "POST", "/wallet/v1/confidential/transfer", SubmittedReply, body);
   }
 
   request(walletId: string, requestId: string): Promise<RequestStatus> {

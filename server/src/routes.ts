@@ -25,6 +25,28 @@ import {
   previewPlan,
 } from "./positions.js";
 import { ApiError } from "./refusals.js";
+import {
+  FollowBody,
+  HANDLE,
+  TraderBody,
+  billKey,
+  closedTrades,
+  confirmFollow,
+  follow,
+  keyBatch,
+  listTraders,
+  myKeys,
+  myTrader,
+  onPositionEvent,
+  openCopy,
+  pollPayment,
+  refreshRecord,
+  resumeKey,
+  setTrader,
+  settleResult,
+  stopKey,
+  traderCard,
+} from "./followers.js";
 import { SettingsBody, getSettings, sendRefill, setSettings } from "./watch.js";
 import { ConfirmBody, GrantBody, KeyBody, PiecesKeyBody, balances, confirmWallet, grantWallet, me, newKey, setPiecesKey } from "./wallets.js";
 
@@ -106,6 +128,24 @@ export function registerMoneyRoutes(app: FastifyInstance, ctx: Ctx, aiHunter?: A
   app.get("/api/settings", async (req) => getSettings(ctx, user(req)));
   app.post("/api/settings", async (req) => setSettings(ctx, user(req), parse(SettingsBody, req.body)));
 
+  // Followers. Trader cards and the list are public: counts, prices, closed results, the guard's record.
+  const handle = (req: FastifyRequest): string => parse(z.string().regex(HANDLE), (req.params as { handle?: string }).handle);
+  app.get("/api/traders", async () => listTraders(ctx));
+  app.get("/api/traders/:handle", async (req) => traderCard(ctx, handle(req)));
+  app.post("/api/traders/:handle/record", async (req) => {
+    user(req);
+    return refreshRecord(ctx, handle(req));
+  });
+  app.get("/api/traders/:handle/trades", async (req) => closedTrades(ctx, user(req), handle(req)));
+  app.get("/api/trader", async (req) => myTrader(ctx, user(req)));
+  app.post("/api/trader", async (req) => setTrader(ctx, user(req), parse(TraderBody, req.body)));
+  app.get("/api/follow", async (req) => myKeys(ctx, user(req)));
+  app.post("/api/follow", async (req) => follow(ctx, user(req), parse(FollowBody, req.body)));
+  app.post("/api/follow/:id/batch", async (req) => ({ policyBatch: await keyBatch(ctx, user(req), id(req)) }));
+  app.post("/api/follow/:id/confirm", async (req) => confirmFollow(ctx, user(req), id(req)));
+  app.post("/api/follow/:id/stop", async (req) => stopKey(ctx, user(req), id(req)));
+  app.post("/api/follow/:id/resume", async (req) => resumeKey(ctx, user(req), id(req)));
+
   app.get("/api/alerts", async (req) => {
     const rows = ctx.db.prepare("SELECT text, created_ms FROM alerts WHERE user_id = ? ORDER BY created_ms DESC, rowid DESC LIMIT 100").all(user(req)) as {
       text: string;
@@ -120,4 +160,9 @@ export function registerMoneyJobs(jobs: JobRunner, ctx: Ctx): void {
   jobs.register("position", (p: { positionId: string }, job) => advancePosition(ctx, p.positionId, job.attempts));
   jobs.register("home", (p: { homeId: string }) => advanceHome(ctx, p.homeId));
   jobs.register("refill", (p: { refillId: string }) => sendRefill(ctx, p.refillId));
+  jobs.register("position_event", (p: { positionId: string; event: "open" | "closing" | "closed" }) => onPositionEvent(ctx, p.positionId, p.event));
+  jobs.register("copy_open", (p: { copyId: string }) => openCopy(ctx, p.copyId));
+  jobs.register("key_bill", (p: { keyId: string }) => billKey(ctx, p.keyId));
+  jobs.register("key_pay_poll", (p: { paymentId: string }) => pollPayment(ctx, p.paymentId));
+  jobs.register("trade_result", (p: { positionId: string }) => settleResult(ctx, p.positionId));
 }

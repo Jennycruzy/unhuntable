@@ -9,6 +9,7 @@ export {
   checkLeverage,
   checkPositive,
   checkShard,
+  checkTraderTag,
   checkSide,
   checkStop,
   type Answer,

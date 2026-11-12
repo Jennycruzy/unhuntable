@@ -5,6 +5,7 @@
 // Defence: when the guard cut or closed a piece, the user gets an alert, and with
 // auto_refill on (and under the day's cap) a refill goes from the private balance to that
 // same piece's own address: the smallest ladder amount that restores its reserve.
+import { positionEvent } from "./events.js";
 import { z } from "zod";
 import { LADDER, USDC_NEAR, ladderAmount, toUnits, type Coin } from "unhuntable-client";
 import { addAlert, balanceWallet, walletById, type Ctx } from "./ctx.js";
@@ -88,7 +89,7 @@ async function tickGroup(ctx: Ctx, coin: Coin, open: OpenPiece[]): Promise<void>
 function closeFinished(ctx: Ctx, ids: string[]): void {
   for (const id of new Set(ids)) {
     const left = ctx.db.prepare("SELECT COUNT(*) AS n FROM position_pieces WHERE position_id = ? AND state != 'closed'").get(id) as { n: number };
-    if (left.n === 0) ctx.db.prepare("UPDATE positions SET state = 'closed' WHERE id = ? AND state = 'open'").run(id);
+    if (left.n === 0 && ctx.db.prepare("UPDATE positions SET state = 'closed' WHERE id = ? AND state = 'open'").run(id).changes === 1) positionEvent(ctx, id, "closed");
   }
 }
 

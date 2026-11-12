@@ -48,7 +48,7 @@ describe("sealed ops", () => {
   const ok = { body: { output: { ok: true } } };
 
   it("each op is one sealed box with the op name inside", async () => {
-    const { c, sent } = client(Array.from({ length: 7 }, () => ({ ...ok })));
+    const { c, sent } = client(Array.from({ length: 9 }, () => ({ ...ok })));
     await c.agent("alpha");
     await c.leverage({ shard: "alpha", coin: "ETH", leverage: 5 });
     await c.open({ shard: "alpha", coin: "BTC", side: "short", size: 0.001 });
@@ -56,6 +56,8 @@ describe("sealed ops", () => {
     await c.tick({ shard: "alpha", coin: "ETH", dry: true });
     await c.register({ shard: "alpha", master: MASTER.toUpperCase().replace("0X", "0x") });
     await c.proof();
+    await c.register({ shard: "beta", master: MASTER, owner: "ab".repeat(32) });
+    await c.record({ trader: "ab".repeat(32) });
     expect(sent.map((s) => inner(s.body))).toEqual([
       { op: "agent", shard: "alpha" },
       { op: "leverage", shard: "alpha", coin: "ETH", leverage: 5 },
@@ -64,6 +66,8 @@ describe("sealed ops", () => {
       { op: "tick", shard: "alpha", coin: "ETH", dry: true },
       { op: "register", shard: "alpha", master: MASTER },
       { op: "proof" },
+      { op: "register", shard: "beta", master: MASTER, owner: "ab".repeat(32) },
+      { op: "record", trader: "ab".repeat(32) },
     ]);
   });
 
@@ -98,6 +102,8 @@ describe("checks before any call", () => {
     ["master short", (c) => c.register({ shard: "a", master: "0x1234" })],
     ["master no 0x", (c) => c.register({ shard: "a", master: "22".repeat(20) })],
     ["master not hex", (c) => c.register({ shard: "a", master: "0x" + "zz".repeat(20) })],
+    ["owner tag short", (c) => c.register({ shard: "a", master: "0x" + "22".repeat(20), owner: "ab" })],
+    ["owner tag uppercase", (c) => c.record({ trader: "AB".repeat(32) })],
   ];
   for (const [name, op] of bad) {
     it(`refuses ${name}`, async () => {

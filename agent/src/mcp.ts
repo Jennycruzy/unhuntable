@@ -110,6 +110,78 @@ export function buildServer(api: AgentApi): McpServer {
     },
   );
 
+  server.registerTool(
+    "unhuntable_traders",
+    {
+      title: "Traders",
+      description:
+        "Traders who sell keys on Unhuntable: price per day of a copy key and of a viewing key, how many hold each, closed trades, wins, result, and the track record the guard (an OutLayer TEE) signed over every piece the trader ever used. No open position, address or stop is ever shown. Free.",
+    },
+    async () => {
+      try {
+        const { traders } = await api.traders();
+        if (traders.length === 0) return text("No traders sell keys yet.");
+        return text(
+          traders
+            .map(
+              (t) =>
+                `@${t.handle}: ${t.closedTrades} closed trades, ${t.wins} won, result $${t.resultUsd}` +
+                (t.record ? `; guard-signed record over ${t.record.shards} pieces: $${t.record.pnlUsd.toFixed(2)}` : "") +
+                `. Copy key $${t.copyUsdDay}/day (${t.copiers} copying), viewing key $${t.viewUsdDay}/day (${t.viewers} viewing).${t.open ? "" : " Not selling keys now."}`,
+            )
+            .join("\n"),
+        );
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    "unhuntable_trader_trades",
+    {
+      title: "A trader's closed trades",
+      description:
+        "Closed trades of a trader the owner holds a key to: market, side, size, leverage, entry, exit and result. Open positions are never shown, to anyone. Costs one paid call.",
+      inputSchema: { handle: z.string().regex(/^[a-z0-9_]{3,20}$/) },
+    },
+    async (a) => {
+      try {
+        const r = await api.trades(a.handle);
+        if (r.trades.length === 0) return text(`@${r.handle} has no closed trades yet.` + paidNote(r.paid));
+        return text(
+          r.trades
+            .map((t) => `${t.side} $${t.notionalUsd} ${t.coin} at ${t.leverage}x: entry ${t.entryPx ?? "?"}, exit ${t.exitPx ?? "?"}, result $${t.pnlUsd ?? "?"}`)
+            .join("\n") + paidNote(r.paid),
+        );
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    "unhuntable_follow",
+    {
+      title: "Ask for a key",
+      description:
+        "Ask the owner for a key to a trader. copy: the trader's crypto trades are copied into the owner's own pieces at copyUsd each; view: the trader's closed trades. The key waits until the owner approves it in the app, because only the owner's wallet can let the private balance pay a trader; then it is paid day by day by private transfer. Costs one paid call.",
+      inputSchema: {
+        handle: z.string().regex(/^[a-z0-9_]{3,20}$/),
+        kind: z.enum(["copy", "view"]),
+        copyUsd: z.number().min(15).optional().describe("Size of each copy in US dollars (copy keys)"),
+      },
+    },
+    async (a) => {
+      try {
+        const r = await api.askKey({ handle: a.handle, kind: a.kind, ...(a.copyUsd !== undefined ? { copyUsd: a.copyUsd } : {}) });
+        return text(`Asked the owner for a ${a.kind} key to @${a.handle}. It waits for their approval in the app.` + paidNote(r.paid));
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
   return server;
 }
 
