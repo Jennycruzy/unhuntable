@@ -22,7 +22,7 @@ The private balance's policy also lists `intents.near`, because OutLayer runs ev
 
 When you buy a key to a trader, the lock also lists that trader's private balance, and your wallet signs it. That lets the server's key send private transfers to that trader, which is how a key is paid day by day. It can pay no other trader, and none at all you did not approve; stopping a key stops the payments, and the trader leaves the list the next time your lock is rebuilt. [Followers](followers.md)
 
-What you do trust: OutLayer's enclave holds the keys, and runs the guard build that our project names on `outlayer.near`. Which build that is, and every build we ever published, is public on NEAR: `get_project` answers the active build's hash and `list_versions` lists each build with its hash and the address of the exact file, so anyone can download the file OutLayer runs and check its hash. The active build is `9fcd15a7…`, built from [`guard/`](../guard/) at commit `045d307`. Steps: [Check it yourself](check-it-yourself.md), step 9.
+What you do trust: OutLayer's enclave holds the keys, and runs the guard build that our project names on `outlayer.near`. Which build that is, and every build we ever published, is public on NEAR: `get_project` answers the active build's hash and `list_versions` lists each build with its hash and the address of the exact file, so anyone can download the file OutLayer runs and check its hash. The active build is `3dd11f02…`, built from [`guard/`](../guard/) at commit `f4cebd4`. Steps: [Check it yourself](check-it-yourself.md), step 9.
 
 ## Privacy: who sees what
 

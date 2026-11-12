@@ -76,10 +76,10 @@ curl -s https://free.rpc.fastnear.com -H 'Content-Type: application/json' -d '{"
   | python3 -c "import sys,json; print(json.loads(bytes(json.load(sys.stdin)['result']['result']))['active_version'])"
 
 # the exact file OutLayer runs, and its hash
-curl -s https://main.fastfs.io/4399fffd59abe3f29284d29936bf83d41e1344e82c971394660217cf6e8046f7/outlayer.near/9fcd15a786ae017bc180e1d968f3ddaa8aee81627c532ce7ca04a89a5c2687ce.wasm | sha256sum
+curl -s https://main.fastfs.io/4399fffd59abe3f29284d29936bf83d41e1344e82c971394660217cf6e8046f7/outlayer.near/3dd11f022d41d4c1cc344057b660a51a5af47d95d9faa60f1992ddea428f18e9.wasm | sha256sum
 ```
 
-→ both print `9fcd15a786ae017bc180e1d968f3ddaa8aee81627c532ce7ca04a89a5c2687ce`. `list_versions` with the same argument lists every guard build we have published, each with its hash and file address. The active build is [`guard/`](../guard/) at commit `045d307`.
+→ both print `3dd11f022d41d4c1cc344057b660a51a5af47d95d9faa60f1992ddea428f18e9`. `list_versions` with the same argument lists every guard build we have published, each with its hash and file address. The active build is [`guard/`](../guard/) at commit `f4cebd4`.
 
 **10. The NEAR AI Hunter's answer came from NEAR AI's TEE** (network, read-only, no account):
 

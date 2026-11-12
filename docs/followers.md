@@ -40,6 +40,7 @@ Proven on mainnet: 0.05 USDC sent by private transfer from one confidential bala
 - The totals are signed by the guard's key as an EAS off-chain attestation under the schema `uint64 asOf,bytes32 trader,uint32 shards,int64 equityMicroUsd,int64 netDepositsMicroUsd,int64 pnlMicroUsd,string outlayerCall`. Its encoding and signature match the official EAS SDK byte for byte (`trader_record_matches_sdk`).
 - On a trader's card, **Download the signed record** saves it; `node tools/easverify.cjs <file>` checks it with the official EAS SDK and prints the signer.
 - No address leaves the guard. The card also shows closed trades and wins, read from each piece's fills on Hyperliquid once a position is closed.
+- Proven on mainnet: the active guard signed a trader record that the official EAS SDK verifies (`sdk_verify: true`), recovering the guard's key `0xf0bd1e2b04f11c880d59bb75fd5bc31ff8331ee4` as signer.
 
 ## For agents
 
