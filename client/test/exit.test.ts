@@ -25,6 +25,8 @@ interface World {
   deniedWithdraws?: number;
   spotTotal?: string;
   lastKeyOnce?: boolean;
+  /** PUT /wallet/v1/api-key fails like a web page's blocked request. */
+  putBlocked?: boolean;
   /** No OutLayer piece wallet exists (only NEAR-controlled pieces). */
   noOutlayerPiece?: boolean;
   /** Answers NEAR RPC calls first when set (NEAR-controlled piece tests). */
@@ -137,7 +139,10 @@ function world(w: World = {}) {
         }
         return json({});
       }
-      if (path === "/wallet/v1/api-key" && method === "PUT") return json({ wallet_id: "w", near_account_id: "n" });
+      if (path === "/wallet/v1/api-key" && method === "PUT") {
+        if (w.putBlocked) throw new TypeError("Failed to fetch");
+        return json({ wallet_id: "w", near_account_id: "n" });
+      }
     }
     throw new Error(`unexpected request ${method} ${url}`);
   }) as typeof fetch;
@@ -300,6 +305,14 @@ describe("exit flow", () => {
     expect(keyCalls.map((c) => c.method)).toEqual(["DELETE", "PUT", "DELETE", "DELETE"]);
     expect(keyCalls[0].url.endsWith(SERVER_KEY_HASH)).toBe(true);
     expect(keyCalls[1].body.key_hash).toMatch(/^[0-9a-f]{64}$/);
+  });
+});
+
+describe("exit flow on a web page", () => {
+  it("points to the terminal tool when a wallet has only our key and the page cannot add the backup key", async () => {
+    const w = world({ lastKeyOnce: true, putBlocked: true });
+    const t = io(["yes", "yes"]);
+    await expect(runExit({ ...base(w.f, t.io), serverKeyHashes: [SERVER_KEY_HASH] })).rejects.toThrow(/run the terminal tool: cd client && npm ci, then cd \.\. && npx tsx exit\/cli\.ts/);
   });
 });
 

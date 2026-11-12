@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { keyFromMnemonic, seedFor } from "unhuntable-client/keys";
+import { backupKeyFor, keyFromMnemonic, keyHash, seedFor } from "unhuntable-client/keys";
 import { Api } from "../lib/api";
 import { approveBatch, checkTrade, openPosition, reviewRows } from "../lib/trade";
 import type { PlanAnswer, PolicyBatch } from "../lib/types";
@@ -107,6 +107,11 @@ describe("trade", () => {
       { requestId: "r2", label: "piece:1", seed: seedFor(key, "piece:1") },
     ]);
     const grants = sent.filter((s) => s.url.endsWith("/api/wallets/grant")).map((s) => JSON.parse(s.body));
+    for (const g of grants) {
+      expect(g.grant.key_hash).not.toBe(g.backup.key_hash);
+      expect(g.backup.key_hash).toBe(keyHash(backupKeyFor(key, g.grant.seed)));
+      expect(g.backup.seed).toBe(g.grant.seed);
+    }
     expect(grants.map((g) => [g.requestId, g.label, g.grant.seed, g.grant.pubkey])).toEqual([
       ["r1", "piece:0", seedFor(key, "piece:0"), key.publicKeyStr],
       ["r2", "piece:1", seedFor(key, "piece:1"), key.publicKeyStr],

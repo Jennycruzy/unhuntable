@@ -199,6 +199,19 @@ describe("carrying a signed key grant to OutLayer", () => {
     expect(h.world.grants).toEqual([]);
   });
 
+  it("carries the user's backup key grant after ours, and refuses a backup for another wallet", async () => {
+    const { h, alice, a, k, grant } = await setup();
+    const backup = apiKeyBody(KEY, ownerAccount(KEY), "unh-seed-1", "cd".repeat(32), h.ctx.now());
+    const send = (payload: Record<string, unknown>) => a.inject({ method: "POST", url: "/api/wallets/grant", headers: { cookie: alice.cookie }, payload });
+    const otherSeed = apiKeyBody(KEY, ownerAccount(KEY), "unh-seed-2", "cd".repeat(32), h.ctx.now());
+    expect((await send({ requestId: k.requestId, label: "balance", grant, backup: otherSeed })).statusCode).toBe(400);
+    const sameKey = apiKeyBody(KEY, ownerAccount(KEY), "unh-seed-1", k.keyHash, h.ctx.now());
+    expect((await send({ requestId: k.requestId, label: "balance", grant, backup: sameKey })).statusCode).toBe(400);
+    expect(h.world.grants).toEqual([]);
+    expect((await send({ requestId: k.requestId, label: "balance", grant, backup })).statusCode).toBe(200);
+    expect(h.world.grants).toEqual([grant, backup]);
+  });
+
   it("refuses another user's request like an unknown one", async () => {
     const { h, a, k, grant } = await setup();
     const bob = addUser(h, "bob.near");

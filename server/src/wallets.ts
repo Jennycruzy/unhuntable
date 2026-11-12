@@ -18,17 +18,21 @@ export const PiecesKeyBody = z.object({
 /** How far the time in a pieces-key proof may be from ours. */
 export const PROOF_WINDOW_MS = 5 * 60_000;
 export const KeyBody = z.object({ label: Label });
+const Grant = z.object({
+  account_id: z.string().regex(/^[0-9a-f]{64}$/),
+  seed: z.string().min(1).max(200),
+  key_hash: z.string().regex(/^[0-9a-f]{64}$/),
+  pubkey: z.string().min(1).max(100),
+  message: z.string().min(1).max(300),
+  signature: z.string().min(1).max(300),
+});
 export const GrantBody = z.object({
   requestId: z.string().uuid(),
   label: Label,
-  grant: z.object({
-    account_id: z.string().regex(/^[0-9a-f]{64}$/),
-    seed: z.string().min(1).max(200),
-    key_hash: z.string().regex(/^[0-9a-f]{64}$/),
-    pubkey: z.string().min(1).max(100),
-    message: z.string().min(1).max(300),
-    signature: z.string().min(1).max(300),
-  }),
+  /** Our server's key for this wallet. */
+  grant: Grant,
+  /** The user's own backup key (only its hash), so our key can always be removed later, even from a web page. */
+  backup: Grant.optional(),
 });
 export const ConfirmBody = z.object({ requestId: z.string().uuid(), label: Label, seed: z.string().min(1).max(200) });
 
@@ -72,8 +76,9 @@ export function newKey(ctx: Ctx, userId: string, body: z.infer<typeof KeyBody>) 
 
 /**
  * Carry the browser's signed grant of our key to OutLayer. Browsers cannot send it themselves
- * (OutLayer allows no PUT from a web page). Only a grant of this request's own key, signed by
- * this user's own pieces key, is carried; OutLayer checks the signature.
+ * (OutLayer allows no PUT from a web page). Only a grant of this request's own key, plus the
+ * user's backup key for the same wallet, signed by this user's own pieces key, is carried;
+ * OutLayer checks the signatures.
  */
 export async function grantWallet(ctx: Ctx, userId: string, body: z.infer<typeof GrantBody>) {
   const u = userRow(ctx, userId);
@@ -88,8 +93,13 @@ export async function grantWallet(ctx: Ctx, userId: string, body: z.infer<typeof
   if (info.label !== body.label || info.walletId) throw new ApiError("bad_request");
   if (body.grant.key_hash !== info.keyHash) throw new ApiError("bad_request");
   if (!u.pieces_public_key || body.grant.pubkey !== u.pieces_public_key) throw new ApiError("bad_request");
+  const b = body.backup;
+  if (b && (b.pubkey !== body.grant.pubkey || b.seed !== body.grant.seed || b.account_id !== body.grant.account_id || b.key_hash === info.keyHash)) {
+    throw new ApiError("bad_request");
+  }
   try {
     await ctx.wallet.grantKey(body.grant);
+    if (b) await ctx.wallet.grantKey(b);
   } catch (e) {
     if (e instanceof OutLayerWalletError) {
       ctx.log?.warn({ code: e.code, status: e.status }, "outlayer refused a key grant");

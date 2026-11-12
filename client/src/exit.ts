@@ -379,7 +379,18 @@ export async function runExit(o: ExitOptions): Promise<ExitResult> {
       } catch (e) {
         if (e instanceof DeterministicWalletError && e.code === "last_key") {
           // keep the wallet usable: add the backup key, then remove ours
-          await ww.addDelegateKey(keyHash(backupKeyFor(key, w.seed)));
+          // Wallets made before the backup key was added at setup. OutLayer takes this only as PUT,
+          // which a web page cannot send, so the page points to the terminal tool for it.
+          try {
+            await ww.addDelegateKey(keyHash(backupKeyFor(key, w.seed)));
+          } catch (e2) {
+            if (e2 instanceof DeterministicWalletError && e2.code === "unreachable") {
+              throw new ExitStopped(
+                `Wallet ${w.label} has only our key on it, and OutLayer does not let a web page add your backup key. Your money is already out. To remove our key too, run the terminal tool: cd client && npm ci, then cd .. && npx tsx exit/cli.ts`,
+              );
+            }
+            throw e2;
+          }
           await ww.revokeDelegateKey(h);
         } else if (e instanceof DeterministicWalletError && e.status === 404) {
           continue; // that key was not on this wallet

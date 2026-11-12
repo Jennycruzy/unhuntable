@@ -93,8 +93,8 @@ export class Api {
   walletKey(label: string) {
     return this.call<WalletKey>("POST", "/api/wallets/key", { label });
   }
-  walletGrant(requestId: string, label: string, grant: ReturnType<typeof apiKeyBody>) {
-    return this.call<{ ok: true }>("POST", "/api/wallets/grant", { requestId, label, grant });
+  walletGrant(requestId: string, label: string, grant: ReturnType<typeof apiKeyBody>, backup?: ReturnType<typeof apiKeyBody>) {
+    return this.call<{ ok: true }>("POST", "/api/wallets/grant", { requestId, label, grant, backup });
   }
   walletConfirm(requestId: string, label: string, seed: string) {
     return this.call<WalletConfirmed>("POST", "/api/wallets/confirm", { requestId, label, seed });

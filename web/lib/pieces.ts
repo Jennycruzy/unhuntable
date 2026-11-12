@@ -1,7 +1,7 @@
 // Making one OutLayer wallet ("balance" or a piece) from the pieces key, in this browser.
 // The browser registers the wallet (if new) and lets the server's key act for it; the
 // server only ever learns the key's hash and the wallet's seed.
-import { OutLayerDeterministic, apiKeyBody, ownerAccount, seedFor, type PiecesKey } from "unhuntable-client/keys";
+import { OutLayerDeterministic, apiKeyBody, backupKeyFor, keyHash as hashOf, ownerAccount, seedFor, type PiecesKey } from "unhuntable-client/keys";
 import type { Api, Fetch } from "./api";
 
 export interface WalletDeps {
@@ -21,7 +21,15 @@ export async function makeWallet(d: WalletDeps, label: string): Promise<string> 
   const { requestId, keyHash } = await d.api.walletKey(label);
   // OutLayer takes this grant only as PUT, which it does not allow from a web page. The pieces key
   // signs it here; our server carries it unchanged and OutLayer checks the signature.
-  await d.api.walletGrant(requestId, label, apiKeyBody(d.key, ownerAccount(d.key), seed, keyHash, (d.now ?? Date.now)()));
+  // The backup key (only its hash leaves this device) lets the exit tool remove our key later.
+  const now = (d.now ?? Date.now)();
+  const owner = ownerAccount(d.key);
+  await d.api.walletGrant(
+    requestId,
+    label,
+    apiKeyBody(d.key, owner, seed, keyHash, now),
+    apiKeyBody(d.key, owner, seed, hashOf(backupKeyFor(d.key, seed)), now),
+  );
   const c = await d.api.walletConfirm(requestId, label, seed);
   return c.address;
 }

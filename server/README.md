@@ -291,10 +291,14 @@ cookie.
   `null`. No session needed.
 - `GET /api/hunt-map` → `{ map }`: the Hunt Map, or `null` when no collector
   store is set. No session needed.
-- `GET /api/me` → the account, whether the pieces key is on it, and its wallets.
-- `POST /api/pieces-key` `{ publicKey }` stores the pieces key's public key once
-  NEAR shows it on the account.
+- `GET /api/me` → the account, whether the pieces key is linked, and its wallets.
+- `POST /api/pieces-key` `{ publicKey, message, signature }` stores the pieces
+  key's public key after a fresh signature proves this device holds it.
 - `POST /api/wallets/key` `{ label }` → `{ requestId, keyHash }`.
+- `POST /api/wallets/grant` `{ requestId, label, grant, backup? }` carries the
+  browser's pieces-key-signed grants (our key, and the user's backup key) to
+  OutLayer's `PUT /wallet/v1/api-key`, which web pages cannot send. Only grants
+  signed by the user's own pieces key, for this request's wallet, are carried.
 - `POST /api/wallets/confirm` `{ requestId, label, seed }` proves our key works
   and saves the wallet → `{ ok, label, address }`.
 - `GET /api/balance` → the private balance and each piece's perp and spot USD.
