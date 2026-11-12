@@ -9,8 +9,6 @@ import { money, px } from "../../lib/huntmap";
 type View = "public" | "hidden";
 
 const RANGE = 10; // percent above and below the price
-const STOP = -1.5; // the example stop, percent from the price
-const LIQ = -2.6; // the example liquidation
 const PIECES = [
   { p: 6.2, f: 0.18 },
   { p: -7.4, f: 0.62 },
@@ -116,6 +114,16 @@ export function Book({ coin, asOfMs }: { coin: MapCoin | null; asOfMs: number | 
       });
   }, [coin, W, padL, padR, narrow]);
 
+  // the example trade sits on the side of the price with less real money near it, so no label covers a real level
+  const dir = useMemo(() => {
+    if (!coin) return -1;
+    const near = (sign: number) => coin.bands.filter((b) => Math.sign(b.pct) === sign && Math.abs(b.pct) <= 5).reduce((a, b) => a + b.usd, 0);
+    return near(-1) > near(1) ? 1 : -1;
+  }, [coin]);
+  const STOP = 1.5 * dir;
+  const LIQ = 2.6 * dir;
+  const DEPTH = 2.05 * dir;
+
   /* the animation: one loop writes attributes on refs; React only changes stage for words and classes */
   useEffect(() => {
     if (still || manual) return;
@@ -153,7 +161,7 @@ export function Book({ coin, asOfMs }: { coin: MapCoin | null; asOfMs: number | 
         const k = i / N;
         const age = (1 - k) * 2200; // ms behind the head
         const at = t - age;
-        const p = drift(shift - (N - i)) * 0.9 + push(at, T.hunt1, T.hunt1End, STOP - 0.55) + push(at, T.hunt2, T.hunt2End, STOP - 0.55);
+        const p = drift(shift - (N - i)) * 0.9 + push(at, T.hunt1, T.hunt1End, DEPTH) + push(at, T.hunt2, T.hunt2End, DEPTH);
         d += `${i ? "L" : "M"}${(traceX0 + (traceX1 - traceX0) * k).toFixed(1)} ${y(p).toFixed(1)}`;
       }
       trace.current?.setAttribute("d", d);
@@ -206,7 +214,7 @@ export function Book({ coin, asOfMs }: { coin: MapCoin | null; asOfMs: number | 
       cancelAnimationFrame(raf);
       io.disconnect();
     };
-  }, [still, manual, W, H, y, traceX0, traceX1, padL, padR, youX, lockX]);
+  }, [still, manual, W, H, y, traceX0, traceX1, padL, padR, youX, lockX, STOP, DEPTH]);
 
   /* a still frame for reduced motion, or after a visitor picks a view */
   useEffect(() => {
@@ -230,7 +238,7 @@ export function Book({ coin, asOfMs }: { coin: MapCoin | null; asOfMs: number | 
     reticle.current?.setAttribute("transform", hidden ? `translate(${W * 0.5} ${y(5)})` : `translate(${lockX} ${y(STOP)})`);
     reticle.current?.setAttribute("opacity", "1");
     setStage(hidden ? 8 : 2);
-  }, [still, manual, view, W, H, y, traceX0, traceX1, padL, padR, lockX]);
+  }, [still, manual, view, W, H, y, traceX0, traceX1, padL, padR, lockX, STOP]);
 
   const pick = (v: View) => {
     setManual(true);
@@ -245,7 +253,7 @@ export function Book({ coin, asOfMs }: { coin: MapCoin | null; asOfMs: number | 
     "The book, as anyone can read it.",
     "Your position, in public.",
     "A hunter locks onto your stop.",
-    "Pushed to your stop. Sold at the low. Price comes straight back.",
+    "Pushed to your stop. Filled at the worst price. Price comes straight back.",
     "The same trade, through Unhuntable.",
     "Split into accounts nobody can link. The stop is sealed.",
     "The hunter looks for a level.",
@@ -304,20 +312,20 @@ export function Book({ coin, asOfMs }: { coin: MapCoin | null; asOfMs: number | 
 
           <g ref={stopLine} className="lp-stop" opacity={0}>
             <line x1={padL} x2={W - padR} y1={y(STOP)} y2={y(STOP)} />
-            <text x={padL + 8} y={y(STOP) - 8}>
+            <text x={padL + 8} y={dir < 0 ? y(STOP) - 8 : y(STOP) + 16}>
               YOUR STOP · ON THE BOOK
             </text>
           </g>
           <g ref={liqLine} className="lp-liq" opacity={0}>
             <line x1={padL} x2={W - padR} y1={y(LIQ)} y2={y(LIQ)} />
-            <text x={padL + 8} y={y(LIQ) + 16}>
+            <text x={padL + 8} y={dir < 0 ? y(LIQ) + 16 : y(LIQ) - 8}>
               YOUR LIQUIDATION · PUBLIC
             </text>
           </g>
           <g ref={you} className="lp-you" opacity={0}>
-            <rect x={youX} y={y(0) - 30} width={narrow ? 118 : 150} height={22} />
-            <text x={youX + 10} y={y(0) - 15}>
-              {narrow ? "YOU · $250K" : "YOU · LONG $250K"}
+            <rect x={youX} y={dir < 0 ? y(0) - 30 : y(0) + 8} width={narrow ? 118 : 150} height={22} />
+            <text x={youX + 10} y={dir < 0 ? y(0) - 15 : y(0) + 23}>
+              {narrow ? "YOU · $250K" : dir < 0 ? "YOU · LONG $250K" : "YOU · SHORT $250K"}
             </text>
           </g>
           {PIECES.map((_, i) => (
@@ -345,7 +353,7 @@ export function Book({ coin, asOfMs }: { coin: MapCoin | null; asOfMs: number | 
             <line x1={0} x2={0} y1={-36} y2={-28} />
             <line x1={0} x2={0} y1={28} y2={36} />
             {stamp && (
-              <text className="stamp" x={0} y={50} textAnchor="middle">
+              <text className="stamp" x={0} y={dir < 0 ? 50 : -42} textAnchor="middle">
                 {stamp}
               </text>
             )}
