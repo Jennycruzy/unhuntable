@@ -32,3 +32,26 @@ test("the 3-word check refuses a wrong word and accepts the right ones", async (
   expect(sentText).not.toContain(words.join(" "));
   for (let i = 0; i + 1 < words.length; i++) expect(sentText).not.toMatch(new RegExp(`\\b${words[i]}\\W{1,4}${words[i + 1]}\\b`));
 });
+
+test("a pieces key left on this device can be swapped for new 12 words", async ({ page, signedIn }) => {
+  await signedIn("setup");
+  await page.goto("/setup/");
+  await page.getByRole("button", { name: "Make my 12 words" }).click();
+  const first = await page.getByTestId("words").locator("li").allInnerTexts();
+  await page.getByRole("button", { name: "I wrote them down" }).click();
+  const labels = await page.locator("form label").allInnerTexts();
+  const positions = labels.map((l) => Number(/Word (\d+)/.exec(l)![1]) - 1);
+  const words = first.map((t) => t.replace(/^\d+\s*/, "").trim());
+  for (let i = 0; i < 3; i++) await page.getByTestId(`check-${i}`).fill(words[positions[i]]);
+  await page.getByRole("button", { name: "Check" }).click();
+  await expect(page.getByRole("heading", { name: "Make your private balance" })).toBeVisible();
+
+  // a fresh session whose account has no pieces key yet: the key on this device waits to be linked
+  await signedIn("setup");
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Link your pieces key" })).toBeVisible();
+  await page.getByTestId("new-words").click();
+  const second = await page.getByTestId("words").locator("li").allInnerTexts();
+  expect(second).toHaveLength(12);
+  expect(second).not.toEqual(first);
+});

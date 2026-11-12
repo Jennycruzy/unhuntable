@@ -222,6 +222,21 @@ function SetupFlow({ me }: { me: Me }) {
           <button type="button" disabled={busy} onClick={link}>
             {busy ? "Linking…" : "Link my pieces key"}
           </button>
+          <button
+            type="button"
+            className="secondary"
+            data-testid="new-words"
+            disabled={busy}
+            onClick={async () => {
+              await forgetPiecesKey(me.accountId);
+              await reload();
+              setError(undefined);
+              setWords(newMnemonic());
+              setStep("words");
+            }}
+          >
+            Use new 12 words instead
+          </button>
         </>
       )}
 
