@@ -1,7 +1,12 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { Shell } from "../components/Shell";
-import "@fontsource-variable/inter";
+import "@fontsource-variable/big-shoulders-display";
+import "@fontsource/ibm-plex-mono/400.css";
+import "@fontsource/ibm-plex-mono/500.css";
+import "@fontsource/ibm-plex-sans/400.css";
+import "@fontsource/ibm-plex-sans/500.css";
+import "@fontsource/ibm-plex-sans/600.css";
 import "./globals.css";
 
 const DESCRIPTION = "Trade on Hyperliquid in pieces nobody can link, with stops that stay sealed until they fire.";
@@ -19,8 +24,8 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#08090a" },
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b0b0a" },
+    { media: "(prefers-color-scheme: light)", color: "#f1efe8" },
   ],
 };
 

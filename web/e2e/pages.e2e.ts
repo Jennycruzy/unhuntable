@@ -48,17 +48,23 @@ test("a bottom nav on phones, a side nav on desktop", async ({ page, apiRequests
   for (const link of await page.locator("nav.nav a:visible").all()) expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(phone ? 44 : 32);
 });
 
-test("visitors get the cover, with one way in, no app nav and no call that fails", async ({ page, apiRequests }) => {
+test("visitors get the landing, with one way in, no app nav and no call that fails", async ({ page, apiRequests }) => {
   const failed: string[] = [];
   page.on("response", (r) => {
     if (r.status() >= 400) failed.push(`${r.status()} ${r.url()}`);
   });
   await page.goto("/");
-  await expect(page.locator("h1")).toHaveText("Trade big. Leave nothing to hunt.");
+  await expect(page.locator("h1")).toHaveText("They can see where you get liquidated.");
   await expect(page.locator("nav.nav")).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Start" }).first()).toHaveAttribute("href", "/signin/");
-  // the film carries the largest live position the server read, with a link to check it
-  await expect(page.getByRole("img", { name: /A public position: Short \$213M ETH on Hyperliquid, liquidation at 3,893/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open the app" }).first()).toHaveAttribute("href", "/signin/");
+  // the book is drawn from the levels the server read, and says which parts are an illustration
+  await expect(page.locator(".lp-heat .band")).not.toHaveCount(0);
+  await expect(page.locator("#lp-book-cap")).toContainText("liquidation levels on Hyperliquid, read 2 min ago");
+  await expect(page.locator("#lp-book-cap")).toContainText("The position and price path are an illustration.");
+  // a visitor can switch between the two views
+  await page.getByRole("button", { name: "Through Unhuntable" }).click();
+  await expect(page.getByRole("button", { name: "Through Unhuntable" })).toHaveAttribute("aria-pressed", "true");
+  // the largest live position the server read, with a link to check it
   await expect(page.getByTestId("whale-link")).toHaveText("0x5b5d…c060");
   await expect(page.getByTestId("whale-link")).toHaveAttribute("href", "https://app.hyperliquid.xyz/explorer/address/0x5b5d51203a0f9079f8aeb098a6523a13f298c060");
   await expect(page.getByTestId("whale-note")).toContainText("2 min ago");
@@ -100,14 +106,16 @@ test("before the first read the Hunt Map says so and shows no numbers", async ({
   await expect(page.getByTestId("totals")).toHaveCount(0);
 });
 
-test("without a live read the film shows levels and no numbers", async ({ page, apiRequests, context }) => {
+test("without a live read the landing shows no numbers it did not read", async ({ page, apiRequests, context }) => {
   void apiRequests;
-  await context.addCookies([{ name: "scenario", value: "no_whale", url: "http://127.0.0.1:4173" }]);
+  await context.addCookies([
+    { name: "scenario", value: "no_map", url: "http://127.0.0.1:4173" },
+  ]);
   await page.goto("/");
-  const film = page.locator(".film");
-  await expect(film.getByText("Liquidation", { exact: true })).toBeVisible();
-  await expect(page.getByTestId("whale-note")).toHaveCount(0);
-  expect(await film.textContent()).not.toMatch(/\$\d/);
+  await expect(page.locator("h1")).toBeVisible();
+  await expect(page.locator(".lp-heat .band")).toHaveCount(0);
+  await expect(page.locator(".lp-readout")).toHaveCount(0);
+  await expect(page.locator("#lp-book-cap")).toHaveText("The position and price path are an illustration.");
 });
 
 test("no page has a serious accessibility problem, in dark or light", async ({ page, apiRequests, signedIn }) => {
