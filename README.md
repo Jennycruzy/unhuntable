@@ -1,6 +1,6 @@
 # Unhuntable
 
-**Private perps for DeFi traders and AI agents, on Hyperliquid and trade.xyz. Built on eleven parts of the NEAR stack.**
+**Private perps for DeFi traders and AI agents, on Hyperliquid and trade.xyz: the venue NEAR chose for near.com's own perps. Built on eleven parts of the NEAR stack.**
 
 **Unhuntable hides the price that wipes you out, for people and for their agents.** Your position is split across accounts nobody can link, your stop is sealed where nobody can read it, and each piece's account is controlled by NEAR Chain Signatures, with no private key anywhere. Hunters have nothing to push the price to.
 
@@ -11,7 +11,7 @@ Tracks: **Privacy & Private AI** · **Unstoppable DeFi** · **AI Security & Defe
 ### Why it matters
 
 - **Every Hyperliquid account is public.** Its size, the exact price that liquidates it and every stop resting on the book. Big positions are tracked by bots and dashboards, and the price is pushed to the levels everyone can see. The [Hunt Map](https://tryunhuntable.site/hunt-map/) shows them live.
-- **near.com hides your name, not that price.** Hunters do not need your name. Unhuntable removes the level itself: no big position to find, no stop on the book.
+- **near.com hides your name, not that price.** Its perps trade on Hyperliquid too, where every account's size and wipe-out price are public. Hunters do not need your name. Unhuntable removes the level itself: no big position to find, no stop on the book.
 - **Agents have it worse.** Their wallets are public, they trade on schedules, and a prompt injection can talk them into giving away their stop. Here the stop is sealed on the agent's own machine and no tool can read it back.
 - **Proven on mainnet with real money:** [a sealed stop firing on an NVDA short](https://app.hyperliquid.xyz/explorer/tx/0xe3658df9d0c075c3e4df04488de8bc02021800df6bc39495872e394c8fc44fae), [NEAR's MPC network signing for a Hyperliquid account with no private key](https://nearblocks.io/txns/86qJbTWkiXwXsKfCCWqK63yLanzvkbxikMj1R4HfufVd), and [an AI agent paying for a call with x402](https://nearblocks.io/txns/7VcZWHJzgrauZaY6irWh1BiHGcr7kDch92UG69MFvMBD).
 - **The answer NEAR's founder pointed to.** In [NEP discussion #531](https://github.com/near/NEPs/issues/531), Illia Polosukhin notes that users spread their activity over many separate accounts to keep it apart, and that the answer lives in the application layer. Unhuntable is that answer for perps: the separate accounts are made and funded for you, from your one NEAR account.
