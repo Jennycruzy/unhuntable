@@ -54,7 +54,7 @@ test("visitors get the landing, with one way in, no app nav and no call that fai
     if (r.status() >= 400) failed.push(`${r.status()} ${r.url()}`);
   });
   await page.goto("/");
-  await expect(page.locator("h1")).toHaveText("They can see where you get liquidated.");
+  await expect(page.locator("h1")).toHaveText("Trade perps nobody can trace to you.");
   await expect(page.locator("nav.nav")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Open the app" }).first()).toHaveAttribute("href", "/signin/");
   // the book is drawn from the levels the server read, and says which parts are an illustration
