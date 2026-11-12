@@ -159,7 +159,7 @@ export function Landing() {
         <section className="lp-hero">
           <div className="lp-hero-text">
             <h1>
-              <span className="l1">Trade perps</span> <span className="l2">nobody can</span> <span className="l3">trace to you.</span>
+              <span className="l1">Trade perps</span> <span className="l2">nobody</span> <span className="l3">can hunt.</span>
             </h1>
             <p className="lp-lede">
               Every Hyperliquid position is public: its size, its liquidation price, every stop on the book. Unhuntable splits yours across accounts nobody can link and
