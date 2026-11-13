@@ -6,6 +6,8 @@
 
 **Live app:** [tryunhuntable.site](https://tryunhuntable.site) · **Try a real trade:** [tryunhuntable.site/judge](https://tryunhuntable.site/judge/) (no sign-in) · **Hunt Map:** [tryunhuntable.site/hunt-map](https://tryunhuntable.site/hunt-map/) (no sign-in) · **Traders:** [tryunhuntable.site/traders](https://tryunhuntable.site/traders/) (no sign-in) · **Agents:** [`agent/`](agent/) (MCP server)
 
+Built at **NEAR HACKATHON** · #NEARHackathon · **Demo video:** [watch or download](https://tryunhuntable.site/video/unhuntable-demo.mp4) (3:22)
+
 Tracks: **Privacy & Private AI** · **Unstoppable DeFi** · **AI Security & Defense** · **Agent Economy**
 
 | What hunters see on Hyperliquid today | The same trade through Unhuntable |
@@ -213,6 +215,12 @@ All of these are observed results on NEAR, NEAR Intents, OutLayer and Hyperliqui
 CI runs every folder's tests, rebuilds the exit page and checks it matches, checks the signer stays under 100 KB, and checks the repo for secrets.
 
 Every folder has its own README with the details, and [`docs/`](docs/) explains each part in depth.
+
+## About
+
+Unhuntable was built at NEAR HACKATHON (#NEARHackathon), 1 to 14 November 2026, by [Jennycruzy](https://github.com/Jennycruzy). It is live on mainnet at [tryunhuntable.site](https://tryunhuntable.site), with real money moving through every part shown above.
+
+It answers one problem: on Hyperliquid, everyone can see the price that wipes you out. Unhuntable removes that price from public view for three kinds of users: traders, the people who copy them through private copy keys, and AI agents trading on their behalf. Every piece of that runs on NEAR: Chain Signatures for accounts with no private key, NEAR Intents for private money, OutLayer's TEE for sealed stops, NEAR AI Cloud for the attacker AI, and x402 on NEAR for agent payments.
 
 ## Security
 
