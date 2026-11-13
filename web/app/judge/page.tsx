@@ -95,7 +95,7 @@ function Run({ run, now, onClose, closing }: { run: JudgeRun; now: number; onClo
           Result {usd(p.result.pnlUsd)}, fees {usd(p.result.feesUsd)}, read from Hyperliquid&apos;s fills.
         </p>
       )}
-      {shown && shown.state !== "planned" && shown.state !== "funding" && shown.state !== "failed" && (
+      {shown && shown.state !== "planned" && shown.state !== "funding" && shown.state !== "failed" && shown.state !== "closed" && (
         <HunterView p={shown} levels={levels} read={() => api.judgeHunter()} />
       )}
     </section>
