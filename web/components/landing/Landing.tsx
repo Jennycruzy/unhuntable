@@ -146,6 +146,9 @@ export function Landing() {
           <Link href="/hunt-map/" className="hide-s">
             Hunt Map
           </Link>
+          <a href="#followers" className="hide-s">
+            Followers
+          </a>
           <a href="#judges" className="hide-s">
             For judges
           </a>
@@ -173,7 +176,7 @@ export function Landing() {
                 See who is exposed right now <span aria-hidden>→</span>
               </Link>
             </div>
-            <p className="lp-for">For traders and their AI agents. Perps on Hyperliquid and US stocks on trade.xyz. Built on NEAR.</p>
+            <p className="lp-for">For traders, the people who follow them, and their AI agents. Perps on Hyperliquid and US stocks on trade.xyz. Built on NEAR.</p>
           </div>
           <Book coin={btc} asOfMs={map?.asOfMs ?? null} />
         </section>
@@ -310,6 +313,40 @@ export function Landing() {
           </ol>
         </section>
 
+        <section className="lp-sec lp-agents lp-follow" id="followers">
+          <div className="lp-head rv">
+            <h2>Sell your trading without showing it.</h2>
+            <p>
+              On a public exchange, letting people follow you means showing your positions to the people best placed to hunt them. Here a trader sells keys instead. A
+              copy key copies each trade into the follower&apos;s own pieces, which nobody can link to the trader&apos;s. A viewing key shows closed trades only. Followers pay
+              day by day by private transfer, and nobody, followers included, ever sees an open position.
+            </p>
+            <Link href="/traders/" className="proof">
+              See the traders and their signed records, no sign-in
+            </Link>
+          </div>
+          <div className="lp-term rv" role="img" aria-label="A trader opens a position, a follower's copy opens in the follower's own account, and nobody can see the trader's position">
+            <p className="me">
+              <span>trader</span> Long ETH $35, 5x. Split into 2 pieces.
+            </p>
+            <p className="it">
+              <span>unhuntable</span> Copied for 1 follower into their own piece. Copy key $0.50 a day, paid privately.
+            </p>
+            <p className="me">
+              <span>follower</span> What is jenny_trades holding right now?
+            </p>
+            <p className="it">
+              <span>unhuntable</span> Nobody sees an open position, key holders included. Your copy is open in your own account.
+            </p>
+            <p className="me">
+              <span>trader</span> Close.
+            </p>
+            <p className="it">
+              <span>unhuntable</span> Your copy closed too. The record is signed by the guard over every piece used.
+            </p>
+          </div>
+        </section>
+
         <section className="lp-sec lp-agents">
           <div className="lp-head rv">
             <h2>Agents get hunted too.</h2>
@@ -378,7 +415,7 @@ export function Landing() {
 
         <section className="lp-sec lp-judges" id="judges">
           <div className="lp-head rv">
-            <h2>Judges: ninety seconds, no wallet.</h2>
+            <h2>Judges: two minutes, no wallet.</h2>
           </div>
           <ol className="lp-clock">
             <li className="rv">
@@ -421,6 +458,16 @@ export function Landing() {
                   <span>node tools/check-ai-hunt.cjs docs/proof/ai-hunt-mainnet.json</span>
                   <Copy text="node tools/check-ai-hunt.cjs docs/proof/ai-hunt-mainnet.json" />
                 </code>
+              </div>
+            </li>
+            <li className="rv">
+              <time>1:30</time>
+              <div>
+                <b>Open a real trade yourself.</b>
+                <p>A real $15 position on Hyperliquid from our demo account, with your stop sealed in your browser. No wallet, no money. The code is in the judging notes.</p>
+                <Link href="/judge/" className="lp-link">
+                  Open a judge trade <span aria-hidden>→</span>
+                </Link>
               </div>
             </li>
           </ol>
