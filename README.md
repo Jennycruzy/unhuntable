@@ -45,15 +45,23 @@ Real screens from the live app at [tryunhuntable.site](https://tryunhuntable.sit
 
 ## For judges, start here
 
-A few minutes, no wallet and no money needed:
+No wallet, no sign-in and no money needed. Each step says what to do and what you will see.
 
-0. **Check every live claim in one command.** `node tools/check-live.mjs` (Node 20+, nothing to install) reads NEAR, Hyperliquid, OutLayer and the live site and prints `PASS` or `FAIL` for 15 claims. [JUDGES.md](JUDGES.md) maps every claim to its code, its test and its command.
+| # | Do this | You see |
+| --- | --- | --- |
+| 1 | From a clone of this repo, run `node tools/check-live.mjs` (Node 20+, nothing to install). | 15 lines, each starting `PASS`, with the transaction or page it read, and last `15 of 15 passed.` It checks the claims below against NEAR, Hyperliquid, OutLayer and the live site. [JUDGES.md](JUDGES.md) maps every claim to its code and test. |
+| 2 | Open the [Hunt Map](https://tryunhuntable.site/hunt-map/). | Real Hyperliquid accounts with the exact price that liquidates each one, a line "Read from Hyperliquid at … Read again every 5 minutes.", and real liquidations replayed: "X of Y came straight back." This is what every trader is exposed to today. |
+| 3 | Open [tryunhuntable.site/judge](https://tryunhuntable.site/judge/), keep ETH, pick Long or Short, press **Open the trade**. | A real $15 position at 2x on our demo account. Within about 10 to 100 seconds (the piece opens at a random moment): "Open on Hyperliquid. Entry …", then "Your stop at … is sealed", and a countdown "Closes by itself in 2:…". If another visitor's trade is running, the page says when the next one can open. |
+| 4 | On the same page, look at **Hunter's view**, then open the address under "Everyone else sees". | Left, what you know: your side, size and stop price. Right, what Hyperliquid tells everyone: "Long (or Short) $14.9… · liquidation …", "No orders", and "Hyperliquid shows one account and no stop or take-profit on the book." The address opens that account on Hyperliquid's explorer: the position, and no open order. |
+| 5 | Press **Close now**. | "Closing through the guard…", then "Closed on Hyperliquid." About a minute later, "Result $… , fees $…, read from Hyperliquid's fills." |
+| 6 | Open [this Hyperliquid transaction](https://app.hyperliquid.xyz/explorer/tx/0xe3658df9d0c075c3e4df04488de8bc02021800df6bc39495872e394c8fc44fae). | An order on `xyz:NVDA` from account `0x35c9…b02a` with **Reduce Only: True**: our sealed stop firing on a mainnet NVDA short. That account is controlled by NEAR Chain Signatures. |
+| 7 | Open [this NEAR transaction](https://nearblocks.io/txns/86qJbTWkiXwXsKfCCWqK63yLanzvkbxikMj1R4HfufVd). | Status **Success**: a `sign` call to `unhuntable.near`, which had NEAR's MPC network sign a Hyperliquid action for a piece that has no private key. |
+| 8 | Open [this NEAR transaction](https://nearblocks.io/txns/7VcZWHJzgrauZaY6irWh1BiHGcr7kDch92UG69MFvMBD). | Status **Success**: an AI agent paying 0.002 USDC on NEAR for one call, with x402. |
+| 9 | Open [Traders](https://tryunhuntable.site/traders/). | The card of `@jenny_trades`: copy key $0.50 a day, viewing key $0.10 a day, how many follow, and a record signed by the guard. Nobody, followers included, sees an open position. |
+| 10 | Run `cd tools && npm install --no-package-lock && cd .. && node tools/check-ai-hunt.cjs docs/proof/ai-hunt-mainnet.json`. | Three lines ending in `yes` (the signed text is our hashes, the signature recovers the enclave key, the key is in NEAR AI's TEE attestation), then the attacker AI's answer: it named only the piece we ran identical test trades on. [What it found](docs/ai-hunter.md#proof-run-on-mainnet) |
+| 11 | Run the test suites: [Check it yourself](docs/check-it-yourself.md), one command per folder. | 606 tests passing across the guard, the signer contract, the records contract, the client, the server, the MCP server and the web app, plus browser tests at phone and desktop size. The same run is in CI. |
 
-1. **Open the [Hunt Map](https://tryunhuntable.site/hunt-map/).** Real Hyperliquid accounts and the exact prices that liquidate them, read from Hyperliquid's public API every 5 minutes. This is what every trader is exposed to today.
-2. **Open three mainnet transactions.** [A sealed stop firing on an NVDA short](https://app.hyperliquid.xyz/explorer/tx/0xe3658df9d0c075c3e4df04488de8bc02021800df6bc39495872e394c8fc44fae), [NEAR's MPC network signing for a Hyperliquid account with no private key](https://nearblocks.io/txns/86qJbTWkiXwXsKfCCWqK63yLanzvkbxikMj1R4HfufVd), and [an AI agent paying for a call with x402](https://nearblocks.io/txns/7VcZWHJzgrauZaY6irWh1BiHGcr7kDch92UG69MFvMBD).
-3. **Check an AI hunt yourself.** We sent an attacker AI, running in a NEAR AI Cloud TEE, after three of our own mainnet pieces. From a clone of this repo, with no account, `cd tools && npm install --no-package-lock && cd .. && node tools/check-ai-hunt.cjs docs/proof/ai-hunt-mainnet.json` checks that its answer came from that enclave: it prints three `yes` lines and the hunter's answer ([what it found](docs/ai-hunter.md#proof-run-on-mainnet)).
-4. **Open a real trade yourself.** At [tryunhuntable.site/judge](https://tryunhuntable.site/judge/), pick BTC, ETH or SOL, long or short. No sign-in. A real $15 position opens on Hyperliquid at 2x from our demo account, on a piece controlled by NEAR Chain Signatures. Your stop is sealed in your browser and only the guard can open it. The page shows what Hyperliquid tells everyone about the piece: no stop on the book. It closes by itself after 3 minutes, or when you press Close. No wallet and no money needed, and nothing on that page can move money. [How it is paid for](#try-a-real-trade-how-it-is-paid-for)
-5. **Run the tests.** 606 tests across the guard, the signer contract, the client, the server, the MCP server and the app, plus browser tests at phone and desktop size, all in CI: [Check it yourself](docs/check-it-yourself.md).
+How the try-a-trade page is paid for, and why nobody can move money through it: [below](#try-a-real-trade-how-it-is-paid-for).
 
 ---
 
