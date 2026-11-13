@@ -1,10 +1,11 @@
-// Judge mode: one small real trade on Hyperliquid for someone with the access code, with no
-// wallet and no money of their own. It runs on our own demo account and its ready pieces,
+// Judge mode: one small real trade on Hyperliquid for anyone, with no wallet, no sign-in and
+// no money of their own. Nobody can move money through it: it only opens and closes one
+// small position on a piece that already holds its money. It runs on our own demo account and its ready pieces,
 // through exactly the path every trade takes: a VRF plan, a piece controlled by NEAR Chain
 // Signatures, a stop sealed in the judge's browser that only the guard can open, and a close
 // by the guard. Limits keep it small: a fixed size and leverage, one run at a time, a few
 // runs a day, and every run closes by itself after ten minutes, sooner if no stop was sealed.
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { readCookie } from "./auth.js";
@@ -27,14 +28,11 @@ const DAY_MS = 24 * 60 * 60_000;
 export interface JudgeOptions {
   /** The demo account's user id. */
   userId: string;
-  /** sha256 hex of the access code; the code itself is never stored. */
-  codeSha256: string;
   perDay: number;
 }
 
 export const JudgeOpen = z
   .object({
-    code: z.string().min(1).max(200),
     coin: z.enum(JUDGE_COINS),
     side: z.enum(["long", "short"]),
   })
@@ -67,11 +65,7 @@ export class Judge {
     private readonly ctx: Ctx,
     private readonly o: JudgeOptions,
   ) {
-    if (!/^[0-9a-f]{64}$/.test(o.codeSha256)) throw new Error("the judge code hash must be 64 hex characters");
-  }
-
-  private codeOk(code: string): boolean {
-    return timingSafeEqual(sha256(code), Buffer.from(this.o.codeSha256, "hex"));
+    if (!o.userId) throw new Error("judge mode needs the demo account's user id");
   }
 
   private live(): RunRow | undefined {
@@ -89,7 +83,7 @@ export class Judge {
       .get(this.ctx.network, this.ctx.now() - DAY_MS) as { n: number; first: number | null };
   }
 
-  /** Whether a judge can open a trade right now, said without the code. */
+  /** Whether a trade can be opened right now. */
   status() {
     const live = this.live();
     const used = this.usedToday();
@@ -103,9 +97,8 @@ export class Judge {
     };
   }
 
-  /** Check the code and the limits, then open the trade. Answers the run and its token. */
+  /** Check the limits, then open the trade. Answers the run and its token. */
   async open(body: z.infer<typeof JudgeOpen>): Promise<{ token: string; run: ReturnType<Judge["view"]> }> {
-    if (!this.codeOk(body.code)) throw new ApiError("judge_code_wrong");
     this.sweep();
     const used = this.usedToday();
     if (used.n >= this.o.perDay) throw new ApiError("judge_session_spent", { time: clock((used.first ?? this.ctx.now()) + DAY_MS) });

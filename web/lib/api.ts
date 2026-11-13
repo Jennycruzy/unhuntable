@@ -193,8 +193,8 @@ export class Api {
   judge() {
     return this.call<JudgeStatus>("GET", "/api/judge");
   }
-  judgeOpen(code: string, coin: Coin, side: Side) {
-    return this.call<{ run: JudgeRun }>("POST", "/api/judge/open", { code, coin, side });
+  judgeOpen(coin: Coin, side: Side) {
+    return this.call<{ run: JudgeRun }>("POST", "/api/judge/open", { coin, side });
   }
   judgeBoxPub() {
     return this.call<{ boxPub: string }>("GET", "/api/judge/box-pub");

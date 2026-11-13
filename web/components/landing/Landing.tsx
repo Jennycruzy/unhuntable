@@ -464,9 +464,9 @@ export function Landing() {
               <time>1:30</time>
               <div>
                 <b>Open a real trade yourself.</b>
-                <p>A real $15 position on Hyperliquid from our demo account, with your stop sealed in your browser. No wallet, no money. The code is in the judging notes.</p>
+                <p>A real $15 position on Hyperliquid from our demo account, with your stop sealed in your browser. No sign-in, no wallet, no money.</p>
                 <Link href="/judge/" className="lp-link">
-                  Open a judge trade <span aria-hidden>→</span>
+                  Open a real trade <span aria-hidden>→</span>
                 </Link>
               </div>
             </li>

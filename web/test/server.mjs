@@ -246,7 +246,6 @@ function api(method, path, body, c) {
       return ok({ ...status, run: r ? judgeRun(r) : null });
     }
     if (method === "POST" && path === "/api/judge/open") {
-      if (body.code !== "judge-code") return fail(403, "judge_code_wrong", "That judge code is not right. It is in the judging notes of the submission.");
       const token = Math.random().toString(16).slice(2).padEnd(16, "0");
       const run = { coin: body.coin, side: body.side, state: "opening", stopSealed: false, endsMs: Date.now() + 600_000, stops: [] };
       judgeRuns.set(token, run);

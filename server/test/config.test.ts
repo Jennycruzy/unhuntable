@@ -49,12 +49,11 @@ describe("config secret-file permissions", () => {
     expect(c.version).toBe("dev");
     expect(c.secrets.paymentKey).toBe(PAYMENT_KEY);
     expect(() => loadConfig({})).toThrow(ConfigError);
-    // judge mode: off unless both are given, and a bad hash or one half alone stops the start
+    // judge mode: off unless the demo account is named
     expect(loadConfig({ SECRETS_FILE: secretsFile() }).judge).toBeUndefined();
-    expect(loadConfig({ SECRETS_FILE: secretsFile(), JUDGE_USER: "u1", JUDGE_CODE_SHA256: "AB".repeat(32) }).judge).toEqual({ userId: "u1", codeSha256: "ab".repeat(32), perDay: 12 });
-    expect(() => loadConfig({ SECRETS_FILE: secretsFile(), JUDGE_USER: "u1" })).toThrow(ConfigError);
-    expect(() => loadConfig({ SECRETS_FILE: secretsFile(), JUDGE_USER: "u1", JUDGE_CODE_SHA256: "abc" })).toThrow(ConfigError);
-    expect(() => loadConfig({ SECRETS_FILE: secretsFile(), JUDGE_USER: "u1", JUDGE_CODE_SHA256: "ab".repeat(32), JUDGE_PER_DAY: "0" })).toThrow(ConfigError);
+    expect(loadConfig({ SECRETS_FILE: secretsFile(), JUDGE_USER: "u1" }).judge).toEqual({ userId: "u1", perDay: 12 });
+    expect(loadConfig({ SECRETS_FILE: secretsFile(), JUDGE_USER: "u1", JUDGE_PER_DAY: "5" }).judge).toEqual({ userId: "u1", perDay: 5 });
+    expect(() => loadConfig({ SECRETS_FILE: secretsFile(), JUDGE_USER: "u1", JUDGE_PER_DAY: "0" })).toThrow(ConfigError);
     expect(() => loadConfig({ SECRETS_FILE: secretsFile(), NETWORK: "devnet" })).toThrow(ConfigError);
     expect(loadConfig({ SECRETS_FILE: secretsFile(), NETWORK: "testnet", GIT_SHA: "abc123" })).toMatchObject({
       network: "testnet",

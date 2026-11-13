@@ -121,7 +121,6 @@ function sessionStorageSet(k: string, v: string): void {
 export default function JudgePage() {
   const [status, setStatus] = useState<JudgeStatus | undefined>();
   const [error, setError] = useState<string | undefined>();
-  const [code, setCode] = useState("");
   const [coin, setCoin] = useState<Coin>("ETH");
   const [side, setSide] = useState<Side>("long");
   const [dist, setDist] = useState<string>(String(DEFAULT_STOP));
@@ -147,7 +146,7 @@ export default function JudgePage() {
     setError(undefined);
     try {
       sessionStorageSet("judge-stop", dist);
-      const r = await api.judgeOpen(code.trim(), coin, side);
+      const r = await api.judgeOpen(coin, side);
       setStatus((s) => (s ? { ...s, run: r.run } : s));
       await refresh();
     } catch (e) {
@@ -181,7 +180,7 @@ export default function JudgePage() {
             Hunt Map
           </Link>
           <Link href="/judge/" aria-current="page" className="hide-s">
-            Judges
+            Try a trade
           </Link>
           <Link href="/signin/" className="pill">
             Sign in
@@ -192,8 +191,8 @@ export default function JudgePage() {
         <section className="wrap hero hm-hero">
           <h1>Open a real trade</h1>
           <p className="lede">
-            For judges: a real {status ? usd(status.notionalUsd) : "$15"} position on Hyperliquid at {status?.leverage ?? 2}x, from Unhuntable&apos;s own demo account. No
-            wallet and no money needed. It takes the same path as every trade: a piece controlled by NEAR Chain Signatures, a stop sealed in your browser that only the
+            Try it yourself: a real {status ? usd(status.notionalUsd) : "$15"} position on Hyperliquid at {status?.leverage ?? 2}x, from Unhuntable&apos;s own demo account. No
+            sign-in, no wallet and no money needed, and nothing here can move money. It takes the same path as every trade: a piece controlled by NEAR Chain Signatures, a stop sealed in your browser that only the
             guard can open, and a close by the guard. It closes by itself after {status?.minutes ?? 10} minutes.
           </p>
           {error && <Notice kind="error">{error}</Notice>}
@@ -207,11 +206,6 @@ export default function JudgePage() {
                 void open();
               }}
             >
-              <label>
-                Judge code
-                <input value={code} onChange={(e) => setCode(e.target.value)} autoComplete="off" spellCheck={false} required data-testid="judge-code" />
-                <span className="small muted">It is in the judging notes of the submission.</span>
-              </label>
               <Choice name="Market" value={coin} options={status.coins.map((c) => ({ v: c, label: c }))} onChange={setCoin} />
               <Choice
                 name="Side"
@@ -223,9 +217,9 @@ export default function JudgePage() {
                 onChange={setSide}
               />
               <Choice name="Stop distance" value={dist} options={STOP_CHOICES.map((d) => ({ v: String(d), label: `Stop ${d * 100}% away` }))} onChange={setDist} />
-              {status.busyUntilMs !== null && <Notice>Another judge trade is running. The next one can open in {clock(status.busyUntilMs - now)}.</Notice>}
-              {status.leftToday === 0 && <Notice>Today&apos;s judge trades are used up. More open within 24 hours.</Notice>}
-              <button type="submit" disabled={busy || status.busyUntilMs !== null || status.leftToday === 0 || code.trim() === ""} data-testid="judge-open">
+              {status.busyUntilMs !== null && <Notice>Someone else&apos;s trade is running. The next one can open in {clock(status.busyUntilMs - now)}.</Notice>}
+              {status.leftToday === 0 && <Notice>Today&apos;s trades are used up. More open within 24 hours.</Notice>}
+              <button type="submit" disabled={busy || status.busyUntilMs !== null || status.leftToday === 0} data-testid="judge-open">
                 {busy ? "Opening…" : "Open the trade"}
               </button>
             </form>

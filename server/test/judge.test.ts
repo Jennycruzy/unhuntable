@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { buildServer } from "../src/index.js";
 import { JUDGE_RUN_MS, JUDGE_STOP_WITHIN_MS, Judge } from "../src/judge.js";
@@ -7,8 +6,6 @@ import { addUser, addWallet, harness, runFor, type Harness } from "./world.js";
 
 const ETH = { coin: "ETH", side: "long", notionalUsd: 30, leverage: 3, hiding: "normal" } as const;
 const BOX = { epk: "11".repeat(32), nonce: "22".repeat(12), ct: "33".repeat(48) };
-const CODE = "let-me-try";
-const HASH = createHash("sha256").update(CODE).digest("hex");
 
 interface S {
   h: Harness;
@@ -24,7 +21,7 @@ function setup(perDay = 3): S {
   const h = harness();
   const demo = addUser(h);
   addWallet(h, demo.userId, "balance", "none");
-  const judge = new Judge(h.ctx, { userId: demo.userId, codeSha256: HASH, perDay });
+  const judge = new Judge(h.ctx, { userId: demo.userId, perDay });
   const app = buildServer({ config: testConfig(), db: h.db, now: h.ctx.now, money: h.ctx, judge });
   return { h, app, judge, cookie: demo.cookie, userId: demo.userId };
 }
@@ -92,19 +89,22 @@ describe("a reused piece that still holds money", () => {
 });
 
 describe("judge mode", () => {
-  it("says what a judge can do, without the code", async () => {
+  it("says what anyone can do, with no sign-in", async () => {
     const s = setup();
     const r = (await as(s, undefined, "GET", "/api/judge")).json();
     expect(r).toMatchObject({ notionalUsd: 15, leverage: 2, coins: ["BTC", "ETH", "SOL"], minutes: 10, busyUntilMs: null, leftToday: 3, run: null });
   });
 
-  it("refuses a wrong code and bad input, and opens nothing", async () => {
+  it("refuses bad input and anything that could move money, and opens nothing", async () => {
     const s = setup();
     await readyPiece(s);
     const before = (s.h.db.prepare("SELECT COUNT(*) AS n FROM positions").get() as { n: number }).n;
-    expect((await as(s, undefined, "POST", "/api/judge/open", { code: "nope", coin: "ETH", side: "long" })).json().error).toBe("judge_code_wrong");
-    expect((await as(s, undefined, "POST", "/api/judge/open", { code: CODE, coin: "DOGE", side: "long" })).statusCode).toBe(400);
-    expect((await as(s, undefined, "POST", "/api/judge/open", { code: CODE, coin: "ETH", side: "long", notionalUsd: 9000 })).statusCode).toBe(400);
+    // only the market and side are taken: no size, no leverage, no address, no amount
+    for (const extra of [{ to: "0x" + "11".repeat(20) }, { amount: "5" }, { leverage: 50 }]) {
+      expect((await as(s, undefined, "POST", "/api/judge/open", { coin: "ETH", side: "long", ...extra })).statusCode).toBe(400);
+    }
+    expect((await as(s, undefined, "POST", "/api/judge/open", { coin: "DOGE", side: "long" })).statusCode).toBe(400);
+    expect((await as(s, undefined, "POST", "/api/judge/open", { coin: "ETH", side: "long", notionalUsd: 9000 })).statusCode).toBe(400);
     expect((s.h.db.prepare("SELECT COUNT(*) AS n FROM positions").get() as { n: number }).n).toBe(before);
   });
 
@@ -112,7 +112,7 @@ describe("judge mode", () => {
     const s = setup();
     const addr = await readyPiece(s);
     s.h.world.setPerp(addr, 12, 12, []);
-    const r = await as(s, undefined, "POST", "/api/judge/open", { code: CODE, coin: "ETH", side: "short" });
+    const r = await as(s, undefined, "POST", "/api/judge/open", { coin: "ETH", side: "short" });
     expect(r.statusCode, r.body).toBe(200);
     const jar = jarOf(r);
     expect(String(r.headers["set-cookie"])).toMatch(/^judge=[0-9a-f]{64}; Path=\/api\/judge; HttpOnly; Secure; SameSite=Strict/);
@@ -137,7 +137,7 @@ describe("judge mode", () => {
 
     // another browser sees the run as busy and cannot touch it
     expect((await as(s, undefined, "GET", "/api/judge")).json()).toMatchObject({ run: null, busyUntilMs: run.endsMs, leftToday: 2 });
-    expect((await as(s, undefined, "POST", "/api/judge/open", { code: CODE, coin: "BTC", side: "long" })).json().error).toBe("judge_busy");
+    expect((await as(s, undefined, "POST", "/api/judge/open", { coin: "BTC", side: "long" })).json().error).toBe("judge_busy");
     expect((await as(s, undefined, "POST", "/api/judge/close")).json().error).toBe("judge_no_run");
     expect((await as(s, "judge=" + "0".repeat(64), "POST", "/api/judge/stop", { boxes: [{ shard, box: BOX }] })).json().error).toBe("judge_no_run");
 
@@ -153,7 +153,7 @@ describe("judge mode", () => {
     const s = setup();
     const addr = await readyPiece(s);
     s.h.world.setPerp(addr, 12, 12, []);
-    const a = (await as(s, undefined, "POST", "/api/judge/open", { code: CODE, coin: "BTC", side: "long" })).json().run;
+    const a = (await as(s, undefined, "POST", "/api/judge/open", { coin: "BTC", side: "long" })).json().run;
     await runFor(s.h, 120_000, 1_000);
     expect(posState(s, a.id)).toBe("open");
     s.judge.sweep(); // sees it open: the stop clock starts
@@ -166,7 +166,7 @@ describe("judge mode", () => {
     expect(posState(s, a.id)).toBe("closed");
 
     s.h.world.setPerp(addr, 12, 12, []);
-    const r = await as(s, undefined, "POST", "/api/judge/open", { code: CODE, coin: "ETH", side: "long" });
+    const r = await as(s, undefined, "POST", "/api/judge/open", { coin: "ETH", side: "long" });
     expect(r.statusCode, r.body).toBe(200);
     const b = r.json().run;
     const jar = jarOf(r);
@@ -186,7 +186,7 @@ describe("judge mode", () => {
     const s = setup();
     const addr = await readyPiece(s);
     s.h.world.setPerp(addr, 12, 12, []);
-    const r = await as(s, undefined, "POST", "/api/judge/open", { code: CODE, coin: "ETH", side: "long" });
+    const r = await as(s, undefined, "POST", "/api/judge/open", { coin: "ETH", side: "long" });
     const id = r.json().run.id;
     expect((await as(s, jarOf(r), "POST", "/api/judge/close")).json()).toMatchObject({ ok: true, state: "failed" });
     await runFor(s.h, 100_000, 1_000);
@@ -198,20 +198,20 @@ describe("judge mode", () => {
     const s = setup(1);
     const addr = await readyPiece(s);
     s.h.world.setPerp(addr, 12, 12, []);
-    const r = await as(s, undefined, "POST", "/api/judge/open", { code: CODE, coin: "ETH", side: "long" });
+    const r = await as(s, undefined, "POST", "/api/judge/open", { coin: "ETH", side: "long" });
     await runFor(s.h, 60_000, 1_000);
     await as(s, jarOf(r), "POST", "/api/judge/close");
     await runFor(s.h, 10_000, 1_000);
     s.judge.sweep();
-    expect((await as(s, undefined, "POST", "/api/judge/open", { code: CODE, coin: "ETH", side: "long" })).json().error).toBe("judge_session_spent");
+    expect((await as(s, undefined, "POST", "/api/judge/open", { coin: "ETH", side: "long" })).json().error).toBe("judge_session_spent");
   });
 
   it("is busy when the demo account has no free piece", async () => {
     const s = setup();
-    expect((await as(s, undefined, "POST", "/api/judge/open", { code: CODE, coin: "ETH", side: "long" })).json().error).toBe("judge_busy");
+    expect((await as(s, undefined, "POST", "/api/judge/open", { coin: "ETH", side: "long" })).json().error).toBe("judge_busy");
   });
 
-  it("refuses a code hash that is not 64 hex characters", () => {
-    expect(() => new Judge(harness().ctx, { userId: "u", codeSha256: "short", perDay: 1 })).toThrow();
+  it("needs the demo account's user id", () => {
+    expect(() => new Judge(harness().ctx, { userId: "", perDay: 1 })).toThrow();
   });
 });
