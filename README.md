@@ -8,7 +8,7 @@
 
 Built at **NEAR HACKATHON** · #NEARHackathon · **Demo video:** [watch on Clips](https://clips.agent-native.com/share/D99B2jDb4MFX) (3:22)
 
-Tracks: **Privacy & Private AI** · **Unstoppable DeFi** · **AI Security & Defense** · **Agent Economy**
+Tracks: **Unstoppable DeFi** · **Privacy & Private AI** · **Agent Economy** · **AI Security & Defense**
 
 | What hunters see on Hyperliquid today | The same trade through Unhuntable |
 | :---: | :---: |
