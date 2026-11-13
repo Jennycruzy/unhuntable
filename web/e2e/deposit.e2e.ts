@@ -57,3 +57,14 @@ test("the refund field says which address it needs on each route", async ({ page
   await page.getByLabel("Chain").selectOption({ label: "Base" });
   await expect(page.getByTestId("refund-hint")).toContainText("Your own address on Base, starting with 0x, from MetaMask.");
 });
+
+test("after a quote you can go back and pick another way to deposit", async ({ page, apiRequests, signedIn }) => {
+  void apiRequests;
+  await signedIn();
+  await quote(page);
+  await expect(page.getByTestId("deposit-address")).toBeVisible();
+  await page.getByTestId("other-quote").click();
+  await expect(page.getByTestId("deposit-address")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Get quote" })).toBeVisible();
+  await expect(page.getByRole("radio", { name: "NEAR wallet" })).toBeVisible();
+});

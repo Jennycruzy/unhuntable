@@ -23,6 +23,15 @@ export default function DepositPage() {
   const [now, setNow] = useState(() => Date.now());
   const [copied, setCopied] = useState(false);
 
+  /** Back to the form: a quote nobody sent to simply runs out. */
+  const startOver = () => {
+    setQuote(undefined);
+    setStatus(undefined);
+    setPollError(undefined);
+    setError(undefined);
+    setCopied(false);
+  };
+
   const routeDef = ROUTES.find((r) => r.id === route)!;
   const chainDef = routeDef.chains.find((c) => c.id === chain) ?? routeDef.chains[0];
 
@@ -193,6 +202,14 @@ export default function DepositPage() {
               <Notice testId="deposit-status" live>
                 {view.kind === "seen" ? "We see your transfer. It is on its way to your private balance." : `Waiting for your transfer. This quote ends in ${countdown(view.msLeft)}.`}
               </Notice>
+              {view.kind === "waiting" && (
+                <>
+                  <button type="button" className="secondary" data-testid="other-quote" onClick={startOver}>
+                    Choose another way to deposit
+                  </button>
+                  <p className="small muted">Only if you have not sent anything to this address.</p>
+                </>
+              )}
             </>
           )}
           {pollError && view.kind !== "expired" && <Notice kind="warn">{pollError}</Notice>}
@@ -213,6 +230,9 @@ export default function DepositPage() {
               </Notice>
               <button type="button" onClick={getQuote} disabled={busy}>
                 Get a new quote
+              </button>
+              <button type="button" className="secondary" onClick={startOver}>
+                Choose another way to deposit
               </button>
             </>
           )}

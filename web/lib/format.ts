@@ -23,10 +23,15 @@ export function time(ms: number): string {
   return new Date(ms).toLocaleString("en-GB", { hour: "2-digit", minute: "2-digit", day: "numeric", month: "short" });
 }
 
+/** Time left: "4:05" under an hour, "5 h 12 min" under a day, then "3 days 2 h". */
 export function countdown(msLeft: number): string {
   if (msLeft <= 0) return "0:00";
   const s = Math.floor(msLeft / 1000);
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  if (s < 3600) return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  const h = Math.floor(s / 3600);
+  if (h < 24) return `${h} h ${Math.floor((s % 3600) / 60)} min`;
+  const d = Math.floor(h / 24);
+  return `${d} ${d === 1 ? "day" : "days"} ${h % 24} h`;
 }
 
 export function bpsPercent(bps: number): string {

@@ -32,3 +32,14 @@ describe("deposit", () => {
     expect(depositView("expired", 10_000, 1)).toEqual({ kind: "expired" });
   });
 });
+
+describe("quote countdown", () => {
+  it("reads as minutes under an hour, hours under a day, then days", async () => {
+    const { countdown } = await import("../lib/format");
+    expect(countdown(0)).toBe("0:00");
+    expect(countdown(245_000)).toBe("4:05");
+    expect(countdown((5 * 3600 + 12 * 60) * 1000)).toBe("5 h 12 min");
+    expect(countdown(4349 * 60_000)).toBe("3 days 0 h");
+    expect(countdown((26 * 3600) * 1000)).toBe("1 day 2 h");
+  });
+});
