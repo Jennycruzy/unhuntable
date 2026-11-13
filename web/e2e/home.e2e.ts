@@ -4,7 +4,7 @@ test("go home asks for exactly two approvals and keeps the relock banner until t
   await signedIn();
   await page.goto("/home/");
   await expect(page.getByTestId("exit-fee")).toHaveText("Leaving Hyperliquid costs about $1.20 per piece (Hyperliquid's new-account fee plus routing).");
-  await expect(page.getByRole("link", { name: "Leave without us" })).toHaveAttribute("href", "/exit/index.html");
+  await expect(page.getByRole("link", { name: "Leave without us" })).toHaveAttribute("href", "/exit/");
   await shot(page, "home", info.project.name);
   await page.getByRole("button", { name: "Send home" }).click();
   await expect(page.getByTestId("home-fee")).toHaveText("$2.40");

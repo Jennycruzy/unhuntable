@@ -430,7 +430,7 @@ export function Landing() {
           <div className="rv">
             <h2>Leave without us.</h2>
             <p>Twelve words and an open tool bring your money home, even if our servers are off.</p>
-            <a href="/exit/index.html" className="lp-link">
+            <a href="/exit/" className="lp-link">
               Open the exit tool <span aria-hidden>→</span>
             </a>
           </div>
@@ -458,7 +458,7 @@ export function Landing() {
         </span>
         <nav aria-label="Footer">
           <Link href="/hunt-map/">Hunt Map</Link>
-          <a href="/exit/index.html">Exit tool</a>
+          <a href="/exit/">Exit tool</a>
           <a href={TX.repo} target="_blank" rel="noopener noreferrer">
             Source
           </a>

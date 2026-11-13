@@ -32,10 +32,14 @@
   #log p.done { color: var(--accent); font-weight: 560; }
   #answer-form { display: flex; gap: 8px; }
   #answer-form button { margin-top: 0; width: auto; padding: 0 18px; }
+  a.back { display: inline-block; margin: 0 0 24px; color: var(--fg-2); text-decoration: none; font-size: 0.875rem; }
+  a.back:hover { color: var(--fg); }
+  a.back[hidden] { display: none; }
 </style>
 </head>
 <body>
 <main>
+  <a id="back" class="back" href="/" hidden>&larr; Back to Unhuntable</a>
   <h1>Exit without us</h1>
   <p class="lead">Your 12 words bring your money home, even with our servers gone. This page talks only to OutLayer, Hyperliquid and NEAR, and your words never leave it.</p>
 

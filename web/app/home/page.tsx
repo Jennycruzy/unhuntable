@@ -175,7 +175,7 @@ function GoHome({ me }: { me: Me }) {
       )}
 
       <p className="foot">
-        <a href="/exit/index.html">Leave without us</a>
+        <a href="/exit/">Leave without us</a>
       </p>
     </>
   );

@@ -23,6 +23,12 @@ import { z } from "zod";
 import { AgentApi, AgentApiError } from "./api.js";
 import { describeStatus } from "./words.js";
 
+/** A price as people read it: up to 2 decimals above 1, more below. */
+function px(v: number | null): string {
+  if (v === null || !Number.isFinite(v)) return "?";
+  return v >= 1 ? String(Math.round(v * 100) / 100) : String(Number(v.toPrecision(4)));
+}
+
 export function buildServer(api: AgentApi): McpServer {
   const server = new McpServer({ name: "unhuntable", version: "1.0.0" });
   const text = (t: string) => ({ content: [{ type: "text" as const, text: t }] });
@@ -125,7 +131,7 @@ export function buildServer(api: AgentApi): McpServer {
           traders
             .map(
               (t) =>
-                `@${t.handle}: ${t.closedTrades} closed trades, ${t.wins} won, result $${t.resultUsd}` +
+                `@${t.handle}: ${t.closedTrades} closed ${t.closedTrades === 1 ? "trade" : "trades"}, ${t.wins} won, result $${t.resultUsd}` +
                 (t.record ? `; guard-signed record over ${t.record.shards} pieces: $${t.record.pnlUsd.toFixed(2)}` : "") +
                 `. Copy key $${t.copyUsdDay}/day (${t.copiers} copying), viewing key $${t.viewUsdDay}/day (${t.viewers} viewing).${t.open ? "" : " Not selling keys now."}`,
             )
@@ -151,7 +157,7 @@ export function buildServer(api: AgentApi): McpServer {
         if (r.trades.length === 0) return text(`@${r.handle} has no closed trades yet.` + paidNote(r.paid));
         return text(
           r.trades
-            .map((t) => `${t.side} $${t.notionalUsd} ${t.coin} at ${t.leverage}x: entry ${t.entryPx ?? "?"}, exit ${t.exitPx ?? "?"}, result $${t.pnlUsd ?? "?"}`)
+            .map((t) => `${t.side} $${t.notionalUsd} ${t.coin} at ${t.leverage}x: entry ${px(t.entryPx)}, exit ${px(t.exitPx)}, result $${t.pnlUsd ?? "?"}`)
             .join("\n") + paidNote(r.paid),
         );
       } catch (e) {

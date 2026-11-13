@@ -148,6 +148,9 @@ interface Piece {
 const yes = (a: string) => /^\s*y(es)?\s*$/i.test(a);
 const stop = (a: string) => /^\s*(stop|no|n|q|quit)\s*$/i.test(a);
 
+/** Space between OutLayer calls while looking for wallets, so OutLayer does not refuse them. */
+export const PACE_MS = 250;
+
 export async function runExit(o: ExitOptions): Promise<ExitResult> {
   const f = o.fetch ?? ((...a) => fetch(...a));
   const now = o.now ?? Date.now;
@@ -168,12 +171,56 @@ export async function runExit(o: ExitOptions): Promise<ExitResult> {
   const owner = ownerAccount(key);
   const wallet = (seed: string) => new OutLayerDeterministic({ key, account: owner, seed, fetch: f, baseUrl: o.outlayerUrl ?? OUTLAYER_API, now });
 
+  const info = async (body: Record<string, unknown>): Promise<any> => {
+    let res: Response;
+    try {
+      res = await f(`${hl}/info`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    } catch {
+      throw new ExitStopped("Hyperliquid is not answering. Try again later.");
+    }
+    if (!res.ok) throw new ExitStopped(`Hyperliquid answered HTTP ${res.status} when asked for ${body.type}.`);
+    return res.json();
+  };
+
+  /** One OutLayer call, spaced out, and tried again when OutLayer says it is getting too many. */
+  const paced = async <T>(fn: () => Promise<T>): Promise<T> => {
+    for (let attempt = 0; ; attempt++) {
+      await sleep(PACE_MS);
+      try {
+        return await fn();
+      } catch (e) {
+        if (e instanceof DeterministicWalletError && e.status === 429 && attempt < 6) {
+          await sleep(2000 * (attempt + 1));
+          continue;
+        }
+        throw e;
+      }
+    }
+  };
+  /**
+   * OutLayer answers an address for any seed, used or not. A piece counts as yours once its
+   * Hyperliquid account has ever moved money; the private balance always counts.
+   */
+  const used = async (seed: string, label: string): Promise<boolean> => {
+    if (label === "balance") return paced(() => wallet(seed).exists());
+    let addr: string;
+    try {
+      addr = await paced(() => wallet(seed).evmAddress());
+    } catch (e) {
+      if (e instanceof DeterministicWalletError && e.code !== "unreachable" && e.code !== "bad_reply" && e.status !== 429) return false;
+      throw e;
+    }
+    const led = await info({ type: "userNonFundingLedgerUpdates", user: addr, startTime: 0 });
+    return Array.isArray(led) && led.length > 0;
+  };
+
   // ---- 1. find the wallets
   io.say("Looking for your wallets on OutLayer. This asks about each one in turn.");
   let found;
   try {
-    found = await rediscover(owner, key, (seed) => wallet(seed).exists());
+    found = await rediscover(owner, key, used);
   } catch (e) {
+    if (e instanceof ExitStopped) throw e;
     throw new ExitStopped(`OutLayer is not answering (${(e as Error).message}). Try again later.`);
   }
   const balanceFound = found.find((w) => w.label === "balance");
@@ -202,17 +249,6 @@ export async function runExit(o: ExitOptions): Promise<ExitResult> {
     const err = statuses.find((s) => s && typeof s.error === "string");
     if (err) throw new ExitStopped(`Hyperliquid refused the order: ${err.error}`);
     return j;
-  };
-
-  const info = async (body: Record<string, unknown>): Promise<any> => {
-    let res: Response;
-    try {
-      res = await f(`${hl}/info`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    } catch {
-      throw new ExitStopped("Hyperliquid is not answering. Try again later.");
-    }
-    if (!res.ok) throw new ExitStopped(`Hyperliquid answered HTTP ${res.status} when asked for ${body.type}.`);
-    return res.json();
   };
 
   /** Sign typed data with a piece wallet's own key, asking the person to switch EVM signing on if needed. */

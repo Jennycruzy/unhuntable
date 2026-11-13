@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { ExitStopped, USDC_NEAR, fromUnits, runExit, sendableUsdc, toUnits, type ExitIO } from "../src/exit.js";
 import { keyFromMnemonic, keyHash, ownerAccount, readAuthHeader, seedFor } from "../src/keys.js";
@@ -29,6 +30,10 @@ interface World {
   putBlocked?: boolean;
   /** No OutLayer piece wallet exists (only NEAR-controlled pieces). */
   noOutlayerPiece?: boolean;
+  /** OutLayer answers an address for every seed, as it does today, used or not. */
+  everySeedAnswers?: boolean;
+  /** OutLayer answers 429 this many times first. */
+  tooMany?: number;
   /** Answers NEAR RPC calls first when set (NEAR-controlled piece tests). */
   near?: (body: any) => unknown | undefined;
   /** The piece also holds a short NVDA position and 20 USDC on trade.xyz. */
@@ -53,6 +58,7 @@ function world(w: World = {}) {
   let denied = w.deniedSigns ?? 0;
   let deniedW = w.deniedWithdraws ?? 0;
   let lastKey = w.lastKeyOnce ?? false;
+  let tooMany = w.tooMany ?? 0;
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 
   const f = (async (input: string | URL | Request, init: RequestInit = {}) => {
@@ -73,6 +79,10 @@ function world(w: World = {}) {
       return json({ result: { permission: "FullAccess", nonce: 1 } });
     }
     if (url.startsWith("https://api.hyperliquid.xyz/info")) {
+      if (body.type === "userNonFundingLedgerUpdates") {
+        // only the piece that was ever funded has ledger entries
+        return json(String(body.user).toLowerCase() === PIECE_ADDR.toLowerCase() ? [{ time: 1, delta: { type: "deposit", usdc: "24.5" } }] : []);
+      }
       if (body.type === "allMids") return json(body.dex === "xyz" ? { "xyz:NVDA": "178.0" } : { ETH: "2000.0", BTC: "100000.0" });
       if (body.type === "clearinghouseState" && body.dex === "xyz") {
         if (!w.xyz) return json({ assetPositions: [], marginSummary: { accountValue: "0.0" }, withdrawable: "0.0" });
@@ -107,6 +117,11 @@ function world(w: World = {}) {
     if (url.startsWith("https://api.outlayer.ai/")) {
       const path = url.slice("https://api.outlayer.ai".length);
       if (path === "/wallet/v1/address?chain=base") {
+        if (tooMany > 0) {
+          tooMany -= 1;
+          return new Response("Too Many Requests", { status: 429 });
+        }
+        if (w.everySeedAnswers && seed !== BALANCE_SEED && seed !== PIECE_SEED) return json({ wallet_id: "w-x", chain: "base", address: "0x" + createHash("sha256").update(String(seed)).digest("hex").slice(0, 40) });
         if (seed === BALANCE_SEED) return json({ wallet_id: "w-balance", chain: "base", address: "0x" + "22".repeat(20) });
         if (seed === PIECE_SEED && !w.noOutlayerPiece) return json({ wallet_id: "w-piece", chain: "base", address: PIECE_ADDR });
         return json({ error: "wallet_not_found", message: "Wallet not found" }, 404);
@@ -188,6 +203,24 @@ function steps(calls: Call[]): string[] {
     return [];
   });
 }
+
+describe("finding wallets", () => {
+  it("counts only pieces whose Hyperliquid account ever moved money, though OutLayer answers every seed", async () => {
+    const w = world({ everySeedAnswers: true });
+    const r = await runExit({ ...base(w.f, io(["no"]).io) }).catch((e) => e);
+    void r;
+    const said = w.calls.filter((c) => c.url.includes("/wallet/v1/address")).length;
+    // the balance, piece:0 (used), then the gap of 20 unused seeds: never 99
+    expect(said).toBeLessThanOrEqual(23);
+  });
+
+  it("waits and asks again when OutLayer says it is getting too many requests", async () => {
+    const w = world({ tooMany: 2 });
+    const t = io(["no"]);
+    await runExit(base(w.f, t.io)).catch(() => undefined);
+    expect(t.said.some((m) => /Found your private-balance wallet and 1 piece wallet/.test(m))).toBe(true);
+  });
+});
 
 describe("exit flow", () => {
   it("closes, moves to spot, deposits, sends and withdraws, in that order", async () => {

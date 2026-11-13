@@ -228,7 +228,7 @@ export default function HuntMapPage() {
           <Link href="/hunt-map/" aria-current="page" className="hide-s">
             Hunt Map
           </Link>
-          <a href="/exit/index.html" className="hide-s">
+          <a href="/exit/" className="hide-s">
             Exit tool
           </a>
           <Link href="/signin/" className="pill">
@@ -302,7 +302,7 @@ export default function HuntMapPage() {
         </span>
         <nav aria-label="Footer">
           <Link href="/">Unhuntable</Link>
-          <a href="/exit/index.html">Exit tool</a>
+          <a href="/exit/">Exit tool</a>
         </nav>
       </footer>
     </div>

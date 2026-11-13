@@ -304,7 +304,8 @@ export class OutLayerDeterministic {
       const r = await this.request<{ address?: unknown }>("GET", "/wallet/v1/address?chain=base");
       return typeof r.address === "string";
     } catch (e) {
-      if (e instanceof DeterministicWalletError && e.code !== "unreachable" && e.code !== "bad_reply") return false;
+      // "too many requests" is not an answer about the wallet: the caller waits and asks again
+      if (e instanceof DeterministicWalletError && e.code !== "unreachable" && e.code !== "bad_reply" && e.status !== 429) return false;
       throw e;
     }
   }

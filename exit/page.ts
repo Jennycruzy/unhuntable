@@ -5,6 +5,9 @@ import { ExitStopped, runExit, type ExitIO } from "../client/src/exit.js";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
+// The way back to the app, only when this page was opened from the site (not saved to a file).
+if (location.protocol === "https:" || location.protocol === "http:") $("back").hidden = false;
+
 function line(text: string, kind: "say" | "ask" | "error" | "done" = "say") {
   const p = document.createElement("p");
   p.className = kind;
