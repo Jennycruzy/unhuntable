@@ -1,12 +1,12 @@
 # Unhuntable
 
-**Private perps on Hyperliquid and trade.xyz, the venue NEAR chose for near.com's own perps. Trade without being hunted, and sell keys that let others follow or copy your trading without ever seeing your positions. For traders, their followers and AI agents. Built on eleven parts of the NEAR stack.**
+**Private perps on Hyperliquid and trade.xyz. Trade without being hunted, and sell keys that let others follow or copy your trading without ever seeing your positions. For traders, their followers and AI agents. Built on eleven parts of the NEAR stack.**
 
 **Unhuntable hides the price that wipes you out, for people and for their agents.** Your position is split across accounts nobody can link, your stop is sealed where nobody can read it, and each piece's account is controlled by NEAR Chain Signatures, with no private key anywhere. Hunters have nothing to push the price to.
 
-**Live app:** [tryunhuntable.site](https://tryunhuntable.site) · **Hunt Map:** [tryunhuntable.site/hunt-map](https://tryunhuntable.site/hunt-map/) (no sign-in) · **Traders:** [tryunhuntable.site/traders](https://tryunhuntable.site/traders/) (no sign-in) · **Agents:** [`agent/`](agent/) (MCP server)
+**Live app:** [tryunhuntable.site](https://tryunhuntable.site) · **Try a real trade:** [tryunhuntable.site/judge](https://tryunhuntable.site/judge/) (no sign-in) · **Hunt Map:** [tryunhuntable.site/hunt-map](https://tryunhuntable.site/hunt-map/) (no sign-in) · **Traders:** [tryunhuntable.site/traders](https://tryunhuntable.site/traders/) (no sign-in) · **Agents:** [`agent/`](agent/) (MCP server)
 
-Tracks: **Privacy & Private AI** · **Unstoppable DeFi** · **AI Security & Defense**
+Tracks: **Privacy & Private AI** · **Unstoppable DeFi** · **AI Security & Defense** · **Agent Economy**
 
 | What hunters see on Hyperliquid today | The same trade through Unhuntable |
 | :---: | :---: |
@@ -47,9 +47,21 @@ A few minutes, no wallet and no money needed:
 
 1. **Open the [Hunt Map](https://tryunhuntable.site/hunt-map/).** Real Hyperliquid accounts and the exact prices that liquidate them, read from Hyperliquid's public API every 5 minutes. This is what every trader is exposed to today.
 2. **Open three mainnet transactions.** [A sealed stop firing on an NVDA short](https://app.hyperliquid.xyz/explorer/tx/0xe3658df9d0c075c3e4df04488de8bc02021800df6bc39495872e394c8fc44fae), [NEAR's MPC network signing for a Hyperliquid account with no private key](https://nearblocks.io/txns/86qJbTWkiXwXsKfCCWqK63yLanzvkbxikMj1R4HfufVd), and [an AI agent paying for a call with x402](https://nearblocks.io/txns/7VcZWHJzgrauZaY6irWh1BiHGcr7kDch92UG69MFvMBD).
-3. **Check an AI hunt yourself.** We sent an attacker AI, running in a NEAR AI Cloud TEE, after three of our own mainnet pieces. One command checks that its answer came from that enclave, with no account: `node tools/check-ai-hunt.cjs docs/proof/ai-hunt-mainnet.json` prints three `yes` lines and the hunter's answer ([what it found](docs/ai-hunter.md#proof-run-on-mainnet)).
-4. **Open a real trade yourself.** At [tryunhuntable.site/judge](https://tryunhuntable.site/judge/), pick BTC, ETH or SOL, long or short. No sign-in. A real $15 position opens on Hyperliquid at 2x from our demo account, on a piece controlled by NEAR Chain Signatures. Your stop is sealed in your browser and only the guard can open it. The page shows what Hyperliquid tells everyone about the piece: no stop on the book. It closes by itself after 10 minutes, or when you press Close. No wallet and no money needed, and nothing on that page can move money.
+3. **Check an AI hunt yourself.** We sent an attacker AI, running in a NEAR AI Cloud TEE, after three of our own mainnet pieces. From a clone of this repo, with no account, `cd tools && npm install --no-package-lock && cd .. && node tools/check-ai-hunt.cjs docs/proof/ai-hunt-mainnet.json` checks that its answer came from that enclave: it prints three `yes` lines and the hunter's answer ([what it found](docs/ai-hunter.md#proof-run-on-mainnet)).
+4. **Open a real trade yourself.** At [tryunhuntable.site/judge](https://tryunhuntable.site/judge/), pick BTC, ETH or SOL, long or short. No sign-in. A real $15 position opens on Hyperliquid at 2x from our demo account, on a piece controlled by NEAR Chain Signatures. Your stop is sealed in your browser and only the guard can open it. The page shows what Hyperliquid tells everyone about the piece: no stop on the book. It closes by itself after 10 minutes, or when you press Close. No wallet and no money needed, and nothing on that page can move money. [How it is paid for](#try-a-real-trade-how-it-is-paid-for)
 5. **Run the tests.** 604 tests across the guard, the signer contract, the client, the server, the MCP server and the app, plus browser tests at phone and desktop size, all in CI: [Check it yourself](docs/check-it-yourself.md).
+
+---
+
+## Try a real trade: how it is paid for
+
+[tryunhuntable.site/judge](https://tryunhuntable.site/judge/) lets anyone, with no sign-in and no wallet, open one real trade on Hyperliquid through the same path every Unhuntable trade takes.
+
+- **Whose money.** It trades from Unhuntable's own demo account, the follower account that holds a copy key to `@jenny_trades`. Its piece is controlled by NEAR Chain Signatures and holds about $11.60 of our own USDC on Hyperliquid, left on it by its earlier copy trade. We funded that account ourselves: NEAR swapped to USDC, deposited through the app into its private balance on NEAR Intents, then sent privately to the piece.
+- **Nothing moves to open it.** A piece that already holds enough from its last trade trades on that money, so no transfer is sent and the trade opens in seconds. This is the same rule every user's reused piece follows.
+- **What a trade costs us.** $15 at 2x on BTC, ETH or SOL. Hyperliquid's fees are about 1.4 cents a trade. The price can only cost what the stop allows: the page seals a stop 1%, 2% or 3% away, and the trade closes by itself after 10 minutes, or 2 minutes after it opens if no stop was sealed. So one trade costs at most about 45 cents, and usually a cent or two.
+- **Limits.** One trade at a time and 12 a day. The page takes only a market and a side: no size, no leverage, no address and no amount, so nobody can move money through it. Moving the piece's money needs the demo account's own 12 words.
+- **Topping it up.** If the piece runs low, we send it more by private transfer from our own private balance, the normal funding path. Until then the page says it cannot open a trade.
 
 ---
 
@@ -135,6 +147,9 @@ All of these are observed results on NEAR, NEAR Intents, OutLayer and Hyperliqui
 
 | What we did | What happened |
 | --- | --- |
+| A full trade in the live app from our own NEAR wallet, recorded for the demo video | 25 USDC deposited from a NEAR wallet into the private balance. A $35 ETH long at 5x, split into 2 NEAR-controlled pieces, opened at 2011.0 and 2013.7 while Hyperliquid showed two unrelated accounts and no orders. Closed, then both pieces' money was signed home by NEAR's MPC network: $20.87 back in the private balance. The gap is Hyperliquid's new-account fee and routing, about $1.20 a piece, plus the trade. |
+| The trader sold keys as `@jenny_trades`; a second account bought a copy key | One wallet approval, then $0.50 for the day went by private transfer from the follower's private balance to the trader's. The trader's ETH long was copied into the follower's own piece, which opened at 2011.8 minutes after the trader's. When the trader closed, the copy closed too. The follower never saw the trader's position, and the trader card then showed one follower and $0.50 earned. |
+| Opened trades from the [try-a-trade page](#try-a-real-trade-how-it-is-paid-for) with no wallet | A $15 ETH long at 2x opened in about 10 seconds on the demo account's piece with no transfer, the stop was sealed in the browser, and the guard closed it 10 seconds later, for 1.4 cents. A short held for 45 seconds showed Hyperliquid's public view of the piece as "Short $14.88, liquidation 3,419, no orders". |
 | Deployed the signer contract as `unhuntable.near` | Running on NEAR mainnet with `v1.signer` and Hyperliquid mainnet; no owner, no admin methods. |
 | Registered a piece key and asked NEAR for its Hyperliquid account | `v1.signer` derived the account from `unhuntable.near` and the key; it was the same account we computed before the contract existed. |
 | Funded that piece privately: 2.5 USDC from a confidential balance | Arrived as 2.178894 USDC on the piece's Hyperliquid account. |
@@ -184,11 +199,12 @@ All of these are observed results on NEAR, NEAR Intents, OutLayer and Hyperliqui
 | Folder | What it is | Tests |
 | --- | --- | --- |
 | `guard/` | The guard: a Rust WASI program for OutLayer. Decisions are pure functions in `src/lib.rs`. | 44 |
-| `client/` | TypeScript: sealed boxes, guard client, position planner, fill savings, pieces key, Hyperliquid signing, Chain Signatures pieces, NEAR relay, exit logic | 179 |
-| `server/` | API, SQLite, jobs, NEAR sign-in, OutLayer wallet client, Chain Signatures relay, money flows, Hunt Map collector, Hunter's View, NEAR AI Hunter, PingPay route, Followers | 256 |
+| `client/` | TypeScript: sealed boxes, guard client, position planner, fill savings, pieces key, Hyperliquid signing, Chain Signatures pieces, NEAR relay, exit logic | 181 |
+| `server/` | API, SQLite, jobs, NEAR sign-in, OutLayer wallet client, Chain Signatures relay, money flows, Hunt Map collector, Hunter's View, NEAR AI Hunter, PingPay route, Followers, try-a-trade page | 267 |
 | `signer/` | NEAR contract `unhuntable.near`: Hyperliquid accounts controlled by Chain Signatures, signing only what each piece key approved | 16 |
+| `contract/` | NEAR records contract: public, checkable records (hashes, amounts, treasury settings) and never an address that could tie pieces together | 18 |
 | `agent/` | MCP server for AI agents: open, sealed stop, status, close, traders, closed trades, ask for a key; pays each call with x402 in USDC on NEAR or through PingPay | 13 |
-| `web/` | Phone-first static web app with a strict CSP | 59 unit + Playwright at two screen sizes |
+| `web/` | Phone-first static web app with a strict CSP | 65 unit + Playwright at two screen sizes |
 | `exit/` | Leave-without-us tool: one HTML page or a CLI | in `client/` |
 | `attacks/` | Linking attacks with public data only | |
 | `tools/` | EAS proof check and its reference, NEAR AI Hunter receipt check | |
