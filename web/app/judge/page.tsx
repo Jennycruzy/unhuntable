@@ -218,8 +218,9 @@ export default function JudgePage() {
               />
               <Choice name="Stop distance" value={dist} options={STOP_CHOICES.map((d) => ({ v: String(d), label: `Stop ${d * 100}% away` }))} onChange={setDist} />
               {status.busyUntilMs !== null && <Notice>Someone else&apos;s trade is running. The next one can open in {clock(status.busyUntilMs - now)}.</Notice>}
+              {!status.ready && status.busyUntilMs === null && <Notice>The demo account can&apos;t open a trade right now. Try again later.</Notice>}
               {status.leftToday === 0 && <Notice>Today&apos;s trades are used up. More open within 24 hours.</Notice>}
-              <button type="submit" disabled={busy || status.busyUntilMs !== null || status.leftToday === 0} data-testid="judge-open">
+              <button type="submit" disabled={busy || !status.ready || status.busyUntilMs !== null || status.leftToday === 0} data-testid="judge-open">
                 {busy ? "Opening…" : "Open the trade"}
               </button>
             </form>

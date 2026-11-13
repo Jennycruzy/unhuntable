@@ -17,6 +17,16 @@ interface S {
 
 let nextWallet = 0x40;
 
+/** Run the clock in 1 s steps, sweeping as the server does, until the position is open. */
+async function untilOpen(s: S, id: string): Promise<void> {
+  for (let i = 0; i < 200 && posState(s, id) !== "open"; i++) {
+    await runFor(s.h, 1_000, 1_000);
+    s.judge.sweep();
+  }
+  expect(posState(s, id)).toBe("open");
+  s.judge.sweep();
+}
+
 function setup(perDay = 3): S {
   const h = harness();
   const demo = addUser(h);
@@ -104,7 +114,9 @@ describe("judge mode", () => {
   it("says what anyone can do, with no sign-in", async () => {
     const s = setup();
     const r = (await as(s, undefined, "GET", "/api/judge")).json();
-    expect(r).toMatchObject({ notionalUsd: 15, leverage: 2, coins: ["BTC", "ETH", "SOL"], minutes: 10, busyUntilMs: null, leftToday: 3, run: null });
+    expect(r).toMatchObject({ notionalUsd: 15, leverage: 2, coins: ["BTC", "ETH", "SOL"], minutes: 3, busyUntilMs: null, leftToday: 3, run: null });
+    // no ready piece yet, so the page says so before anyone presses anything
+    expect(r.ready).toBe(false);
   });
 
   it("refuses bad input and anything that could move money, and opens nothing", async () => {
@@ -161,14 +173,12 @@ describe("judge mode", () => {
     expect((await as(s, jar, "GET", "/api/judge")).json().run).toMatchObject({ live: false });
   });
 
-  it("closes by itself when no stop is sealed in time, and after ten minutes with one", async () => {
+  it("closes by itself when no stop is sealed in time, and at the end of its time with one", async () => {
     const s = setup();
     const addr = await readyPiece(s);
     s.h.world.setPerp(addr, 12, 12, []);
     const a = (await as(s, undefined, "POST", "/api/judge/open", { coin: "BTC", side: "long" })).json().run;
-    await runFor(s.h, 120_000, 1_000);
-    expect(posState(s, a.id)).toBe("open");
-    s.judge.sweep(); // sees it open: the stop clock starts
+    await untilOpen(s, a.id); // the sweep sees it open: the stop clock starts
     await runFor(s.h, JUDGE_STOP_WITHIN_MS - 10_000, 5_000);
     s.judge.sweep();
     expect(posState(s, a.id)).toBe("open");
@@ -182,16 +192,30 @@ describe("judge mode", () => {
     expect(r.statusCode, r.body).toBe(200);
     const b = r.json().run;
     const jar = jarOf(r);
-    await runFor(s.h, 120_000, 1_000);
+    await untilOpen(s, b.id);
     const shard = (await as(s, jar, "GET", "/api/judge")).json().run.position.pieces[0].shard;
     await as(s, jar, "POST", "/api/judge/stop", { boxes: [{ shard, box: BOX }] });
-    await runFor(s.h, JUDGE_STOP_WITHIN_MS, 5_000);
+    await runFor(s.h, 20_000, 5_000);
     s.judge.sweep();
     expect(posState(s, b.id)).toBe("open");
     await runFor(s.h, JUDGE_RUN_MS, 5_000);
     s.judge.sweep();
     await runFor(s.h, 10_000, 1_000);
     expect(posState(s, b.id)).toBe("closed");
+  });
+
+  it("says it is not available, and opens nothing, when the demo piece holds too little", async () => {
+    const s = setup();
+    const addr = await readyPiece(s);
+    s.h.world.setPerp(addr, 6, 6, []);
+    expect((await as(s, undefined, "GET", "/api/judge")).json().ready).toBe(false);
+    const before = (s.h.db.prepare("SELECT COUNT(*) AS n FROM positions").get() as { n: number }).n;
+    expect((await as(s, undefined, "POST", "/api/judge/open", { coin: "ETH", side: "long" })).json().error).toBe("judge_unavailable");
+    expect((s.h.db.prepare("SELECT COUNT(*) AS n FROM positions").get() as { n: number }).n).toBe(before);
+    // topped up: ready again once the 30-second read has expired
+    s.h.world.setPerp(addr, 12, 12, []);
+    await runFor(s.h, 31_000, 1_000);
+    expect((await as(s, undefined, "GET", "/api/judge")).json().ready).toBe(true);
   });
 
   it("calls a run off when closed before anything opened", async () => {

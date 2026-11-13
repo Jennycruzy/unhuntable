@@ -72,7 +72,7 @@ export const API_ERRORS = {
   key_exists: "You already hold this kind of key to this trader. Stop it first to buy it again.",
   key_needed: "Closed trades are shown to holders of a key to this trader that is on.",
   judge_busy: "Someone else's trade is running. The next one can open at {time}.",
-  judge_unavailable: "The demo account needs its owner in the app first. Nothing was opened.",
+  judge_unavailable: "The demo account can't open a trade right now. Nothing was opened. Try again later.",
   judge_no_run: "There is no trade from this page in this browser. Open one first.",
 } as const;
 

@@ -17,3 +17,6 @@ __pycache__/
 HANDOFF*.md
 [S]PEC*
 linking-report.json
+
+# local-only scripts that hold paths of this machine
+zz-*.test.ts

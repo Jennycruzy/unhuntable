@@ -4,7 +4,7 @@
 // through exactly the path every trade takes: a VRF plan, a piece controlled by NEAR Chain
 // Signatures, a stop sealed in the judge's browser that only the guard can open, and a close
 // by the guard. Limits keep it small: a fixed size and leverage, one run at a time, a few
-// runs a day, and every run closes by itself after ten minutes, sooner if no stop was sealed.
+// runs a day, and every run closes by itself after three minutes, sooner if no stop was sealed.
 import { createHash, randomBytes } from "node:crypto";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
@@ -20,10 +20,18 @@ export const JUDGE_COOKIE = "judge";
 export const JUDGE_COINS = ["BTC", "ETH", "SOL"] as const;
 export const JUDGE_NOTIONAL_USD = 15;
 export const JUDGE_LEVERAGE = 2;
-export const JUDGE_RUN_MS = 10 * 60_000;
+export const JUDGE_RUN_MS = 3 * 60_000;
 /** A run whose position has been open this long with no sealed stop is closed. */
-export const JUDGE_STOP_WITHIN_MS = 2 * 60_000;
+export const JUDGE_STOP_WITHIN_MS = 90_000;
 const DAY_MS = 24 * 60 * 60_000;
+/**
+ * What the demo piece must hold to open a trade without a transfer: a $15 trade at 2x needs
+ * $7.50 of margin and about 3 cents of fee reserve. Below this the page says it is not
+ * available, rather than letting a judge wait.
+ */
+export const JUDGE_MIN_HELD_USD = 8;
+/** One read of the demo piece's balance serves the page for this long. */
+const HELD_CACHE_MS = 30_000;
 
 export interface JudgeOptions {
   /** The demo account's user id. */
@@ -60,6 +68,7 @@ const clock = (ms: number): string => new Date(ms).toISOString().slice(11, 16) +
 
 export class Judge {
   private opening = false;
+  private held: { at: number; ok: boolean } | null = null;
 
   constructor(
     private readonly ctx: Ctx,
@@ -83,11 +92,34 @@ export class Judge {
       .get(this.ctx.network, this.ctx.now() - DAY_MS) as { n: number; first: number | null };
   }
 
+  /** Whether a free demo piece holds enough to trade. A failed read does not block the page. */
+  async funded(): Promise<boolean> {
+    const now = this.ctx.now();
+    if (this.held && now - this.held.at < HELD_CACHE_MS) return this.held.ok;
+    let ok = true;
+    try {
+      ok = false;
+      for (const p of freePieces(this.ctx, this.o.userId)) {
+        if (!p.hl_address) continue;
+        const perp = await this.ctx.hl.perp(p.hl_address);
+        if (perp.positions.length === 0 && perp.accountValue >= JUDGE_MIN_HELD_USD) {
+          ok = true;
+          break;
+        }
+      }
+    } catch {
+      ok = true;
+    }
+    this.held = { at: now, ok };
+    return ok;
+  }
+
   /** Whether a trade can be opened right now. */
-  status() {
+  async status() {
     const live = this.live();
     const used = this.usedToday();
     return {
+      ready: live ? true : await this.funded(),
       notionalUsd: JUDGE_NOTIONAL_USD,
       leverage: JUDGE_LEVERAGE,
       coins: [...JUDGE_COINS],
@@ -105,6 +137,7 @@ export class Judge {
     const live = this.live();
     if (live || this.opening) throw new ApiError("judge_busy", { time: clock(live?.ends_ms ?? this.ctx.now() + JUDGE_RUN_MS) });
     if (freePieces(this.ctx, this.o.userId).length < 1) throw new ApiError("judge_busy", { time: clock(this.ctx.now() + JUDGE_RUN_MS) });
+    if (!(await this.funded())) throw new ApiError("judge_unavailable");
 
     this.opening = true;
     try {
@@ -189,7 +222,7 @@ export class Judge {
     return { ok: true as const, state: after };
   }
 
-  /** Close runs past their ten minutes, and runs that opened with no sealed stop in time. Safe to run often. */
+  /** Close runs past their time, and runs that opened with no sealed stop in time. Safe to run often. */
   sweep(): void {
     const now = this.ctx.now();
     const runs = this.ctx.db.prepare("SELECT * FROM judge_runs WHERE state = 'live' AND network = ?").all(this.ctx.network) as RunRow[];
@@ -217,7 +250,7 @@ export class Judge {
 
 export function registerJudgeRoutes(app: FastifyInstance, judge: Judge, ctx: Ctx): void {
   const token = (req: FastifyRequest) => readCookie(req.headers.cookie, JUDGE_COOKIE);
-  app.get("/api/judge", async (req) => ({ ...judge.status(), run: judge.mine(token(req)) }));
+  app.get("/api/judge", async (req) => ({ ...(await judge.status()), run: judge.mine(token(req)) }));
   app.post("/api/judge/open", async (req, reply) => {
     const parsed = JudgeOpen.safeParse(req.body);
     if (!parsed.success) throw new ApiError("bad_request");

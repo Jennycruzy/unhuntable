@@ -125,7 +125,7 @@ function int(name: string, v: string | undefined, dflt: number): number {
 function judgeConfig(env: NodeJS.ProcessEnv): Config["judge"] {
   const userId = env.JUDGE_USER ?? "";
   if (!userId) return undefined;
-  const perDay = int("JUDGE_PER_DAY", env.JUDGE_PER_DAY, 12);
+  const perDay = int("JUDGE_PER_DAY", env.JUDGE_PER_DAY, 40);
   if (perDay < 1) throw new ConfigError("JUDGE_PER_DAY must be at least 1");
   return { userId, perDay };
 }

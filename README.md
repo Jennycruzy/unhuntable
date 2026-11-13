@@ -50,7 +50,7 @@ A few minutes, no wallet and no money needed:
 1. **Open the [Hunt Map](https://tryunhuntable.site/hunt-map/).** Real Hyperliquid accounts and the exact prices that liquidate them, read from Hyperliquid's public API every 5 minutes. This is what every trader is exposed to today.
 2. **Open three mainnet transactions.** [A sealed stop firing on an NVDA short](https://app.hyperliquid.xyz/explorer/tx/0xe3658df9d0c075c3e4df04488de8bc02021800df6bc39495872e394c8fc44fae), [NEAR's MPC network signing for a Hyperliquid account with no private key](https://nearblocks.io/txns/86qJbTWkiXwXsKfCCWqK63yLanzvkbxikMj1R4HfufVd), and [an AI agent paying for a call with x402](https://nearblocks.io/txns/7VcZWHJzgrauZaY6irWh1BiHGcr7kDch92UG69MFvMBD).
 3. **Check an AI hunt yourself.** We sent an attacker AI, running in a NEAR AI Cloud TEE, after three of our own mainnet pieces. From a clone of this repo, with no account, `cd tools && npm install --no-package-lock && cd .. && node tools/check-ai-hunt.cjs docs/proof/ai-hunt-mainnet.json` checks that its answer came from that enclave: it prints three `yes` lines and the hunter's answer ([what it found](docs/ai-hunter.md#proof-run-on-mainnet)).
-4. **Open a real trade yourself.** At [tryunhuntable.site/judge](https://tryunhuntable.site/judge/), pick BTC, ETH or SOL, long or short. No sign-in. A real $15 position opens on Hyperliquid at 2x from our demo account, on a piece controlled by NEAR Chain Signatures. Your stop is sealed in your browser and only the guard can open it. The page shows what Hyperliquid tells everyone about the piece: no stop on the book. It closes by itself after 10 minutes, or when you press Close. No wallet and no money needed, and nothing on that page can move money. [How it is paid for](#try-a-real-trade-how-it-is-paid-for)
+4. **Open a real trade yourself.** At [tryunhuntable.site/judge](https://tryunhuntable.site/judge/), pick BTC, ETH or SOL, long or short. No sign-in. A real $15 position opens on Hyperliquid at 2x from our demo account, on a piece controlled by NEAR Chain Signatures. Your stop is sealed in your browser and only the guard can open it. The page shows what Hyperliquid tells everyone about the piece: no stop on the book. It closes by itself after 3 minutes, or when you press Close. No wallet and no money needed, and nothing on that page can move money. [How it is paid for](#try-a-real-trade-how-it-is-paid-for)
 5. **Run the tests.** 604 tests across the guard, the signer contract, the client, the server, the MCP server and the app, plus browser tests at phone and desktop size, all in CI: [Check it yourself](docs/check-it-yourself.md).
 
 ---
@@ -61,8 +61,8 @@ A few minutes, no wallet and no money needed:
 
 - **Whose money.** It trades from Unhuntable's own demo account, the follower account that holds a copy key to `@jenny_trades`. Its piece is controlled by NEAR Chain Signatures and holds about $11.60 of our own USDC on Hyperliquid, left on it by its earlier copy trade. We funded that account ourselves: NEAR swapped to USDC, deposited through the app into its private balance on NEAR Intents, then sent privately to the piece.
 - **Nothing moves to open it.** A piece that already holds enough from its last trade trades on that money, so no transfer is sent and the trade opens in seconds. This is the same rule every user's reused piece follows.
-- **What a trade costs us.** $15 at 2x on BTC, ETH or SOL. Hyperliquid's fees are about 1.4 cents a trade. The price can only cost what the stop allows: the page seals a stop 1%, 2% or 3% away, and the trade closes by itself after 10 minutes, or 2 minutes after it opens if no stop was sealed. So one trade costs at most about 45 cents, and usually a cent or two.
-- **Limits.** One trade at a time and 12 a day. The page takes only a market and a side: no size, no leverage, no address and no amount, so nobody can move money through it. Moving the piece's money needs the demo account's own 12 words.
+- **What a trade costs us.** $15 at 2x on BTC, ETH or SOL. Hyperliquid's fees are about 1.4 cents a trade. The price can only cost what the stop allows: the page seals a stop 1%, 2% or 3% away, and the trade closes by itself after 3 minutes, or 90 seconds after it opens if no stop was sealed. So one trade costs at most about 45 cents, and usually a cent or two.
+- **Limits.** One trade at a time, 3 minutes each, and 40 a day. If the piece ever holds too little, the page says so before anyone presses anything. The page takes only a market and a side: no size, no leverage, no address and no amount, so nobody can move money through it. Moving the piece's money needs the demo account's own 12 words.
 - **Topping it up.** If the piece runs low, we send it more by private transfer from our own private balance, the normal funding path. Until then the page says it cannot open a trade.
 
 ---
@@ -215,6 +215,21 @@ All of these are observed results on NEAR, NEAR Intents, OutLayer and Hyperliqui
 CI runs every folder's tests, rebuilds the exit page and checks it matches, checks the signer stays under 100 KB, and checks the repo for secrets.
 
 Every folder has its own README with the details, and [`docs/`](docs/) explains each part in depth.
+
+## What we used and built
+
+- **Written during the event.** All code in this repo was written for Unhuntable between 3 and 14 November 2026, after the hackathon opened on 19 October. No earlier project's code was copied in; the first commit is [`8d0e682`](https://github.com/Jennycruzy/unhuntable/commit/8d0e682) on 3 November.
+- **AI-written code.** Most of the code was written by Claude Code (Anthropic), in local and cloud sessions, under the owner's direction, and reviewed against tests and live mainnet runs before it shipped.
+- **Model at run time.** The NEAR AI Hunter runs `Qwen/Qwen3.6-35B-A3B-FP8` on NEAR AI Cloud, inside its TEE.
+- **NEAR and partner services.** NEAR Chain Signatures (`v1.signer`), NEAR Intents and 1Click, Aurora Intents, OutLayer (TEE runs, VRF, custody wallets and policies), NEAR AI Cloud, PingPay Agent Pay, Sputnik DAO, Hyperliquid and trade.xyz, EAS attestations.
+- **Main libraries.**
+  - Rust: `near-sdk` 5, `k256` 0.13, `ed25519-dalek` 2, `x25519-dalek` 2, `sha2` 0.10, `serde`.
+  - Client: `@noble/curves` 1.9, `@noble/hashes` 1.8, `@noble/ciphers` 1.3, `@scure/base` 1.2, `@scure/bip39` 1.6.
+  - Server: `fastify` 5, `better-sqlite3` 11, `zod` 3, `pino` 9, `@fastnear/x402` 2.5.
+  - Web: `next` 16, `react` 19, `@near-wallet-selector` 10 (Meteor, HOT, MyNearWallet), `qrcode-generator` 2.
+  - Agent: `@modelcontextprotocol/sdk` 1.32, `@fastnear/x402` 2.5.
+  - Proof checks: `ethers` 6, `@ethereum-attestation-service/eas-sdk` 2.10.
+  - Tests: `vitest`, Playwright, `@axe-core/playwright`, `near-workspaces`.
 
 ## About
 

@@ -29,3 +29,11 @@ test("judge mode says so when another judge trade is running", async ({ page, co
   await expect(page.getByText("Someone else's trade is running.")).toBeVisible();
   await expect(page.getByTestId("judge-open")).toBeDisabled();
 });
+
+test("judge mode says so up front when the demo account cannot trade", async ({ page, context, apiRequests }) => {
+  void apiRequests;
+  await context.addCookies([{ name: "scenario", value: "judge_low", url: "http://127.0.0.1:4173" }]);
+  await page.goto("/judge/");
+  await expect(page.getByText("The demo account can't open a trade right now.")).toBeVisible();
+  await expect(page.getByTestId("judge-open")).toBeDisabled();
+});

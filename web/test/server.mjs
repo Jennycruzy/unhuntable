@@ -240,7 +240,7 @@ function api(method, path, body, c) {
   // public: the Hunt us challenge
   if (path.startsWith("/api/judge")) {
     const r = c.judge ? judgeRuns.get(c.judge) : undefined;
-    const status = { notionalUsd: 15, leverage: 2, coins: ["BTC", "ETH", "SOL"], minutes: 10, busyUntilMs: scenario === "judge_busy" ? Date.now() + 300_000 : null, leftToday: 11 };
+    const status = { ready: scenario !== "judge_low", notionalUsd: 15, leverage: 2, coins: ["BTC", "ETH", "SOL"], minutes: 3, busyUntilMs: scenario === "judge_busy" ? Date.now() + 300_000 : null, leftToday: 11 };
     if (method === "GET" && path === "/api/judge") {
       if (r && r.state === "opening") r.state = "open";
       return ok({ ...status, run: r ? judgeRun(r) : null });

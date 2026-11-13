@@ -51,7 +51,7 @@ describe("config secret-file permissions", () => {
     expect(() => loadConfig({})).toThrow(ConfigError);
     // judge mode: off unless the demo account is named
     expect(loadConfig({ SECRETS_FILE: secretsFile() }).judge).toBeUndefined();
-    expect(loadConfig({ SECRETS_FILE: secretsFile(), JUDGE_USER: "u1" }).judge).toEqual({ userId: "u1", perDay: 12 });
+    expect(loadConfig({ SECRETS_FILE: secretsFile(), JUDGE_USER: "u1" }).judge).toEqual({ userId: "u1", perDay: 40 });
     expect(loadConfig({ SECRETS_FILE: secretsFile(), JUDGE_USER: "u1", JUDGE_PER_DAY: "5" }).judge).toEqual({ userId: "u1", perDay: 5 });
     expect(() => loadConfig({ SECRETS_FILE: secretsFile(), JUDGE_USER: "u1", JUDGE_PER_DAY: "0" })).toThrow(ConfigError);
     expect(() => loadConfig({ SECRETS_FILE: secretsFile(), NETWORK: "devnet" })).toThrow(ConfigError);

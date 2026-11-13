@@ -456,6 +456,8 @@ export interface JudgeRun {
 }
 
 export interface JudgeStatus {
+  /** False when the demo account's piece holds too little to open a trade right now. */
+  ready: boolean;
   notionalUsd: number;
   leverage: number;
   coins: Coin[];
