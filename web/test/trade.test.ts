@@ -67,6 +67,12 @@ describe("trade", () => {
     expect(reviewRows({ ...PLAN, builderFee: { rate: "0.01%", usd: "0.0300" } }).builderFee).toEqual({ rate: "0.01%", usd: "0.0300" });
   });
 
+  it("review shows piece USD in cents, not float noise", () => {
+    const pieces = [{ ...PLAN.plan.pieces[0], notionalUsd: 15.294005000000002 }, PLAN.plan.pieces[1]];
+    const r = reviewRows({ ...PLAN, plan: { ...PLAN.plan, pieces } });
+    expect(r.pieces[0].notional).toBe("15.29");
+  });
+
   it("checks the form before asking the server", () => {
     expect(checkTrade(REQ)).toBeUndefined();
     expect(checkTrade({ ...REQ, leverage: 11 })).toBe("Leverage is a whole number from 1 to 10.");

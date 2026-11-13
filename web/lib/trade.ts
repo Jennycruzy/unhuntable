@@ -74,7 +74,7 @@ export function reviewRows(a: import("./types").PlanAnswer): {
 } {
   return {
     count: a.plan.pieces.length,
-    pieces: a.plan.pieces.map((p, i) => ({ n: i + 1, size: String(p.size), notional: String(p.notionalUsd), funding: String(p.fundingUsd) })),
+    pieces: a.plan.pieces.map((p, i) => ({ n: i + 1, size: String(p.size), notional: p.notionalUsd.toFixed(2), funding: String(p.fundingUsd) })),
     feesUsd: String(a.feesUsd),
     exitFeeUsd: String(a.exitFeeUsd),
     builderFee: a.builderFee ? { rate: String(a.builderFee.rate), usd: String(a.builderFee.usd) } : null,

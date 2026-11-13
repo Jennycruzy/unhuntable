@@ -8,6 +8,11 @@
 
 Tracks: **Privacy & Private AI** · **Unstoppable DeFi** · **AI Security & Defense**
 
+| What hunters see on Hyperliquid today | The same trade through Unhuntable |
+| :---: | :---: |
+| <img src="docs/img/book-public.png" alt="A short position on Hyperliquid: its liquidation price is public and its stop sits on the book, and a hunter locks onto the stop" width="440"> | <img src="docs/img/book-hidden.png" alt="The same trade through Unhuntable: small separate accounts, no stop on the book, the stop sealed in an enclave" width="440"> |
+| Your liquidation price is public and your stop sits on the book. A hunter locks on. | Small separate accounts, no stop on the book, the stop sealed in an enclave. Nothing to hunt. |
+
 ### Why it matters
 
 - **Every Hyperliquid account is public.** Its size, the exact price that liquidates it and every stop resting on the book. Big positions are tracked by bots and dashboards, and the price is pushed to the levels everyone can see. The [Hunt Map](https://tryunhuntable.site/hunt-map/) shows them live.
@@ -17,7 +22,22 @@ Tracks: **Privacy & Private AI** · **Unstoppable DeFi** · **AI Security & Defe
 - **Proven on mainnet with real money:** [a sealed stop firing on an NVDA short](https://app.hyperliquid.xyz/explorer/tx/0xe3658df9d0c075c3e4df04488de8bc02021800df6bc39495872e394c8fc44fae), [NEAR's MPC network signing for a Hyperliquid account with no private key](https://nearblocks.io/txns/86qJbTWkiXwXsKfCCWqK63yLanzvkbxikMj1R4HfufVd), and [an AI agent paying for a call with x402](https://nearblocks.io/txns/7VcZWHJzgrauZaY6irWh1BiHGcr7kDch92UG69MFvMBD).
 - **The answer NEAR's founder pointed to.** In [NEP discussion #531](https://github.com/near/NEPs/issues/531), Illia Polosukhin notes that users spread their activity over many separate accounts to keep it apart, and that the answer lives in the application layer. Unhuntable is that answer for perps: the separate accounts are made and funded for you, from your one NEAR account.
 
-[For judges](#for-judges-start-here) · [How it works](#how-it-works-in-short) · [Three doors](#three-doors-one-protection) · [NEAR stack](#eleven-parts-of-the-near-stack-each-doing-real-work) · [Mainnet proof](#what-ran-on-mainnet-with-real-money) · [Go deeper](#go-deeper)
+### See it
+
+Real screens from the live app at [tryunhuntable.site](https://tryunhuntable.site), with real money on mainnet.
+
+| | |
+| :---: | :---: |
+| <img src="docs/img/huntmap.png" alt="The Hunt Map: real Hyperliquid accounts and the prices that liquidate them" width="420"> | <img src="docs/img/deposit.png" alt="Deposit from NEAR, Ethereum, Base, Arbitrum or Solana" width="420"> |
+| **The Hunt Map.** Billions in real positions, with the exact prices that wipe them out, read from Hyperliquid's public API. This is the problem. | **Deposit from any chain.** NEAR, Ethereum, Base, Arbitrum or Solana. The money lands in a private balance on NEAR Intents. |
+| <img src="docs/img/review.png" alt="Trade review: As the world sees it, two small separate accounts" width="420"> | <img src="docs/img/positions.png" alt="Positions: a follower's copy of @jenny_trades, opened in their own piece and closed when the trader closed" width="420"> |
+| **Before you confirm, see what the world will see.** One trade becomes separate small accounts, each controlled by NEAR Chain Signatures with no private key anywhere. | **A follower's copy.** It opened in the follower's own piece minutes after the trader's, and closed when the trader closed. The follower never saw the trader's position. |
+| <img src="docs/img/traders.png" alt="Traders: a copy key to @jenny_trades, paid day by day, and the trader's guard-signed record" width="420"> | <img src="docs/img/agents.png" alt="AI agents: give an agent its own key with limits; each call paid in USDC on NEAR with x402" width="420"> |
+| **Sell keys to your trading.** Copy keys and viewing keys, paid day by day by private transfer. The record is signed by the guard over every piece the trader used. | **AI agents get the same protection.** Their own key and limits, over MCP, each call paid in USDC on NEAR with x402. No agent can move money or read a stop back. |
+| <img src="docs/img/stocks.png" alt="US stocks on trade.xyz: NVDA" width="420"> | <img src="docs/img/phone-huntmap.png" alt="The Hunt Map on a phone" width="200"> |
+| **US stocks on trade.xyz.** NVIDIA, the Nasdaq-100 and more, with the same split and sealed stops. | **Works on a phone.** |
+
+[See it](#see-it) · [For judges](#for-judges-start-here) · [How it works](#how-it-works-in-short) · [Three doors](#three-doors-one-protection) · [NEAR stack](#eleven-parts-of-the-near-stack-each-doing-real-work) · [Mainnet proof](#what-ran-on-mainnet-with-real-money) · [Go deeper](#go-deeper)
 
 ---
 
