@@ -33,6 +33,7 @@ import { WHALE_EVERY_MS, WhaleWatch } from "./whale.js";
 import { openHuntDbReadOnly } from "./huntmap.js";
 import { HuntMapView } from "./huntview.js";
 import { registerAgentRoutes } from "./agents.js";
+import { Judge, registerJudgeRoutes } from "./judge.js";
 import { HuntUs } from "./huntus.js";
 import { AiHunter } from "./aihunt.js";
 import { NearAi } from "./nearai.js";
@@ -56,6 +57,8 @@ export interface ServerDeps {
   huntUs?: HuntUs;
   /** NEAR AI Hunter; without it its routes are not served. */
   aiHunter?: AiHunter;
+  /** Judge mode; without it its routes are not served. */
+  judge?: Judge;
 }
 
 const SECURITY_HEADERS: Record<string, string> = {
@@ -150,6 +153,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
   if (deps.money) {
     registerMoneyRoutes(app, deps.money, deps.aiHunter);
     registerAgentRoutes(app, deps.money, deps.paywall);
+    if (deps.judge) registerJudgeRoutes(app, deps.judge, deps.money);
   }
 
   return app;
@@ -241,7 +245,8 @@ export async function main(): Promise<void> {
   const aiHunter = config.secrets.nearaiKey
     ? new AiHunter(db, money.hl, new NearAi(config.secrets.nearaiKey, config.nearaiUrl, undefined, config.nearaiModel), config.network, Date.now, money.random)
     : undefined;
-  const app = buildServer({ config, db, log, money, whale, huntMap, paywall, huntUs, aiHunter });
+  const judge = config.judge ? new Judge(money, config.judge) : undefined;
+  const app = buildServer({ config, db, log, money, whale, huntMap, paywall, huntUs, aiHunter, judge });
   let watching = false;
   const watch = (fn: () => Promise<unknown>) => () => {
     if (watching) return;
@@ -262,6 +267,15 @@ export async function main(): Promise<void> {
       .finally(() => (reading = false));
   };
   const whales = setInterval(readWhale, WHALE_EVERY_MS);
+  // judge runs close by themselves on time
+  const judging = setInterval(() => {
+    try {
+      judge?.sweep();
+    } catch (e) {
+      log.warn({ error: e instanceof Error ? e.message : String(e) }, "judge sweep failed");
+    }
+  }, 15_000);
+  judging.unref();
   readWhale();
   mids.unref();
   beat.unref();
@@ -271,6 +285,7 @@ export async function main(): Promise<void> {
     clearInterval(mids);
     clearInterval(beat);
     clearInterval(whales);
+    clearInterval(judging);
     jobs.stop();
     await app.close();
     db.close();

@@ -71,6 +71,10 @@ export const API_ERRORS = {
   trader_closed: "This trader is not selling keys right now.",
   key_exists: "You already hold this kind of key to this trader. Stop it first to buy it again.",
   key_needed: "Closed trades are shown to holders of a key to this trader that is on.",
+  judge_code_wrong: "That judge code is not right. It is in the judging notes of the submission.",
+  judge_busy: "Another judge trade is running. The next one can open at {time}.",
+  judge_unavailable: "The demo account needs its owner in the app first. Nothing was opened.",
+  judge_no_run: "There is no judge trade in this browser. Open one first.",
 } as const;
 
 export type RefusalCode = keyof typeof REFUSALS;
@@ -123,6 +127,10 @@ export const HTTP_STATUS: Record<ErrorCode, number> = {
   trader_closed: 409,
   key_exists: 409,
   key_needed: 403,
+  judge_code_wrong: 403,
+  judge_busy: 409,
+  judge_unavailable: 503,
+  judge_no_run: 404,
   bad_request: 400,
   not_found: 404,
   not_signed_in: 401,

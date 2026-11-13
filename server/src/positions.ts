@@ -232,7 +232,9 @@ function setPieceState(ctx: Ctx, ppId: string, state: PieceRow["state"], from?: 
 
 /** Enqueue the next run of a position's job at a time (never in the past). */
 function schedule(ctx: Ctx, positionId: string, atMs: number): void {
-  const at = Math.max(ctx.now(), atMs);
+  // at least 1 ms ahead: a step that schedules "now" from inside the job running now would
+  // otherwise reuse that job's key and be dropped
+  const at = Math.max(ctx.now() + 1, atMs);
   ctx.jobs.enqueue("position", { positionId }, `position:${positionId}:${at}`, at);
 }
 
@@ -428,9 +430,25 @@ function guardOk(ctx: Ctx, id: string): void {
   ctx.db.prepare("UPDATE positions SET guard = 'ok' WHERE id = ?").run(id);
 }
 
-async function fundPiece(ctx: Ctx, pos: PositionRow, pp: PieceRow, bal: WalletRow & { wallet_id: string }): Promise<void> {
+/**
+ * A reused piece still holding enough from its last trade trades on that: nothing moves, no
+ * route fee is paid, and with no transfer to spread out there is nothing to wait for.
+ */
+async function holdsEnough(ctx: Ctx, pos: PositionRow, pp: PieceRow): Promise<boolean> {
+  if (!pp.reused || dexOf(pos.coin)) return false;
+  const piece = walletById(ctx, pp.piece_id);
+  if (!piece.hl_address) return false;
+  const perp = await ctx.hl.perp(piece.hl_address);
+  return perp.positions.length === 0 && perp.accountValue >= pp.funding_usd - FUNDING_SLACK_USD;
+}
+
+async function fundPiece(ctx: Ctx, pos: PositionRow, pp: PieceRow, bal: WalletRow & { wallet_id: string }, held = false): Promise<void> {
   const piece = walletById(ctx, pp.piece_id);
   if (!piece.hl_address) throw new ApiError("wallet_missing");
+  if (held) {
+    setPieceState(ctx, pp.id, "funding", "planned");
+    return;
+  }
   if (!setPieceState(ctx, pp.id, "funding", "planned")) return;
   // Only ever from the user's private balance to this same piece's own address.
   const body = { chain: "hypercore", to: piece.hl_address, amount: toUnits(String(pp.funding_usd), 6).toString(), token: USDC_NEAR };
@@ -562,7 +580,9 @@ async function step(ctx: Ctx, pos: PositionRow): Promise<void> {
   if (pos.state === "funding") {
     const bal = balanceWallet(ctx, pos.user_id);
     for (const pp of pieceRows(ctx, pos.id)) {
-      if (pp.state === "planned" && now >= (pos.start_ms ?? 0) + pp.entry_offset_ms) await fundPiece(ctx, pos, pp, bal);
+      if (pp.state !== "planned") continue;
+      if (await holdsEnough(ctx, pos, pp)) await fundPiece(ctx, pos, pp, bal, true);
+      else if (now >= (pos.start_ms ?? 0) + pp.entry_offset_ms) await fundPiece(ctx, pos, pp, bal);
     }
     for (const pp of pieceRows(ctx, pos.id)) if (pp.state === "funding") await approvePiece(ctx, pos, pp);
     const pps = pieceRows(ctx, pos.id);

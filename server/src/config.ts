@@ -50,6 +50,8 @@ export interface Config {
   huntmapDb?: string;
   /** HUNT_US_FILE: the live challenge position for the Hunt us page, { coin, pieces }; unset = no challenge. */
   huntUsFile?: string;
+  /** Judge mode: JUDGE_USER (the demo account's user id) and JUDGE_CODE_SHA256 (sha256 hex of the access code); both unset = off. */
+  judge?: { userId: string; codeSha256: string; perDay: number };
   /** BUILDER_FEE=on: new NEAR-controlled pieces approve the builder fee and their opens carry it. */
   builderFee: boolean;
   /** X402=on: agent calls are paid per call in USDC on NEAR, settled by RELAY_ACCOUNT. */
@@ -120,6 +122,16 @@ function int(name: string, v: string | undefined, dflt: number): number {
   return n;
 }
 
+function judgeConfig(env: NodeJS.ProcessEnv): Config["judge"] {
+  const userId = env.JUDGE_USER ?? "";
+  const codeSha256 = (env.JUDGE_CODE_SHA256 ?? "").toLowerCase();
+  if (!userId && !codeSha256) return undefined;
+  if (!userId || !/^[0-9a-f]{64}$/.test(codeSha256)) throw new ConfigError("judge mode needs JUDGE_USER and JUDGE_CODE_SHA256 (64 hex characters)");
+  const perDay = int("JUDGE_PER_DAY", env.JUDGE_PER_DAY, 12);
+  if (perDay < 1) throw new ConfigError("JUDGE_PER_DAY must be at least 1");
+  return { userId, codeSha256, perDay };
+}
+
 function onOff(name: string, v: string | undefined): boolean {
   if (v === undefined || v === "" || v === "off") return false;
   if (v === "on") return true;
@@ -152,6 +164,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     huntmapDb: env.HUNTMAP_DB || undefined,
     builderFee: onOff("BUILDER_FEE", env.BUILDER_FEE),
     huntUsFile: env.HUNT_US_FILE || undefined,
+    judge: judgeConfig(env),
     x402: onOff("X402", env.X402),
     x402PayTo: env.X402_PAY_TO || env.CHAINSIG_CONTRACT || "",
     x402Price: env.X402_PRICE || "0.002",

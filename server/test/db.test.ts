@@ -20,6 +20,7 @@ const TABLES = [
   "home_steps",
   "homes",
   "jobs",
+  "judge_runs",
   "key_payments",
   "migrations",
   "piece_orders",
@@ -50,12 +51,13 @@ describe("migrations idempotent", () => {
       { name: "006_agents.sql", created_ms: 42, network: "mainnet" },
       { name: "007_ai_hunts.sql", created_ms: 42, network: "mainnet" },
       { name: "008_followers.sql", created_ms: 42, network: "mainnet" },
+      { name: "009_judge.sql", created_ms: 42, network: "mainnet" },
     ]);
     db.prepare("INSERT INTO users (id, near_account, created_ms, network) VALUES ('u', 'alice.near', 1, 'mainnet')").run();
     expect(migrate(db, { network: "mainnet" })).toEqual([]);
     db.close();
     const again = openDb(path, { network: "mainnet" });
-    expect(again.prepare("SELECT COUNT(*) AS n FROM migrations").get()).toEqual({ n: 8 });
+    expect(again.prepare("SELECT COUNT(*) AS n FROM migrations").get()).toEqual({ n: 9 });
     expect(again.prepare("SELECT near_account FROM users").get()).toEqual({ near_account: "alice.near" });
     again.close();
   });
@@ -110,7 +112,7 @@ describe("money schema", () => {
     old.close();
 
     const db = openDb(path, { network: "mainnet" });
-    expect((db.prepare("SELECT name FROM migrations ORDER BY name").all() as { name: string }[]).map((r) => r.name)).toEqual(["001_init.sql", "002_money.sql", "003_chainsig.sql", "004_xyz.sql", "005_builder.sql", "006_agents.sql", "007_ai_hunts.sql", "008_followers.sql"]);
+    expect((db.prepare("SELECT name FROM migrations ORDER BY name").all() as { name: string }[]).map((r) => r.name)).toEqual(["001_init.sql", "002_money.sql", "003_chainsig.sql", "004_xyz.sql", "005_builder.sql", "006_agents.sql", "007_ai_hunts.sql", "008_followers.sql", "009_judge.sql"]);
     expect(db.prepare("SELECT id, kind, shard_id, wallet_id, hl_address, policy_state FROM pieces ORDER BY id").all()).toEqual([
       { id: "p1", kind: "piece", shard_id: "0123456789abcdef", wallet_id: "w1", hl_address: "0x1111111111111111111111111111111111111111", policy_state: "locked" },
       { id: "p2", kind: "piece", shard_id: "fedcba9876543210", wallet_id: null, hl_address: null, policy_state: "unlocked" },

@@ -443,3 +443,26 @@ export interface FollowKey {
   paidUsd: string;
   copies: { state: string; positionId: string | null; reason: string | null; ms: number }[];
 }
+
+/** Judge mode: one small real trade on our demo account, for someone with the access code. */
+export interface JudgeRun {
+  id: string;
+  live: boolean;
+  endsMs: number;
+  stopSealed: boolean;
+  /** Set once the position is open: a run with no sealed stop by then is closed. */
+  stopByMs: number | null;
+  position: Position | null;
+}
+
+export interface JudgeStatus {
+  notionalUsd: number;
+  leverage: number;
+  coins: Coin[];
+  minutes: number;
+  /** When the run now going ends; null when a judge can open one. */
+  busyUntilMs: number | null;
+  leftToday: number;
+  /** This browser's own run, if it has one. */
+  run: JudgeRun | null;
+}

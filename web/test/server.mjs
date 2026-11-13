@@ -190,6 +190,33 @@ const TRADER_CARD = {
 };
 const followKeys = new Map();
 const traderProfiles = new Map();
+const judgeRuns = new Map();
+
+/** Judge mode: a run opens on the next read after it is asked for, and closes when asked. */
+function judgeRun(r) {
+  const open = r.state === "open" || r.state === "closed";
+  return {
+    id: "judge1",
+    live: r.state !== "closed",
+    endsMs: r.endsMs,
+    stopSealed: r.stopSealed,
+    stopByMs: open ? r.endsMs - 480_000 : null,
+    position: {
+      id: "judge1",
+      coin: r.coin,
+      side: r.side,
+      notionalUsd: 15,
+      leverage: 2,
+      hiding: "normal",
+      state: r.state,
+      createdMs: 1767225600000,
+      pieces: [{ label: "piece:7", shard: "cd".repeat(8), size: "0.005", entryPx: open ? "3000" : null, liqDistance: open ? "0.49" : null, hasStop: r.stopSealed, hasTp: false, guard: "ok", nearControlled: true }],
+      alerts: [],
+      copyOf: null,
+      result: r.state === "closed" ? { pnlUsd: 0.04, feesUsd: 0.01 } : null,
+    },
+  };
+}
 
 function api(method, path, body, c) {
   const scenario = c.scenario ?? "ok";
@@ -211,6 +238,39 @@ function api(method, path, body, c) {
   if (method === "GET" && path === "/api/traders") return ok({ traders: scenario === "no_traders" ? [] : [TRADER_CARD] });
   if (method === "GET" && path === "/api/traders/alice_trades") return ok({ trader: TRADER_CARD });
   // public: the Hunt us challenge
+  if (path.startsWith("/api/judge")) {
+    const r = c.judge ? judgeRuns.get(c.judge) : undefined;
+    const status = { notionalUsd: 15, leverage: 2, coins: ["BTC", "ETH", "SOL"], minutes: 10, busyUntilMs: scenario === "judge_busy" ? Date.now() + 300_000 : null, leftToday: 11 };
+    if (method === "GET" && path === "/api/judge") {
+      if (r && r.state === "opening") r.state = "open";
+      return ok({ ...status, run: r ? judgeRun(r) : null });
+    }
+    if (method === "POST" && path === "/api/judge/open") {
+      if (body.code !== "judge-code") return fail(403, "judge_code_wrong", "That judge code is not right. It is in the judging notes of the submission.");
+      const token = Math.random().toString(16).slice(2).padEnd(16, "0");
+      const run = { coin: body.coin, side: body.side, state: "opening", stopSealed: false, endsMs: Date.now() + 600_000, stops: [] };
+      judgeRuns.set(token, run);
+      return { ...ok({ run: judgeRun(run) }), cookie: `judge=${token}; Path=/api/judge; SameSite=Strict` };
+    }
+    if (!r) return fail(404, "judge_no_run", "There is no judge trade in this browser. Open one first.");
+    if (method === "GET" && path === "/api/judge/box-pub") return ok({ boxPub: TEST_BOX_PUB });
+    if (method === "POST" && path === "/api/judge/stop") {
+      r.stopSealed = true;
+      r.stops.push(...body.boxes);
+      return ok({ ok: true, sealed: body.boxes.length });
+    }
+    if (method === "POST" && path === "/api/judge/close") {
+      r.state = "closed";
+      return ok({ ok: true, state: "closed" });
+    }
+    if (method === "GET" && path === "/api/judge/hunter")
+      return ok({
+        asOfMs: Date.now(),
+        coin: r.coin,
+        markPx: 3001,
+        accounts: [{ address: "0x" + "7e".repeat(20), side: r.side, size: 0.005, valueUsd: 15, entryPx: 3000, liqPx: 1530, leverage: 2, restingOrders: 0, triggerPxs: [] }],
+      });
+  }
   if (method === "GET" && path === "/api/hunt-us")
     return ok({ challenge: scenario === "no_hunt" ? null : { coin: "ETH", count: 3, shown: "0x" + "a1".repeat(20), seconds: 90 } });
   if (method === "POST" && path === "/api/hunt-us/start") return ok({ token: "1767225600000." + "ab".repeat(32), revealAtMs: Date.now() + 1500 });

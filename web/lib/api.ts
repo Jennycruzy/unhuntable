@@ -6,6 +6,10 @@ import type {
   Whale,
   HuntMap,
   HunterView,
+  JudgeRun,
+  JudgeStatus,
+  Coin,
+  Side,
   AiHunt,
   AgentKeys,
   Settings,
@@ -185,6 +189,24 @@ export class Api {
   }
   homeState(id: string) {
     return this.call<HomeState>("GET", `/api/home/${encodeURIComponent(id)}`);
+  }
+  judge() {
+    return this.call<JudgeStatus>("GET", "/api/judge");
+  }
+  judgeOpen(code: string, coin: Coin, side: Side) {
+    return this.call<{ run: JudgeRun }>("POST", "/api/judge/open", { code, coin, side });
+  }
+  judgeBoxPub() {
+    return this.call<{ boxPub: string }>("GET", "/api/judge/box-pub");
+  }
+  judgeStop(boxes: { shard: string; box: SealedBox }[]) {
+    return this.call<{ ok: true; sealed: number }>("POST", "/api/judge/stop", { boxes });
+  }
+  judgeClose() {
+    return this.call<{ ok: true; state: string }>("POST", "/api/judge/close", {});
+  }
+  judgeHunter() {
+    return this.call<HunterView>("GET", "/api/judge/hunter");
   }
   huntUs() {
     return this.call<{ challenge: HuntUsChallenge | null }>("GET", "/api/hunt-us");

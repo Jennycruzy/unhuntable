@@ -15,12 +15,21 @@ function level(v: number | "set" | "none"): string {
 }
 
 /** One position twice: what its owner knows, and what Hyperliquid's public API tells anyone. */
-export function HunterView({ p, levels }: { p: Position; levels: Record<string, { stop?: number; tp?: number } | undefined> }) {
+export function HunterView({
+  p,
+  levels,
+  read = () => api.hunter(p.id),
+}: {
+  p: Position;
+  levels: Record<string, { stop?: number; tp?: number } | undefined>;
+  /** Where the public view comes from; judge mode reads its own run. */
+  read?: () => Promise<View>;
+}) {
   const [view, setView] = useState<View | undefined>();
   const [failed, setFailed] = useState(false);
   useInterval(async () => {
     try {
-      setView(await api.hunter(p.id));
+      setView(await read());
       setFailed(false);
     } catch {
       setFailed(true);
