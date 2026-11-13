@@ -76,10 +76,22 @@ describe("a reused piece that still holds money", () => {
     expect(sent.n).toBe(0);
   });
 
+  it("trades on less than a transfer would send, as long as it covers margin, reserve and fees", async () => {
+    // $15 at 2x needs $7.53 on the piece; a transfer would have sent $12
+    const s = setup();
+    const addr = await readyPiece(s);
+    s.h.world.setPerp(addr, 9, 9, []);
+    const sent = withdrawCount(s);
+    const r = (await owner(s, "POST", "/api/positions", { coin: "ETH", side: "long", notionalUsd: 15, leverage: 2, hiding: "normal" })).json();
+    await runFor(s.h, 200_000, 1_000);
+    expect(posState(s, r.positionId)).toBe("open");
+    expect(sent.n).toBe(0);
+  });
+
   it("is funded as usual when it holds too little", async () => {
     const s = setup();
     const addr = await readyPiece(s);
-    s.h.world.setPerp(addr, 2, 2, []);
+    s.h.world.setPerp(addr, 5, 5, []);
     const sent = withdrawCount(s);
     const r = (await owner(s, "POST", "/api/positions", { coin: "ETH", side: "long", notionalUsd: 15, leverage: 2, hiding: "normal" })).json();
     await runFor(s.h, 200_000, 1_000);

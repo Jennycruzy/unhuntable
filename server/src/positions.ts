@@ -14,6 +14,7 @@
 
 import { traderTag } from "./tags.js";
 import {
+  TRADING_FEE_RESERVE,
   USDC_NEAR,
   VrfStream,
   exchangeBody,
@@ -115,6 +116,7 @@ interface PieceRow {
   has_stop: number;
   has_tp: number;
   close_at_ms: number | null;
+  funding_request_id?: string | null;
 }
 
 // ------------------------------------------------------------ plan
@@ -439,7 +441,19 @@ async function holdsEnough(ctx: Ctx, pos: PositionRow, pp: PieceRow): Promise<bo
   const piece = walletById(ctx, pp.piece_id);
   if (!piece.hl_address) return false;
   const perp = await ctx.hl.perp(piece.hl_address);
-  return perp.positions.length === 0 && perp.accountValue >= pp.funding_usd - FUNDING_SLACK_USD;
+  return perp.positions.length === 0 && perp.accountValue >= heldNeed(pos, pp);
+}
+
+/**
+ * What a reused piece must already hold to trade without a transfer: the opening margin, the
+ * reserve that keeps liquidation away, and the trading-fee reserve. The ladder rounding and
+ * the route fee are left out: they exist only for a transfer, and none is sent.
+ */
+export function heldNeed(pos: { plan_json: string }, pp: { idx: number; funding_usd: number }): number {
+  const p = (JSON.parse(pos.plan_json) as Plan).pieces?.[pp.idx];
+  const lev = (JSON.parse(pos.plan_json) as Plan).leverage;
+  if (!p || !(p.notionalUsd > 0) || !(lev > 0) || !(p.reserveUsd >= 0)) return pp.funding_usd - FUNDING_SLACK_USD;
+  return p.notionalUsd / lev + p.reserveUsd + TRADING_FEE_RESERVE * p.notionalUsd;
 }
 
 async function fundPiece(ctx: Ctx, pos: PositionRow, pp: PieceRow, bal: WalletRow & { wallet_id: string }, held = false): Promise<void> {
@@ -474,7 +488,9 @@ async function approvePiece(ctx: Ctx, pos: PositionRow, pp: PieceRow): Promise<b
   // Once the funding has moved onto trade.xyz the main balance is nearly empty: it landed.
   if (!(dexOf(pos.coin) && xyzMoveDone(ctx, piece.id, pos.id))) {
     const perp = await ctx.hl.perp(piece.hl_address!);
-    if (perp.accountValue < pp.funding_usd - FUNDING_SLACK_USD) return false;
+    // a reused piece that sent nothing trades on what it holds; a funded one waits for its transfer
+    const held = pp.reused === 1 && !pp.funding_request_id;
+    if (perp.accountValue < (held ? heldNeed(pos, pp) : pp.funding_usd - FUNDING_SLACK_USD)) return false;
   }
   if (!piece.agent && isChainSig(piece)) {
     // NEAR's MPC network signs the approval the piece key signed in the browser.
