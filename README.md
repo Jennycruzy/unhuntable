@@ -6,7 +6,7 @@
 
 **Live app:** [tryunhuntable.site](https://tryunhuntable.site) · **Try a real trade:** [tryunhuntable.site/judge](https://tryunhuntable.site/judge/) (no sign-in) · **Hunt Map:** [tryunhuntable.site/hunt-map](https://tryunhuntable.site/hunt-map/) (no sign-in) · **Traders:** [tryunhuntable.site/traders](https://tryunhuntable.site/traders/) (no sign-in) · **Agents:** [`agent/`](agent/) (MCP server)
 
-Built at **NEAR HACKATHON** · #NEARHackathon
+Built at **NEAR HACKATHON** · #NEARHackathon · **Demo video:** [watch on Clips](https://clips.agent-native.com/share/D99B2jDb4MFX) (3:22)
 
 Tracks: **Privacy & Private AI** · **Unstoppable DeFi** · **AI Security & Defense** · **Agent Economy**
 
