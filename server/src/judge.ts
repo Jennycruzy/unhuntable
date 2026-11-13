@@ -30,8 +30,9 @@ const DAY_MS = 24 * 60 * 60_000;
  * available, rather than letting a judge wait.
  */
 export const JUDGE_MIN_HELD_USD = 8;
-/** One read of the demo piece's balance serves the page for this long. */
+/** One read of the demo piece's balance serves the page for this long; a low one, briefly. */
 const HELD_CACHE_MS = 30_000;
+const LOW_CACHE_MS = 5_000;
 
 export interface JudgeOptions {
   /** The demo account's user id. */
@@ -68,7 +69,7 @@ const clock = (ms: number): string => new Date(ms).toISOString().slice(11, 16) +
 
 export class Judge {
   private opening = false;
-  private held: { at: number; ok: boolean } | null = null;
+  private held: { until: number; ok: boolean } | null = null;
 
   constructor(
     private readonly ctx: Ctx,
@@ -92,25 +93,33 @@ export class Judge {
       .get(this.ctx.network, this.ctx.now() - DAY_MS) as { n: number; first: number | null };
   }
 
-  /** Whether a free demo piece holds enough to trade. A failed read does not block the page. */
+  /**
+   * Whether the demo piece holds enough to trade. A piece that is only busy, or a failed read,
+   * does not count as too little: busy is shown on its own, and a read error must not block the
+   * page. A "too little" answer is kept only briefly, so a top-up shows within seconds.
+   */
   async funded(): Promise<boolean> {
     const now = this.ctx.now();
-    if (this.held && now - this.held.at < HELD_CACHE_MS) return this.held.ok;
-    let ok = true;
+    if (this.held && now < this.held.until) return this.held.ok;
+    const free = freePieces(this.ctx, this.o.userId).filter((p) => p.hl_address);
+    if (free.length === 0) {
+      // busy pieces mean a trade is running or closing; no pieces at all mean nothing can open
+      const any = this.ctx.db.prepare("SELECT COUNT(*) AS n FROM pieces WHERE user_id = ? AND kind = 'piece'").get(this.o.userId) as { n: number };
+      return any.n > 0;
+    }
+    let ok = false;
     try {
-      ok = false;
-      for (const p of freePieces(this.ctx, this.o.userId)) {
-        if (!p.hl_address) continue;
-        const perp = await this.ctx.hl.perp(p.hl_address);
+      for (const p of free) {
+        const perp = await this.ctx.hl.perp(p.hl_address!);
         if (perp.positions.length === 0 && perp.accountValue >= JUDGE_MIN_HELD_USD) {
           ok = true;
           break;
         }
       }
     } catch {
-      ok = true;
+      return true;
     }
-    this.held = { at: now, ok };
+    this.held = { until: now + (ok ? HELD_CACHE_MS : LOW_CACHE_MS), ok };
     return ok;
   }
 

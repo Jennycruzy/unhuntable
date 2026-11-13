@@ -166,8 +166,11 @@ describe("judge mode", () => {
     expect((await as(s, "judge=" + "0".repeat(64), "POST", "/api/judge/stop", { boxes: [{ shard, box: BOX }] })).json().error).toBe("judge_no_run");
 
     expect((await as(s, jar, "POST", "/api/judge/close")).statusCode).toBe(200);
+    // while the piece is still closing, the page must not say the account is out of money
+    expect((await as(s, undefined, "GET", "/api/judge")).json().ready).toBe(true);
     await runFor(s.h, 30_000, 1_000);
     expect(posState(s, run.id)).toBe("closed");
+    expect((await as(s, undefined, "GET", "/api/judge")).json().ready).toBe(true);
     const after = (await as(s, undefined, "GET", "/api/judge")).json();
     expect(after.busyUntilMs).toBeNull();
     expect((await as(s, jar, "GET", "/api/judge")).json().run).toMatchObject({ live: false });
@@ -212,9 +215,9 @@ describe("judge mode", () => {
     const before = (s.h.db.prepare("SELECT COUNT(*) AS n FROM positions").get() as { n: number }).n;
     expect((await as(s, undefined, "POST", "/api/judge/open", { coin: "ETH", side: "long" })).json().error).toBe("judge_unavailable");
     expect((s.h.db.prepare("SELECT COUNT(*) AS n FROM positions").get() as { n: number }).n).toBe(before);
-    // topped up: ready again once the 30-second read has expired
+    // topped up: ready again within seconds
     s.h.world.setPerp(addr, 12, 12, []);
-    await runFor(s.h, 31_000, 1_000);
+    await runFor(s.h, 6_000, 1_000);
     expect((await as(s, undefined, "GET", "/api/judge")).json().ready).toBe(true);
   });
 
