@@ -47,6 +47,8 @@ Real screens from the live app at [tryunhuntable.site](https://tryunhuntable.sit
 
 A few minutes, no wallet and no money needed:
 
+0. **Check every live claim in one command.** `node tools/check-live.mjs` (Node 20+, nothing to install) reads NEAR, Hyperliquid, OutLayer and the live site and prints `PASS` or `FAIL` for 15 claims. [JUDGES.md](JUDGES.md) maps every claim to its code, its test and its command.
+
 1. **Open the [Hunt Map](https://tryunhuntable.site/hunt-map/).** Real Hyperliquid accounts and the exact prices that liquidate them, read from Hyperliquid's public API every 5 minutes. This is what every trader is exposed to today.
 2. **Open three mainnet transactions.** [A sealed stop firing on an NVDA short](https://app.hyperliquid.xyz/explorer/tx/0xe3658df9d0c075c3e4df04488de8bc02021800df6bc39495872e394c8fc44fae), [NEAR's MPC network signing for a Hyperliquid account with no private key](https://nearblocks.io/txns/86qJbTWkiXwXsKfCCWqK63yLanzvkbxikMj1R4HfufVd), and [an AI agent paying for a call with x402](https://nearblocks.io/txns/7VcZWHJzgrauZaY6irWh1BiHGcr7kDch92UG69MFvMBD).
 3. **Check an AI hunt yourself.** We sent an attacker AI, running in a NEAR AI Cloud TEE, after three of our own mainnet pieces. From a clone of this repo, with no account, `cd tools && npm install --no-package-lock && cd .. && node tools/check-ai-hunt.cjs docs/proof/ai-hunt-mainnet.json` checks that its answer came from that enclave: it prints three `yes` lines and the hunter's answer ([what it found](docs/ai-hunter.md#proof-run-on-mainnet)).
@@ -209,7 +211,7 @@ All of these are observed results on NEAR, NEAR Intents, OutLayer and Hyperliqui
 | `web/` | Phone-first static web app with a strict CSP | 65 unit + Playwright at two screen sizes |
 | `exit/` | Leave-without-us tool: one HTML page or a CLI | in `client/` |
 | `attacks/` | Linking attacks with public data only | |
-| `tools/` | EAS proof check and its reference, NEAR AI Hunter receipt check | |
+| `tools/` | Live-claims check (`check-live.mjs`), EAS proof check and its reference, NEAR AI Hunter receipt check | |
 | `scripts/` | Repo checks run in CI | |
 
 CI runs every folder's tests, rebuilds the exit page and checks it matches, checks the signer stays under 100 KB, and checks the repo for secrets.
