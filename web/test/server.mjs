@@ -121,6 +121,25 @@ function positions(scenario) {
             ? [{ text: "The guard isn't answering. Your positions are open on Hyperliquid; stops can't fire until it's back. You can close now.", ms: 1767226200000 }]
             : [{ text: "Both pieces are open.", ms: 1767225900000 }],
       },
+      ...(scenario === "lock_wait"
+        ? [
+            {
+              id: "pos3",
+              coin: "ETH",
+              side: "long",
+              notionalUsd: 35,
+              leverage: 5,
+              hiding: "whale",
+              state: "policy_wait",
+              createdMs: 1767226000000,
+              pieces: [
+                { label: "piece:0", shard: "s4", size: 0.0087, entryPx: null, liqDistance: null, hasStop: false, hasTp: false, guard },
+                { label: "piece:1", shard: "s5", size: 0.0086, entryPx: null, liqDistance: null, hasStop: false, hasTp: false, guard },
+              ],
+              alerts: [{ text: "Your ETH pieces are funded. Approve their locks in your wallet to open the position.", ms: 1767226000000 }],
+            },
+          ]
+        : []),
       ...(scenario === "copy_wait"
         ? [
             {

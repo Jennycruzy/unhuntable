@@ -256,11 +256,20 @@ function Positions({ me }: { me: Me }) {
           </Notice>
         ))}
       {positions
-        ?.filter((p) => p.copyOf && (p.state === "planned" || p.state === "policy_wait"))
+        ?.filter((p) => (p.copyOf && p.state === "planned") || p.state === "policy_wait")
         .map((p) => (
-          <Notice key={`copy-${p.id}`} kind="warn" testId="start-copy">
-            Your copy of @{p.copyOf!.handle}&rsquo;s {ticker(p.coin)} {p.side} ({usd(p.notionalUsd)}) needs your approval once
-            {p.state === "planned" ? ": new pieces are made in this browser, then your wallet locks them." : ": your wallet locks its new pieces."}{" "}
+          <Notice key={`copy-${p.id}`} kind="warn" testId={p.copyOf ? "start-copy" : "approve-locks"}>
+            {p.copyOf ? (
+              <>
+                Your copy of @{p.copyOf.handle}&rsquo;s {ticker(p.coin)} {p.side} ({usd(p.notionalUsd)}) needs your approval once
+                {p.state === "planned" ? ": new pieces are made in this browser, then your wallet locks them." : ": your wallet locks its new pieces."}
+              </>
+            ) : (
+              <>
+                Your {ticker(p.coin)} pieces are funded. Approve their locks in your wallet to open the position: your private balance may then send only to your
+                pieces and to you.
+              </>
+            )}{" "}
             <button
               type="button"
               disabled={!key}
@@ -275,7 +284,7 @@ function Positions({ me }: { me: Me }) {
                 }
               }}
             >
-              Start my copy
+              {p.copyOf ? "Start my copy" : "Approve in my wallet"}
             </button>
           </Notice>
         ))}

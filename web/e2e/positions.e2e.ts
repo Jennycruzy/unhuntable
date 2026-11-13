@@ -100,3 +100,15 @@ test("a copy says whose trade it copies, and a first copy starts with one wallet
   expect(apiRequests.some((r) => r.url.endsWith("/api/positions/pos2/continue"))).toBe(true);
   await expect.poll(() => apiRequests.some((r) => r.url.endsWith("/api/policy/confirm"))).toBe(true);
 });
+
+test("your own funded pieces waiting for their locks get an Approve button that signs once", async ({ page, apiRequests, signedIn, walletCalls }) => {
+  await signedIn("lock_wait");
+  await restoreKey(page);
+  await page.goto("/positions/");
+  const n = page.getByTestId("approve-locks");
+  await expect(n).toContainText("Your ETH pieces are funded. Approve their locks in your wallet");
+  await n.getByRole("button", { name: "Approve in my wallet" }).click();
+  await expect.poll(async () => (await walletCalls(page)).filter((c) => c.kind === "send").length).toBe(1);
+  expect(apiRequests.some((r) => r.url.endsWith("/api/positions/pos3/continue"))).toBe(true);
+  await expect.poll(() => apiRequests.some((r) => r.url.endsWith("/api/policy/confirm"))).toBe(true);
+});

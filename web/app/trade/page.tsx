@@ -254,6 +254,9 @@ function Trade({ me }: { me: Me }) {
           <Notice kind="ok" testId="trade-opened">
             Your position is on its way.
           </Notice>
+          <Notice testId="lock-next">
+            New pieces need one more wallet approval: once they are funded, Positions shows Approve in my wallet, and then they open.
+          </Notice>
           {stage.levels && stage.sealed && <Notice testId="stop-sealed">{stopCopy(coin)}</Notice>}
           {stage.levels && !stage.sealed && <Notice kind="warn">Your stop will be sealed as soon as the position is open. Keep Positions open on this device.</Notice>}
           <Link className="button" href="/positions/">
