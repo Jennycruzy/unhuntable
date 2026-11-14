@@ -25,6 +25,7 @@ Tracks: **Unstoppable DeFi** · **Privacy & Private AI** · **Agent Economy** ·
 - **Agents have it worse.** Their wallets are public, they trade on schedules, and a prompt injection can talk them into giving away their stop. Here the stop is sealed on the agent's own machine and no tool can read it back.
 - **Proven on mainnet with real money:** [a sealed stop firing on an NVDA short](https://app.hyperliquid.xyz/explorer/tx/0xe3658df9d0c075c3e4df04488de8bc02021800df6bc39495872e394c8fc44fae), [NEAR's MPC network signing for a Hyperliquid account with no private key](https://nearblocks.io/txns/86qJbTWkiXwXsKfCCWqK63yLanzvkbxikMj1R4HfufVd), and [an AI agent paying for a call with x402](https://nearblocks.io/txns/7VcZWHJzgrauZaY6irWh1BiHGcr7kDch92UG69MFvMBD).
 - **The answer NEAR's founder pointed to.** In [NEP discussion #531](https://github.com/near/NEPs/issues/531), Illia Polosukhin notes that users spread their activity over many separate accounts to keep it apart, and that the answer lives in the application layer. Unhuntable is that answer for perps: the separate accounts are made and funded for you, from your one NEAR account.
+- **Built on two of the ideas NEAR's founder asked for.** In [his post](https://x.com/ilblackdragon/status/2106269343881519444), Illia Polosukhin listed "Private trading where you sell your viewing keys for people to follow/copy trade" and "Never get liquidated". Unhuntable builds the first as copy and viewing keys, and takes the second to perps, with the stop sealed off the book.
 
 ### See it
 
