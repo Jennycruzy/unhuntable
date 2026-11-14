@@ -2,7 +2,7 @@
 
 **Private perps on Hyperliquid and trade.xyz. Trade without being hunted, and sell keys that let others follow or copy your trading without ever seeing your positions. For traders, their followers and AI agents. Built on eleven parts of the NEAR stack.**
 
-**Unhuntable hides the price that wipes you out, for people and for their agents.** Your position is split across separate accounts, each funded, timed and closed on its own random draw, your stop is sealed where nobody can read it, and each piece's account is controlled by NEAR Chain Signatures, with no private key anywhere. Hunters have nothing to push the price to.
+**Unhuntable hides the price that wipes you out, for people and for their agents.** Your position is split across accounts nobody can link, your stop is sealed where nobody can read it, and each piece's account is controlled by NEAR Chain Signatures, with no private key anywhere. Hunters have nothing to push the price to.
 
 **Live app:** [tryunhuntable.site](https://tryunhuntable.site) · **Try a real trade:** [tryunhuntable.site/judge](https://tryunhuntable.site/judge/) (no sign-in) · **Hunt Map:** [tryunhuntable.site/hunt-map](https://tryunhuntable.site/hunt-map/) (no sign-in) · **Traders:** [tryunhuntable.site/traders](https://tryunhuntable.site/traders/) (no sign-in) · **Agents:** [`agent/`](agent/) (MCP server)
 
