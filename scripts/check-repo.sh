@@ -89,10 +89,12 @@ report "internal label in files:" "$label_hits"
 check_files "AI attribution" "$ATTRIB" "-i"
 check_files "key material" "$SECRETS" ""
 
+# signed receipts hold a model's answer byte for byte; its wording cannot change without breaking the signature
+word_files=$(echo "$files" | grep -v -E '^docs/proof/.*\.json$')
 word_hits=$(
-  echo "$files" | xargs -r grep -n -I -i -w -E "$WORDS" 2>/dev/null
+  echo "$word_files" | xargs -r grep -n -I -i -w -E "$WORDS" 2>/dev/null
   echo "$files" | grep -v -E "$TEST_PATHS" | xargs -r grep -n -I -i -w -E "$TEST_WORDS" 2>/dev/null
-  echo "$files" | xargs -r grep -n -I -i -w 'pending' 2>/dev/null | bare_pending 2
+  echo "$word_files" | xargs -r grep -n -I -i -w 'pending' 2>/dev/null | bare_pending 2
 )
 report "banned word in files:" "$word_hits"
 report "internal label in file names:" "$(git ls-files | grep -E "$PATH_LABELS" || true)"
