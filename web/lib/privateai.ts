@@ -144,7 +144,7 @@ export async function verifiedModel(sdk: Sdk, f: typeof fetch = fetch): Promise<
   const verifiers = { tdxQuote: sdk.createTdxQuoteVerifier(), gpuEvidence: sdk.createGpuEvidenceVerifier({ nrasUrl: NRAS_PROXY }) };
   for (const attestation of fetched.attestations) {
     try {
-      const v = await sdk.verifyModelAttestation({ attestation, clientBinding: fetched.clientBinding, verifiers, policy: { gpuEvidence: "required" } });
+      const v = await sdk.verifyModelAttestation({ attestation, clientBinding: fetched.clientBinding, verifiers, policy: { gpuEvidence: "required", acceptedTcbStatuses: ["UpToDate"] } });
       if (v.gpuEvidence === "verified" && typeof v.signingPublicKey === "string" && /^[0-9a-f]+$/i.test(v.signingPublicKey)) return v as Verified & { signingPublicKey: string };
     } catch {
       // try the next enclave; none verified means nothing is sent

@@ -267,7 +267,7 @@ export function Landing() {
           <ol className="lp-moves">
             <li className="rv">
               <span className="verb">Split</span>
-              <p>Your position is cut into 2 to 12 separate Hyperliquid accounts, each funded privately through NEAR Intents. Nobody can tie them together.</p>
+              <p>Your position is cut into 2 to 12 separate Hyperliquid accounts, each funded privately through NEAR Intents. Nobody can trace them back to you.</p>
               <svg viewBox="0 0 160 48" aria-hidden="true" className="g-split">
                 <rect className="whole" x="10" y="20" width="140" height="8" />
                 {[0, 1, 2, 3, 4, 5].map((i) => (

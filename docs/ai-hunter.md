@@ -81,7 +81,7 @@ We sent the hunter after three of our own real mainnet pieces: [`0xb02b…e4ac`]
 
 Payer and timing hid these pieces among 992 accounts, but two pieces that **behave** the same, with the same sizes on the same loop, are linkable.
 
-### A position the app opened, and what we changed
+### Found on a position the app opened, and fixed
 
 Then we sent it after the split position the app itself had opened on mainnet: ETH long, $35 at 5x, two pieces, [`0x71e9…5873`](https://app.hyperliquid.xyz/explorer/address/0x71e9a4a9aa0a22b00c575eff5e379bccb1ba5873) and [`0xb6ea…7e66`](https://app.hyperliquid.xyz/explorer/address/0xb6eaf2cc9d672cece276ad05d8e7488266d67e66). It ran twice, once starting from each piece.
 
@@ -93,12 +93,12 @@ Then we sent it after the split position the app itself had opened on mainnet: E
 | It named | The other piece, confidence 95 | The other piece, confidence 95 |
 | Strangers named | 0 | 0 |
 | A random pick of 1 name would find | 0.07 | 0.07 |
-| Verdict | **Caught** | **Caught** |
+| Verdict, before the fix | **Caught** | **Caught** |
 | TEE checks | all hold ([receipt](proof/ai-hunt-app-1.json), chat `e4e91fb3f9f54f4fa9dbb7d1859f857c`) | all hold ([receipt](proof/ai-hunt-app-2.json), chat `8682b0c274ef4162b3af34e94891e922`) |
 
 In its own words: *"Exact same $11.68 funding from P1, identical 2-fill ETH pattern, and coordinated exit at minute 39."* The public data says the same. Both pieces were funded with the same $12 step of the funding ladder (arriving as $11.68 after the route fee), both closed inside the same minute because closes were spread over only 90 seconds, and both were fresh accounts with one trade each. The random entry times, 10 minutes apart, did their part; the other three were enough.
 
-So we changed the app:
+Fixed in the app, for every split position:
 
 - **Every piece is funded with its own amount.** A split position's pieces each get what they need plus a random 5 to 50% more, in cents, drawn from the position's OutLayer VRF output and at least $0.25 apart. One-piece trades keep the ladder (`client/src/planner.ts`).
 - **Pieces close at their own times.** Close spreads a split position's pieces over 2 to 20 minutes, at least 20 seconds apart, drawn from the same VRF output, the same window entries use. Close now still closes them all at once (`server/src/positions.ts`).
