@@ -12,7 +12,7 @@ Node 20 or newer, nothing to install, no account and no money. It reads NEAR's a
 
 ## Every test suite
 
-[docs/check-it-yourself.md](docs/check-it-yourself.md) runs all 606 tests, one command per folder, from a fresh clone.
+[docs/check-it-yourself.md](docs/check-it-yourself.md) runs all 631 tests, one command per folder, from a fresh clone.
 
 ## Claims, code, tests
 

@@ -61,7 +61,7 @@ No wallet, no sign-in and no money needed. Each step says what to do and what yo
 | 8 | Open [this NEAR transaction](https://nearblocks.io/txns/7VcZWHJzgrauZaY6irWh1BiHGcr7kDch92UG69MFvMBD). | Status **Success**: an AI agent paying 0.002 USDC on NEAR for one call, with x402. |
 | 9 | Open [Traders](https://tryunhuntable.site/traders/). | The card of `@jenny_trades`: copy key $0.50 a day, viewing key $0.10 a day, how many follow, and a record signed by the guard. Nobody, followers included, sees an open position. |
 | 10 | Run `cd tools && npm install --no-package-lock && cd .. && node tools/check-ai-hunt.cjs docs/proof/ai-hunt-mainnet.json`. | Three lines ending in `yes` (the signed text is our hashes, the signature recovers the enclave key, the key is in NEAR AI's TEE attestation), then the attacker AI's answer: it named only the piece we ran identical test trades on. [What it found, and what it found on a position the app opened](docs/ai-hunter.md#proof-runs-on-mainnet) |
-| 11 | Run the test suites: [Check it yourself](docs/check-it-yourself.md), one command per folder. | 606 tests passing across the guard, the signer contract, the records contract, the client, the server, the MCP server and the web app, plus browser tests at phone and desktop size. The same run is in CI. |
+| 11 | Run the test suites: [Check it yourself](docs/check-it-yourself.md), one command per folder. | 631 tests passing across the guard, the signer contract, the records contract, the client, the server, the MCP server and the web app, plus browser tests at phone and desktop size. The same run is in CI. |
 
 How the try-a-trade page is paid for, and why nobody can move money through it: [below](#try-a-real-trade-how-it-is-paid-for).
 
@@ -85,7 +85,7 @@ How the try-a-trade page is paid for, and why nobody can move money through it: 
 | --- | --- | --- |
 | **NEAR Chain Signatures** | `unhuntable.near` asks `v1.signer` to sign Hyperliquid actions for a piece, so the piece's Hyperliquid account has no private key anywhere | [`unhuntable.near`](https://nearblocks.io/address/unhuntable.near) · [approve-agent tx](https://nearblocks.io/txns/86qJbTWkiXwXsKfCCWqK63yLanzvkbxikMj1R4HfufVd) · [the account it controls](https://app.hyperliquid.xyz/explorer/address/0x35c99eff31255e9ac3fc2a3c6e4dd70cb026b02a) |
 | **OutLayer TEE (Intel TDX)** | Runs the guard: sealed stops, one agent key per piece, up to seven price sources, the defence ladder, and each trader's signed record over every piece they ever used | Sealed-stop trade: public order list `[]` while open, then a reduce-only close |
-| **NEAR AI Cloud (TEE inference)** | Runs the NEAR AI Hunter: an attacker AI that starts from one of your pieces and tries to find the others in Hyperliquid's public data, with the enclave's signature over the exact question and answer | [Three signed mainnet hunts](docs/ai-hunter.md#proof-runs-on-mainnet): what each named, 0 strangers in all; every receipt checks with one command |
+| **NEAR AI Cloud (TEE inference)** | Runs the NEAR AI Hunter: an attacker AI that starts from one of your pieces and tries to find the others in Hyperliquid's public data, with the enclave's signature over the exact question and answer. Also runs the private AI stop adviser: the question is encrypted in your browser to the model's attested key with NEAR AI's end-to-end encryption, so our server forwards only ciphertext | [Three signed mainnet hunts](docs/ai-hunter.md#proof-runs-on-mainnet): what each named, 0 strangers in all; every receipt checks with one command. [A signed private AI answer](docs/private-ai.md#proof-run-on-mainnet): ciphertext both ways through our server, same check |
 | **trade.xyz (US stocks on Hyperliquid)** | 12 stock and index markets, isolated margin, money moved onto trade.xyz and back by Chain Signatures, stops that need two prices from outside the book | [move in](https://nearblocks.io/txns/8LzpGyN9kKpDwMmYKihG1MXXbgHFbs9H3E9Ci7w1jL6Z) · [stop fired](https://nearblocks.io/txns/6ewnHXXtwTjBvqdEqYdDkoVc3oE3ew2b6prZ5MAVCz4c) · [move back](https://nearblocks.io/txns/CALA24Gya1fLd8No2wzukUSM8cQ29eaBAUActpFLVGvc) |
 | **x402 on NEAR + PingPay (AI agents)** | Each agent call is paid in USDC on NEAR with a NEP-366 delegated `ft_transfer`, settled by our relayer before the call runs; or from six other chains through PingPay Agent Pay, settled to `unhuntable.near` through NEAR Intents | [paid agent call](https://nearblocks.io/txns/7VcZWHJzgrauZaY6irWh1BiHGcr7kDch92UG69MFvMBD) · [PingPay call settled to `unhuntable.near`](https://nearblocks.io/txns/GzuVd2giEu3VJ6LpeKHZfw7rFG8jatkpJbqJ5ZyACkP3) |
 | **NEAR Intents (Confidential)** | Holds your private balance, funds each piece with no public link between pieces, and pays for follower keys by private transfer from one private balance to another | 2.5 USDC sent privately to a piece, arriving as 2.178894 USDC |
@@ -127,6 +127,7 @@ How the try-a-trade page is paid for, and why nobody can move money through it: 
 - **Money in from any chain, with no trail.** Deposits through 1Click or Aurora Intents land in a confidential balance on NEAR Intents, and every piece is funded through the same shared payer that funds thousands of unrelated Hyperliquid accounts.
 - **See yourself as hunters do.** Hunter's View puts each of your positions beside what Hyperliquid's public API shows for it: separate small accounts, no stop on the book. The public [Hunt Map](https://tryunhuntable.site/hunt-map/) shows what everyone else exposes: the liquidation price of every large position held by Hyperliquid's biggest accounts.
 - **Send an AI hunter after yourself.** One tap sends an attacker AI, running in a NEAR AI Cloud TEE, after your own position: it starts from one piece and hunts for the rest in Hyperliquid's public data. You see what it named against the truth and against chance, with NEAR AI's enclave signature over the exact question and answer: [NEAR AI Hunter](docs/ai-hunter.md).
+- **Ask an AI where to put your stop, privately.** On the try-a-trade page, your browser encrypts the question to the key of NEAR AI's model in its enclave; our server only forwards ciphertext, and only your browser can read the answer: [Private AI stop adviser](docs/private-ai.md).
 - **Teams and DAOs.** A piece can be handed to a DAO, and then its money moves only on a passed vote: [treasury mode](docs/treasury.md), proven with a Sputnik DAO.
 - **Leave without us.** The exit tool brings your money home from your 12 words alone, even if our servers are gone.
 
@@ -200,6 +201,7 @@ All of these are observed results on NEAR, NEAR Intents, OutLayer and Hyperliqui
 | [Followers](docs/followers.md) | Copy keys and viewing keys, private daily payments, the guard-signed record per trader |
 | [The Hunt Map and Hunter's View](docs/hunt-map.md) | How the map is collected and what it counts; your position as the public sees it |
 | [NEAR AI Hunter](docs/ai-hunter.md) | An attacker AI in a NEAR AI TEE hunts your pieces; what it sees, how it is scored, the signed proof |
+| [Private AI stop adviser](docs/private-ai.md) | Ask an AI where to put your stop with NEAR AI's end-to-end encryption; what our server sees, the signed proof |
 | [How it works](docs/how-it-works.md) | The life of one position, the architecture, prices and stops, the defence ladder, engineering decisions |
 | [Security and privacy](docs/security.md) | Who could cheat and why they cannot, who sees what, the attacks we ran on our own pieces, the flaw we found for OutLayer |
 | [Treasury mode](docs/treasury.md) | Pieces handed to a DAO: money moves only on a passed Sputnik DAO vote |
@@ -215,11 +217,11 @@ All of these are observed results on NEAR, NEAR Intents, OutLayer and Hyperliqui
 | --- | --- | --- |
 | `guard/` | The guard: a Rust WASI program for OutLayer. Decisions are pure functions in `src/lib.rs`. | 44 |
 | `client/` | TypeScript: sealed boxes, guard client, position planner, fill savings, pieces key, Hyperliquid signing, Chain Signatures pieces, NEAR relay, exit logic | 186 |
-| `server/` | API, SQLite, jobs, NEAR sign-in, OutLayer wallet client, Chain Signatures relay, money flows, Hunt Map collector, Hunter's View, NEAR AI Hunter, PingPay route, Followers, try-a-trade page | 276 |
+| `server/` | API, SQLite, jobs, NEAR sign-in, OutLayer wallet client, Chain Signatures relay, money flows, Hunt Map collector, Hunter's View, NEAR AI Hunter, private AI relay, PingPay route, Followers, try-a-trade page | 284 |
 | `signer/` | NEAR contract `unhuntable.near`: Hyperliquid accounts controlled by Chain Signatures, signing only what each piece key approved | 16 |
 | `contract/` | NEAR records contract: public, checkable records (hashes, amounts, treasury settings) and never an address that could tie pieces together | 18 |
 | `agent/` | MCP server for AI agents: open, sealed stop, status, close, traders, closed trades, ask for a key; pays each call with x402 in USDC on NEAR or through PingPay | 13 |
-| `web/` | Phone-first static web app with a strict CSP | 65 unit + Playwright at two screen sizes |
+| `web/` | Phone-first static web app with a strict CSP | 70 unit + Playwright at two screen sizes |
 | `exit/` | Leave-without-us tool: one HTML page or a CLI | in `client/` |
 | `attacks/` | Linking attacks with public data only | |
 | `tools/` | Live-claims check (`check-live.mjs`), EAS proof check and its reference, NEAR AI Hunter receipt check | |
