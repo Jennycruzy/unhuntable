@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Check a NEAR AI Hunter receipt by yourself: the file the app's "Download the signed
-// question and answer" button saves, or docs/proof/ai-hunt-mainnet.json.
+// Check a NEAR AI Hunter or private AI stop adviser receipt by yourself: the file the app's
+// "Download the signed" buttons save, or the files in docs/proof.
 //
 //   node tools/check-ai-hunt.cjs docs/proof/ai-hunt-mainnet.json
 //
@@ -44,7 +44,8 @@ const ok = (b) => (b ? "yes" : "NO");
   console.log(`signature recovers ${signer}: ${ok(sigOk)}`);
   console.log(`signer is in the TEE attestation:   ${ok(attested)}${attested ? "" : ` (attested now: ${keys.join(", ") || "none"}; a restarted enclave gets a new key)`}`);
   const content = JSON.parse(r.response).choices[0].message.content;
-  console.log(`\nThe hunter answered:\n${content}`);
+  if (/^[0-9a-f]+$/i.test(content)) console.log(`\nThe answer is encrypted to the asker's browser key (NEAR AI E2EE); only that browser could read it:\n${content.slice(0, 96)}…`);
+  else console.log(`\nThe hunter answered:\n${content}`);
   process.exit(hashes && sigOk && attested ? 0 : 1);
 })().catch((e) => {
   console.error(e.message);

@@ -36,6 +36,7 @@ import { registerAgentRoutes } from "./agents.js";
 import { Judge, registerJudgeRoutes } from "./judge.js";
 import { HuntUs } from "./huntus.js";
 import { AiHunter } from "./aihunt.js";
+import { PrivateAi } from "./privateai.js";
 import { NearAi } from "./nearai.js";
 import { bothPaywalls, nearPaywall, pingRoute, type Paywall } from "./x402.js";
 
@@ -59,6 +60,8 @@ export interface ServerDeps {
   aiHunter?: AiHunter;
   /** Judge mode; without it its routes are not served. */
   judge?: Judge;
+  /** Private AI stop adviser relay; without it its route is not served. */
+  privateAi?: PrivateAi;
 }
 
 const SECURITY_HEADERS: Record<string, string> = {
@@ -148,6 +151,12 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     const token = (req.query as { token?: unknown }).token;
     if (typeof token !== "string") throw new ApiError("bad_request");
     return deps.huntUs.reveal(token);
+  });
+
+  // Private AI stop adviser: forwards an encrypted question to NEAR AI, never reads it.
+  app.post("/api/private-ai", { bodyLimit: 80_000 }, async (req) => {
+    if (!deps.privateAi) throw new ApiError("not_found");
+    return deps.privateAi.relay(req.ip, req.body);
   });
 
   if (deps.money) {
@@ -246,7 +255,8 @@ export async function main(): Promise<void> {
     ? new AiHunter(db, money.hl, new NearAi(config.secrets.nearaiKey, config.nearaiUrl, undefined, config.nearaiModel), config.network, Date.now, money.random)
     : undefined;
   const judge = config.judge ? new Judge(money, config.judge) : undefined;
-  const app = buildServer({ config, db, log, money, whale, huntMap, paywall, huntUs, aiHunter, judge });
+  const privateAi = config.secrets.nearaiKey ? new PrivateAi(config.secrets.nearaiKey, config.nearaiUrl, config.nearaiModel) : undefined;
+  const app = buildServer({ config, db, log, money, whale, huntMap, paywall, huntUs, aiHunter, judge, privateAi });
   let watching = false;
   const watch = (fn: () => Promise<unknown>) => () => {
     if (watching) return;

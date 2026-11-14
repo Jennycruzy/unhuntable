@@ -158,14 +158,16 @@ if any page loads a script from another origin, and adds this policy as a
 | `https://mw.rpc.fastnear.com` | the NEAR RPC the Meteor wallet module calls |
 | `https://h4n.app` | the HOT wallet relay: HOT passes sign requests and answers through it |
 | `https://api.outlayer.ai` | OutLayer: the browser registers your wallets and adds our key to them, signed with your pieces key |
+| `https://cloud-api.near.ai` | NEAR AI Cloud's public attestation: the private AI stop adviser reads the model's encryption key here itself, so our server never hands it a key |
+| `https://api.hyperliquid.xyz` | Hyperliquid's public prices: the private AI stop adviser reads recent candles here itself, so our server does not learn what you asked about |
 
 `frame-src https://hot-labs.org`: HOT opens its sign-in widget in a frame from
 there.
 
 MyNearWallet and Meteor open their own pages in a new window, which the policy
 does not need to allow. "Check it yourself" links open Hyperliquid's public
-account page (`app.hyperliquid.xyz`) in a new tab; the app never calls
-Hyperliquid itself.
+account page (`app.hyperliquid.xyz`) in a new tab. The only call the browser
+makes to Hyperliquid is the private AI stop adviser's read of public candles.
 
 A `<meta>` policy can't set `frame-ancestors`. Have the static host also send
 `Content-Security-Policy: frame-ancestors 'none'` and `Referrer-Policy:

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ticker } from "unhuntable-client/hyperliquid";
 import { HunterView } from "../../components/HunterView";
 import { Mark } from "../../components/icons";
+import { PrivateAdvice } from "../../components/PrivateAdvice";
 import { Notice } from "../../components/ui";
 import { sentence } from "../../lib/api";
 import { usd } from "../../lib/format";
@@ -217,6 +218,7 @@ export default function JudgePage() {
                 onChange={setSide}
               />
               <Choice name="Stop distance" value={dist} options={STOP_CHOICES.map((d) => ({ v: String(d), label: `Stop ${d * 100}% away` }))} onChange={setDist} />
+              <PrivateAdvice coin={coin} side={side} sizeUsd={status.notionalUsd} leverage={status.leverage} choices={STOP_CHOICES} onUse={(d) => setDist(String(d))} />
               {status.busyUntilMs !== null && <Notice>Someone else&apos;s trade is running. The next one can open in {clock(status.busyUntilMs - now)}.</Notice>}
               {!status.ready && status.busyUntilMs === null && <Notice>The demo account can&apos;t open a trade right now. Try again later.</Notice>}
               {status.leftToday === 0 && <Notice>Today&apos;s trades are used up. More open within 24 hours.</Notice>}

@@ -19,6 +19,7 @@
     "@near-wallet-selector/hot-wallet": "^10.1.4",
     "@near-wallet-selector/meteor-wallet": "^10.1.4",
     "@near-wallet-selector/my-near-wallet": "^10.1.4",
+    "@nearai/inference-sdk": "0.3.0",
     "buffer": "^6.0.3",
     "next": "^16.4.5",
     "qrcode-generator": "^2.0.4",

@@ -22,6 +22,8 @@ export function connectOrigins(env = process.env) {
     "https://mw.rpc.fastnear.com",
     "https://h4n.app",
     "https://api.outlayer.ai",
+    "https://cloud-api.near.ai",
+    "https://api.hyperliquid.xyz",
   );
   return [...new Set(list)];
 }
