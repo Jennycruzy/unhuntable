@@ -50,7 +50,7 @@ cd contract && cargo test
 cd client && npm ci && npm run build && cd ../web && npm ci && npx playwright install chromium && npm test && npm run build && npx playwright test
 ```
 
-→ 70 unit tests, then every screen in headless Chromium at 360×780 and 1280×800, with all outside requests blocked. Screenshots land in `web/screenshots/`.
+→ 76 unit tests, then every screen in headless Chromium at 360×780 and 1280×800, with all outside requests blocked. Screenshots land in `web/screenshots/`.
 
 **6. The MCP server for AI agents:**
 

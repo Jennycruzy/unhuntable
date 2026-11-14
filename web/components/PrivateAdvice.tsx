@@ -52,7 +52,6 @@ export function PrivateAdvice({
     URL.revokeObjectURL(url);
   };
 
-  const c = result?.receipt.proof.checks;
   return (
     <div className="card" data-testid="private-ai">
       <p className="small">
@@ -75,8 +74,8 @@ export function PrivateAdvice({
             All our server saw of your question: <code>{result.sentPreview}…</code>
           </p>
           <p className="muted small" data-testid="private-ai-checks">
-            NEAR AI&apos;s enclave signed the exact bytes: hashes {c?.hashesMatch ? "match" : "do not match"}, signature {c?.signatureValid ? "valid" : "not valid"}, signer{" "}
-            {c?.inAttestation ? "in the hardware attestation" : "not found in the attestation"}.{" "}
+            Checked in this browser before showing it: the enclave&apos;s Intel TDX quote (TCB {result.checks.tcb}), NVIDIA&apos;s verdict on its GPU, the
+            question encrypted to the key in that quote, and NEAR AI&apos;s signature over the exact bytes by that enclave.{" "}
             <button type="button" className="link" onClick={download}>
               Download the signed receipt
             </button>

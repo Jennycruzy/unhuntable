@@ -109,40 +109,8 @@ So we changed the app:
 ### What can still tie pieces together
 
 - **A stop, take-profit or defence step fires at its price.** Pieces with the same stop close together when it is hit. Risk comes first, so no stop ever waits to look random. That ties them only after the fact; the stop itself is never on the book beforehand.
-- **The pieces of one position share a market, a side and a leverage,** and a new piece starts as a fresh account. Reusing older pieces softens the second. We re-ran the hunter on the real data of the caught position with these changes applied, and with others we tried (very different sizes, older pieces, a second funding route, pieces opened hours apart): told that one of 15 accounts is the owner's, it still picked out the other piece in most runs. Only all of them together brought it down to 3 runs in 12. [Every run is below](#benchmark-what-each-defence-buys).
+- **The pieces of one position share a market, a side and a leverage,** and a new piece starts as a fresh account. Reusing older pieces softens the second.
 - **Hyperliquid shows every account's positions and liquidation prices.** Unhuntable makes linking pieces hard; it cannot make it impossible. The hunter is how each owner checks their own position, with a signed answer.
-
-## Benchmark: what each defence buys
-
-To learn which defences stop the hunter, we gave it the caught position again, 68 times. Each time our two pieces' public facts were changed to what a set of defences would produce, with the deployed fix always applied. Same model in NEAR AI's TEE, same 15-account lineup with one of ours, same scoring. A random pick of one name finds our piece 7 times in 100. The app runs the first row.
-
-| Defences, each on top of the deployed fix | Runs | Named our other piece | Strangers named |
-| --- | --- | --- | --- |
-| None: own funding amount and own close time (the deployed fix) | 4 | 4 | 0 |
-| Uneven sizes: a 25-40% piece and a 60-75% piece | 4 | 4 | 0 |
-| Aged pieces: each funded 1-24 hours before, with one small trade in another market | 4 | 4 | 2 |
-| A second funding route: one piece paid through Aurora's bridge, not 1Click's payer | 4 | 4 | 3 |
-| Sizes, aged and route together | 4 | 4 | 0 |
-| Slow: the other piece opens and closes 1-6 hours apart | 4 | 4 | 3 |
-| Slow and sizes | 8 | 8 | 8 |
-| Slow and aged | 8 | 7 | 7 |
-| Slow and route | 8 | 5 | 12 |
-| Slow, aged and route | 8 | 6 | 18 |
-| **Slow, sizes, aged and route** | **12** | **3** | **28** |
-
-What it shows:
-
-- **No single defence stops it.** With any one of them, and with sizes, aged and route together, the hunter named our other piece every time.
-- **Time apart is what breaks it, and only with the rest.** With all four, it named our piece in 3 runs of 12 and named 28 strangers: of the 31 accounts it accused, 3 were ours. A hunter acting on its picks would be wrong 28 times in 31.
-- **These runs answer questions about edited data.** They show what the model concludes from such facts, not that a live position produced them. The signatures prove the model in NEAR AI's TEE gave each answer to each exact question.
-
-Check any run, for example the strongest row:
-
-```bash
-node tools/check-ai-hunt.cjs docs/proof/bench/fix-slow-sizes-aged-route-01.json
-```
-
-All 68 files in [`docs/proof/bench`](proof/bench) pass the three checks. Each file's `what` line names its defences and how it was scored.
 
 ## Limits
 

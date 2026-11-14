@@ -158,7 +158,9 @@ if any page loads a script from another origin, and adds this policy as a
 | `https://mw.rpc.fastnear.com` | the NEAR RPC the Meteor wallet module calls |
 | `https://h4n.app` | the HOT wallet relay: HOT passes sign requests and answers through it |
 | `https://api.outlayer.ai` | OutLayer: the browser registers your wallets and adds our key to them, signed with your pieces key |
-| `https://cloud-api.near.ai` | NEAR AI Cloud's public attestation: the private AI stop adviser reads the model's encryption key here itself, so our server never hands it a key |
+| `https://cloud-api.near.ai` | NEAR AI Cloud's public attestation: the private AI stop adviser fetches the model's attestation here itself, with a fresh nonce, so our server never hands it a key |
+| `https://cloud.near.ai` | NEAR AI's proxy to NVIDIA's attestation service (NVIDIA's own endpoint refuses browsers): the adviser sends the GPU evidence there and gets NVIDIA's signed verdict |
+| `https://nras.attestation.nvidia.com` | NVIDIA's public keys, which the adviser checks that verdict against |
 | `https://api.hyperliquid.xyz` | Hyperliquid's public prices: the private AI stop adviser reads recent candles here itself, so our server does not learn what you asked about |
 
 `frame-src https://hot-labs.org`: HOT opens its sign-in widget in a frame from

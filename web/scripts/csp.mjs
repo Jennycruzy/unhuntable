@@ -23,6 +23,8 @@ export function connectOrigins(env = process.env) {
     "https://h4n.app",
     "https://api.outlayer.ai",
     "https://cloud-api.near.ai",
+    "https://cloud.near.ai",
+    "https://nras.attestation.nvidia.com",
     "https://api.hyperliquid.xyz",
   );
   return [...new Set(list)];

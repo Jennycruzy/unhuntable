@@ -9,6 +9,8 @@ import type { Side } from "./types";
 
 export const PRIVATE_AI_MODEL = "Qwen/Qwen3.6-35B-A3B-FP8";
 export const NEARAI_URL = "https://cloud-api.near.ai/v1";
+/** NEAR AI's CORS proxy to NVIDIA's attestation service; NVIDIA's own endpoint refuses browsers. The verdict is a JWT checked against NVIDIA's own keys. */
+export const NRAS_PROXY = "https://cloud.near.ai/api/proxy/nras/v3/attest/gpu";
 const HL_INFO = "https://api.hyperliquid.xyz/info";
 
 export interface Candle {
@@ -48,9 +50,25 @@ export interface Receipt {
   };
 }
 
+/** What this browser verified itself before it would show the advice. */
+export interface BrowserChecks {
+  /** Intel TDX quote of the model's enclave, bound to this browser's fresh nonce. */
+  tdx: true;
+  /** Intel TCB status of that enclave. */
+  tcb: string;
+  /** NVIDIA's signed verdict on the GPU evidence. */
+  gpu: true;
+  /** The question was encrypted to the key bound in that verified quote. */
+  keyFromQuote: true;
+  /** NEAR AI's signature over the exact request and response bytes, by the verified enclave's signer. */
+  signature: true;
+  signer: string;
+}
+
 export interface AdviceResult {
   advice: StopAdvice;
   receipt: Receipt;
+  checks: BrowserChecks;
   /** What our server was sent, to show that it is ciphertext. */
   sentPreview: string;
 }
@@ -108,14 +126,50 @@ export function readAdvice(content: string, choices: readonly number[]): StopAdv
   return { distance: pick, why };
 }
 
-/** The model's ECDSA E2EE key, fetched by this browser from NEAR AI's attestation endpoint. */
-export async function modelKey(f: typeof fetch = fetch): Promise<{ signingAlgo: "ecdsa"; publicKey: string }> {
-  const res = await f(`${NEARAI_URL}/attestation/report?model=${encodeURIComponent(PRIVATE_AI_MODEL)}&signing_algo=ecdsa`);
-  if (!res.ok) throw new Error("NEAR AI's attestation did not answer. Try again in a moment.");
-  const r = (await res.json()) as { model_attestations?: { signing_algo?: string; signing_public_key?: string }[] };
-  const a = (r.model_attestations ?? []).find((x) => x.signing_algo === "ecdsa" && typeof x.signing_public_key === "string");
-  if (!a?.signing_public_key || !/^[0-9a-f]+$/i.test(a.signing_public_key)) throw new Error("NEAR AI's attestation has no model key.");
-  return { signingAlgo: "ecdsa", publicKey: a.signing_public_key };
+type Sdk = typeof import("@nearai/inference-sdk");
+type Verified = Awaited<ReturnType<Sdk["verifyModelAttestation"]>>;
+
+/**
+ * Fetch the model's attestation with a fresh nonce and verify it here: the Intel TDX quote, NVIDIA's
+ * verdict on the GPU evidence, and the model key bound in the quote. Throws unless all of it holds.
+ */
+export async function verifiedModel(sdk: Sdk, f: typeof fetch = fetch): Promise<Verified & { signingPublicKey: string }> {
+  const client = new sdk.AttestationClient({ baseUrl: NEARAI_URL, fetch: (i, o) => f(i, o) });
+  let fetched;
+  try {
+    fetched = await client.fetchModelAttestations({ model: PRIVATE_AI_MODEL, signingAlgo: "ecdsa" });
+  } catch {
+    throw new Error("NEAR AI's attestation did not answer, so nothing was sent. Try again in a moment.");
+  }
+  const verifiers = { tdxQuote: sdk.createTdxQuoteVerifier(), gpuEvidence: sdk.createGpuEvidenceVerifier({ nrasUrl: NRAS_PROXY }) };
+  for (const attestation of fetched.attestations) {
+    try {
+      const v = await sdk.verifyModelAttestation({ attestation, clientBinding: fetched.clientBinding, verifiers, policy: { gpuEvidence: "required" } });
+      if (v.gpuEvidence === "verified" && typeof v.signingPublicKey === "string" && /^[0-9a-f]+$/i.test(v.signingPublicKey)) return v as Verified & { signingPublicKey: string };
+    } catch {
+      // try the next enclave; none verified means nothing is sent
+    }
+  }
+  throw new Error("NEAR AI's enclave could not be verified in this browser, so nothing was sent.");
+}
+
+/**
+ * Check NEAR AI's signature over the exact bytes against the verified enclave. Throws if the text is not
+ * the hashes of these bytes, the signature does not recover its signer, or the signer is not the enclave's.
+ */
+export function checkSignature(sdk: Sdk, requestBody: string, responseBody: string, signed: { text: string; signature: string } | null, model: Pick<Verified, "signer">): void {
+  if (!signed) throw new Error("NEAR AI sent no signature, so the answer is not shown.");
+  const enc = new TextEncoder();
+  try {
+    sdk.verifyModelResponse({
+      requestBody: enc.encode(requestBody),
+      responseBody: enc.encode(responseBody),
+      signature: { kind: "provider_tee", signer: model.signer, signedText: signed.text, signature: signed.signature },
+      attestation: model as Verified,
+    });
+  } catch {
+    throw new Error("NEAR AI's signature did not check out in this browser, so the answer is not shown.");
+  }
 }
 
 /** True when every message in a chat request body is hex ciphertext, as the relay requires. */
@@ -130,8 +184,9 @@ export function isCiphertext(body: string): boolean {
 
 /** Ask the private AI. `relay` is our server's URL for /api/private-ai. */
 export async function askStop(q: StopQuestion, relay: string, f: typeof fetch = fetch): Promise<AdviceResult> {
-  const { prepareE2eeChatRequest } = await import("@nearai/inference-sdk");
-  const key = await modelKey(f);
+  const sdk = await import("@nearai/inference-sdk");
+  const model = await verifiedModel(sdk, f);
+  const key = { signingAlgo: "ecdsa" as const, publicKey: model.signingPublicKey };
   const { system, user } = stopPrompt(q);
   const plain = new Request(`${NEARAI_URL}/chat/completions`, {
     method: "POST",
@@ -145,7 +200,7 @@ export async function askStop(q: StopQuestion, relay: string, f: typeof fetch = 
       max_tokens: 3000,
     }),
   });
-  const prepared = await prepareE2eeChatRequest({ request: plain, modelKey: key });
+  const prepared = await sdk.prepareE2eeChatRequest({ request: plain, modelKey: key });
   const body = await prepared.request.clone().text();
   const headers: Record<string, string> = {};
   prepared.request.headers.forEach((v, k) => {
@@ -155,18 +210,22 @@ export async function askStop(q: StopQuestion, relay: string, f: typeof fetch = 
   const res = await f(relay, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body, headers }), credentials: "include" });
   const out = (await res.json()) as { response?: string; proof?: Receipt["proof"]; message?: string };
   if (!res.ok || typeof out.response !== "string" || !out.proof) throw new Error(out.message ?? "The private AI did not answer. Try again in a minute.");
+  // fail closed: nothing is decrypted or shown unless the enclave signed exactly these bytes
+  checkSignature(sdk, body, out.response, out.proof.signed, model);
   const decrypted = await prepared.decryptResponse(new Response(out.response, { status: 200, headers: { "Content-Type": "application/json" } }));
   const j = (await decrypted.json()) as { choices?: { message?: { content?: string } }[] };
   const content = j.choices?.[0]?.message?.content ?? "";
   const advice = readAdvice(content, q.choices);
+  const checks: BrowserChecks = { tdx: true, tcb: String(model.tcbStatus), gpu: true, keyFromQuote: true, signature: true, signer: model.signer.signingAddress };
   return {
     advice,
+    checks,
     sentPreview: body.slice(0, 160),
     receipt: {
       what: "Private AI stop adviser: the exact encrypted request and response bytes our server forwarded, and NEAR AI Cloud's signature over them. Only the trader's browser and the model's enclave could read the question and the answer.",
       request: body,
       response: out.response,
-      proof: out.proof,
+      proof: { ...out.proof, checks: { hashesMatch: true, signatureValid: true, inAttestation: true } },
     },
   };
 }
