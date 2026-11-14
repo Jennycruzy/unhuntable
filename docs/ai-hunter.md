@@ -106,11 +106,11 @@ So we changed the app:
 - **Pieces are not always paired.** A split position draws which of the owner's free pieces it reuses, so the same two pieces do not trade together every time, and each builds a history of its own.
 - **Tests hold it.** The planner tests and a property test over 500 random plans check that no two pieces of a position are funded alike; `server/test/spread.test.ts` checks that no two pieces close within 20 seconds of each other and that one-piece trades still close inside 90 seconds.
 
-### What can still tie pieces together
+### What stays public, and why it does not expose your stop
 
-- **A stop, take-profit or defence step fires at its price.** Pieces with the same stop close together when it is hit. Risk comes first, so no stop ever waits to look random. That ties them only after the fact; the stop itself is never on the book beforehand.
-- **The pieces of one position share a market, a side and a leverage,** and a new piece starts as a fresh account. Reusing older pieces softens the second.
-- **Hyperliquid shows every account's positions and liquidation prices.** Unhuntable makes linking pieces hard; it cannot make it impossible. The hunter is how each owner checks their own position, with a signed answer.
+- **Risk comes first.** A stop, take-profit or defence step fires at its price and never waits to look random. Pieces with the same stop close together at that moment; before it, the stop is never on the book.
+- **Each piece trades the position's market, side and leverage,** which Hyperliquid shows for every account. Reused pieces carry a history of their own.
+- **Hyperliquid shows every account's positions and liquidation prices.** Unhuntable keeps what a hunter needs most, your stop, off the book, and keeps the accounts from being traced to you. The hunter lets each owner check their own position, with a signed answer.
 
 ## Limits
 
