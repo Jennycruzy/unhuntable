@@ -32,7 +32,7 @@ Three lines end in `yes`: the signed text holds the hashes of the exact request 
 
 ## Proof run on mainnet
 
-Asked from the page's own browser code against the live site on 14 Nov 2026, for an ETH short at 2x with stops 1%, 2% and 3% away. Receipt: [`docs/proof/private-ai-mainnet.json`](proof/private-ai-mainnet.json).
+Asked from the page's own browser code against the live site, for an ETH short at 2x with stops 1%, 2% and 3% away. Receipt: [`docs/proof/private-ai-mainnet.json`](proof/private-ai-mainnet.json).
 
 | | |
 | --- | --- |
