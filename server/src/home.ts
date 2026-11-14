@@ -23,7 +23,9 @@ import {
   toUnits,
   typedDataJson,
   usdClassTransfer,
+  VrfStream,
   XYZ_DEX,
+  sha256,
   type TypedData,
   type HlValue as Value,
 } from "unhuntable-client";
@@ -39,6 +41,13 @@ import { Label, privateUnits } from "./wallets.js";
 import { HomeSigsBody, homePlan, homeRequests, isChainSig, runRequest, takeHomeSignatures, type HomePlanRow } from "./chainsig.js";
 
 export const HOME_POLL_MS = 15_000;
+/** Each piece after the first waits this long after the one before it, so pieces do not leave together. */
+export const HOME_GAP_MS: readonly [number, number] = [120_000, 1_200_000];
+
+/** The wait before piece i (i >= 1) of a home leaves, drawn from the home's own id. */
+export function homeGap(homeId: string, i: number): number {
+  return new VrfStream(sha256(new TextEncoder().encode(`home:${homeId}:${i}`))).int(HOME_GAP_MS[0], HOME_GAP_MS[1]);
+}
 /** Pieces holding less than this are left where they are. */
 export const HOME_MIN_USDC = 3;
 /** Give up waiting for one piece's money after this long. */
@@ -378,8 +387,26 @@ async function relock(ctx: Ctx, h: HomeRow, failed: boolean): Promise<void> {
 export async function advanceHome(ctx: Ctx, homeId: string): Promise<void> {
   const h = ctx.db.prepare("SELECT * FROM homes WHERE id = ?").get(homeId) as HomeRow | undefined;
   if (!h || h.state !== "moving") return;
-  for (const w of pieces(ctx, h)) {
+  const list = pieces(ctx, h);
+  for (let i = 0; i < list.length; i++) {
+    const w = list[i]!;
     const steps = ctx.db.prepare("SELECT * FROM home_steps WHERE home_id = ? AND piece_id = ? ORDER BY created_ms, rowid").all(h.id, w.id) as StepRow[];
+    // a piece after the first leaves a few minutes after the last piece that sent money
+    if (i > 0 && steps.length === 0) {
+      const prev = ctx.db
+        .prepare("SELECT MAX(created_ms) AS t FROM home_steps WHERE home_id = ? AND piece_id IS NOT NULL AND step = 'send' AND status = 'done'")
+        .get(h.id) as { t: number | null };
+      if (prev.t !== null) {
+        const at = prev.t + homeGap(h.id, i);
+        if (ctx.now() < at) {
+          const note = `Account ${i + 1} leaves at about ${new Date(at).toISOString().slice(11, 16)} UTC, a few minutes after the one before it, so your pieces do not leave together.`;
+          const seen = ctx.db.prepare("SELECT 1 FROM home_steps WHERE home_id = ? AND step = 'wait' AND detail = ?").get(h.id, note);
+          if (!seen) addStep(ctx, h.id, null, "wait", "waiting", note);
+          return schedule(ctx, h.id, at);
+        }
+        ctx.db.prepare("UPDATE home_steps SET status = 'done' WHERE home_id = ? AND step = 'wait' AND status = 'waiting'").run(h.id);
+      }
+    }
     let finished: boolean;
     try {
       finished = await movePiece(ctx, h, w, steps);

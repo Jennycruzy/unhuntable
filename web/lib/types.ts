@@ -375,7 +375,7 @@ export type HomeStateName = "unlock_wait" | "moving" | "relock_wait" | "done" | 
 export interface HomeState {
   homeId: string;
   state: HomeStateName;
-  steps: { label: string; step: string; status: string; ms: number }[];
+  steps: { label: string | null; step: string; status: string; ms: number; detail?: string }[];
   relockBatch: PolicyBatch | null;
   needChainSig?: boolean;
   arrivedUsdc?: string;

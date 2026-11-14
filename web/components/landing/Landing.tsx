@@ -165,7 +165,7 @@ export function Landing() {
               <span className="l1">Trade perps</span> <span className="l2">nobody</span> <span className="l3">can hunt.</span>
             </h1>
             <p className="lp-lede">
-              Every Hyperliquid position is public: its size, its liquidation price, every stop on the book. Unhuntable splits yours across accounts nobody can link and
+              Every Hyperliquid position is public: its size, its liquidation price, every stop on the book. Unhuntable splits yours into small accounts nobody can trace back to you and
               seals your stop where nobody can read it. Nothing left to aim at.
             </p>
             <div className="lp-cta">
@@ -318,7 +318,7 @@ export function Landing() {
             <h2>Sell your trading without showing it.</h2>
             <p>
               On a public exchange, letting people follow you means showing your positions to the people best placed to hunt them. Here a trader sells keys instead. A
-              copy key copies each trade into the follower&apos;s own pieces, which nobody can link to the trader&apos;s. A viewing key shows closed trades only. Followers pay
+              copy key copies each trade into the follower&apos;s own pieces, funded from their own private balance. A viewing key shows closed trades only. Followers pay
               day by day by private transfer, and nobody, followers included, ever sees an open position.
             </p>
             <Link href="/traders/" className="proof">
@@ -363,7 +363,7 @@ export function Landing() {
               <span>agent</span> unhuntable_open BTC long $500, whale
             </p>
             <p className="it">
-              <span>unhuntable</span> Opening across 3 accounts nobody can link. Paid 0.002 USDC.
+              <span>unhuntable</span> Opening across 3 accounts nobody can trace back to you. Paid 0.002 USDC.
             </p>
             <p className="me">
               <span>agent</span> unhuntable_set_stop 2% below entry

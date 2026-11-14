@@ -255,7 +255,7 @@ export function Book({ coin, asOfMs }: { coin: MapCoin | null; asOfMs: number | 
     "A hunter locks onto your stop.",
     "Pushed to your stop. Filled at the worst price. Price comes straight back.",
     "The same trade, through Unhuntable.",
-    "Split into accounts nobody can link. The stop is sealed.",
+    "Split into accounts nobody can trace to you. The stop is sealed.",
     "The hunter looks for a level.",
     "Same push. Nothing to hit.",
     "Nothing to hunt.",

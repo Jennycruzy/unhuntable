@@ -288,7 +288,7 @@ export default function HuntMapPage() {
           <div className="wrap">
             <h2>Through Unhuntable, there is no row to read.</h2>
             <p className="lede hm-close">
-              Your position is split across accounts nobody can link, and your stop is sealed inside an OutLayer enclave. It is on no list like this one.
+              Your position is split into small accounts nobody can trace back to you, and your stop is sealed inside an OutLayer enclave. It is on no list like this one.
             </p>
             <Link className="button" href="/signin/">
               Start

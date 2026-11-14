@@ -9,7 +9,7 @@ import "@fontsource/ibm-plex-sans/500.css";
 import "@fontsource/ibm-plex-sans/600.css";
 import "./globals.css";
 
-const DESCRIPTION = "Trade on Hyperliquid in pieces nobody can link, with stops that stay sealed until they fire.";
+const DESCRIPTION = "Trade on Hyperliquid in small pieces nobody can trace back to you, with stops that stay sealed until they fire.";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://tryunhuntable.site"),

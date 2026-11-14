@@ -55,11 +55,13 @@ const STEP_WORDS: Record<string, string> = {
   to_spot: "Moving money to spot",
   send: "Sending to your private balance",
   arrive: "Arriving in your private balance",
+  wait: "Waiting so your pieces do not leave together",
   relock: "Locking the piece again",
 };
 
 /** A step from the server in plain words. */
-export function stepWords(s: { label: string; step: string; status: string }): string {
+export function stepWords(s: { label: string | null; step: string; status: string; detail?: string }): string {
+  if (s.step === "wait" && s.detail) return s.detail;
   const what = STEP_WORDS[s.step] ?? s.step.replace(/_/g, " ");
   return `${s.label}: ${what} (${s.status.replace(/_/g, " ")})`;
 }

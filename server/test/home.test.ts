@@ -53,12 +53,23 @@ describe("go home", () => {
     expect(conf).toEqual({ ok: true, locked: [], unlocked: ["piece:0", "piece:1"] });
     expect((await home(s, homeId)).state).toBe("moving");
 
-    await runFor(s.h, 120_000);
+    // the second piece waits 2-20 minutes after the first one sent, so they do not leave together
+    await runFor(s.h, 100_000);
+    const mid = await home(s, homeId);
+    expect(mid.state).toBe("moving");
+    const wait = mid.steps.find((x: any) => x.step === "wait");
+    expect(wait).toMatchObject({ label: null, status: "waiting" });
+    expect(wait.detail).toMatch(/^Account 2 leaves at about \d\d:\d\d UTC, a few minutes after the one before it, so your pieces do not leave together\.$/);
+    expect(s.h.world.calls.filter((c) => c.path === "/exchange").map((c) => c.body.action.type)).toEqual(["usdClassTransfer", "spotSend"]);
+    await runFor(s.h, 1_300_000);
     const st = await home(s, homeId);
     expect(st.state).toBe("relock_wait");
     expect(st.relockBatch.transactions).toHaveLength(2);
+    const sends = s.h.db.prepare("SELECT created_ms FROM home_steps WHERE home_id = ? AND step = 'send' ORDER BY created_ms").all(homeId) as { created_ms: number }[];
+    expect(sends[1].created_ms - sends[0].created_ms).toBeGreaterThanOrEqual(120_000);
+    expect(st.steps.find((x: any) => x.step === "wait").status).toBe("done");
     expect(st.relockBatch.summary[1]).toBe("Lock piece Account 2: it can only send to its own Hyperliquid account and to alice.near. Our server cannot sign for it.");
-    expect(st.steps.map((x: any) => [x.label, x.step, x.status])).toEqual([
+    expect(st.steps.filter((x: any) => x.step !== "wait").map((x: any) => [x.label, x.step, x.status])).toEqual([
       ["piece:0", "to_spot", "done"],
       ["piece:0", "deposit_address", "done"],
       ["piece:0", "send", "done"],

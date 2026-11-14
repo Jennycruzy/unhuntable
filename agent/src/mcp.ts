@@ -59,7 +59,7 @@ export function buildServer(api: AgentApi): McpServer {
     {
       title: "Open a position",
       description:
-        "Open a perp position on Hyperliquid through Unhuntable, on pieces the owner already set up. normal = one piece; whale = split across several accounts nobody can link. Crypto only (BTC, ETH, SOL), within this agent's limits. It opens within a few minutes; check with unhuntable_status, then seal a stop with unhuntable_set_stop. Costs one paid call.",
+        "Open a perp position on Hyperliquid through Unhuntable, on pieces the owner already set up. normal = one piece; whale = split across several accounts funded so nobody can trace them back to the owner. Crypto only (BTC, ETH, SOL), within this agent's limits. It opens within a few minutes; check with unhuntable_status, then seal a stop with unhuntable_set_stop. Costs one paid call.",
       inputSchema: {
         coin: z.enum(["BTC", "ETH", "SOL"]),
         side: z.enum(["long", "short"]),

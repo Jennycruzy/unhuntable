@@ -102,13 +102,14 @@ So we changed the app:
 
 - **Every piece is funded with its own amount.** A split position's pieces each get what they need plus a random 5 to 50% more, in cents, drawn from the position's OutLayer VRF output and at least $0.25 apart. One-piece trades keep the ladder (`client/src/planner.ts`).
 - **Pieces close at their own times.** Close spreads a split position's pieces over 2 to 20 minutes, at least 20 seconds apart, drawn from the same VRF output, the same window entries use. Close now still closes them all at once (`server/src/positions.ts`).
+- **Pieces go home at their own times.** Going home, each piece after the first waits 2 to 20 minutes after the last one that sent money, and the home screen says when it will leave (`server/src/home.ts`).
 - **Pieces are not always paired.** A split position draws which of the owner's free pieces it reuses, so the same two pieces do not trade together every time, and each builds a history of its own.
 - **Tests hold it.** The planner tests and a property test over 500 random plans check that no two pieces of a position are funded alike; `server/test/spread.test.ts` checks that no two pieces close within 20 seconds of each other and that one-piece trades still close inside 90 seconds.
 
 ### What can still tie pieces together
 
 - **A stop, take-profit or defence step fires at its price.** Pieces with the same stop close together when it is hit. Risk comes first, so no stop ever waits to look random. That ties them only after the fact; the stop itself is never on the book beforehand.
-- **The pieces of one position share a market, a side and a leverage,** and a new piece starts as a fresh account. Reusing older pieces softens the second.
+- **The pieces of one position share a market, a side and a leverage,** and a new piece starts as a fresh account. Reusing older pieces softens the second. We re-ran the hunter on the real data of the caught position with these changes applied, and with others we tried (very different sizes, older pieces, a second funding route, pieces opened hours apart): told that one of 15 accounts is the owner's, it still picked out the other piece in most runs. Only all of them together brought it down to 3 runs in 12.
 - **Hyperliquid shows every account's positions and liquidation prices.** Unhuntable makes linking pieces hard; it cannot make it impossible. The hunter is how each owner checks their own position, with a signed answer.
 
 ## Limits
