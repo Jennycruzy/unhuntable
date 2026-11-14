@@ -37,5 +37,10 @@
     "jsqr": "^1.4.0",
     "typescript": "^5.9.3",
     "vitest": "^3.2.7"
+  },
+  "overrides": {
+    "@freedomofpress/crypto-browser": {
+      "@noble/curves": "2.4.0"
+    }
   }
 }
