@@ -13,7 +13,9 @@ test("judge mode: anyone opens a real trade, the stop is sealed in the browser, 
   // the level never travels: the stop call carries only sealed boxes
   const stop = apiRequests.find((r) => r.url.endsWith("/api/judge/stop"));
   expect(stop).toBeTruthy();
-  expect(stop!.body).not.toContain("3060");
+  // sealed boxes are random hex and can hold "3060" by chance; everything outside them must not
+  const outsideBoxes = (stop!.body ?? "").replace(/"[0-9a-f]{32,}"/g, '""');
+  expect(outsideBoxes).not.toMatch(/3,?060/);
   await expect(page.getByTestId("hunter-verdict")).toHaveText("Hyperliquid shows one account and no stop or take-profit on the book.");
   await shot(page, "judge-open", info.project.name);
 
