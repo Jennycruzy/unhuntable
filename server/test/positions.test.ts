@@ -387,18 +387,21 @@ describe("hunter's view", () => {
 });
 
 describe("close", () => {
-  it("closes each piece at VRF-staggered times inside 0-90 s", async () => {
+  it("closes each split piece at its own VRF-drawn time over 2-20 minutes", async () => {
     const s = setup();
     const { id } = await openPosition(s, WHALE);
     const t0 = s.h.clock.t;
     expect((await post(s, `/api/positions/${id}/close`)).json()).toEqual({ ok: true, state: "closing" });
     const at = (s.h.db.prepare("SELECT close_at_ms FROM position_pieces WHERE position_id = ? ORDER BY idx").all(id) as any[]).map((r) => r.close_at_ms - t0);
     for (const x of at) {
-      expect(x).toBeGreaterThanOrEqual(0);
-      expect(x).toBeLessThanOrEqual(90_000);
+      expect(x).toBeGreaterThanOrEqual(120_000);
+      expect(x).toBeLessThanOrEqual(1_200_000);
     }
-    expect(new Set(at).size).toBeGreaterThan(1);
-    await runFor(s.h, 95_000, 1_000);
+    const sorted = [...at].sort((a, b) => a - b);
+    for (let i = 1; i < sorted.length; i++) expect(sorted[i] - sorted[i - 1]).toBeGreaterThanOrEqual(20_000);
+    await runFor(s.h, 115_000, 1_000);
+    expect(positionState(s, id)).toBe("closing");
+    await runFor(s.h, 1_100_000, 5_000);
     expect(positionState(s, id)).toBe("closed");
     const closes = s.h.world.calls.filter((c) => c.inner?.op === "close");
     expect(closes).toHaveLength(3);

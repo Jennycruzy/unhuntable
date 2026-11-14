@@ -103,7 +103,7 @@ export function buildServer(api: AgentApi): McpServer {
     "unhuntable_close",
     {
       title: "Close a position",
-      description: "Close one of this agent's positions. Pieces close at spread-out times within 90 seconds, or at once with now. Costs one paid call.",
+      description: "Close one of this agent's positions. A one-piece position closes within 90 seconds; split pieces each close at their own time over 2 to 20 minutes, so they do not close together. now closes every piece at once. Costs one paid call.",
       inputSchema: { positionId: z.string().uuid(), now: z.boolean().default(false) },
     },
     async (a) => {

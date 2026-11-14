@@ -31,7 +31,10 @@ export interface Piece {
   /** Coin units, rounded down to szDecimals. */
   size: number;
   notionalUsd: number;
-  /** USDC sent to the piece's account; always a ladder value. */
+  /**
+   * USDC sent to the piece's account. One piece: a ladder value. Split pieces: what the piece
+   * needs plus a random 5-50% more, in cents, so no two pieces of a position are funded alike.
+   */
   fundingUsd: number;
   entryOffsetMs: number;
   /** Equity kept on top of the opening margin so liquidation stays at least 18% away. */
@@ -82,6 +85,10 @@ export const XYZ_KEEP_USD = 1;
 export const NORMAL_ENTRY_MS: readonly [number, number] = [0, 90_000];
 export const WHALE_ENTRY_MS: readonly [number, number] = [120_000, 1_200_000];
 export const WHALE_MIN_GAP_MS = 20_000;
+/** Split pieces: extra funding on top of what each piece needs, drawn per piece. */
+export const SPLIT_FUNDING_EXTRA: readonly [number, number] = [0.05, 0.5];
+/** Split pieces of one position are funded at least this far apart. */
+export const SPLIT_FUNDING_MIN_GAP_USD = 0.25;
 const JITTER = 0.15;
 
 const MSG = {
@@ -233,6 +240,28 @@ export function plan(input: PlanInput, vrf: Uint8Array): Plan | PlanError {
     }
   }
 
+  // Same amount on every piece of one position would tie them together, so split pieces each draw their own.
+  const funding = units.map((u) => fundingNeed(notionalOf(u), leverage, maxLeverage, isolated));
+  if (hiding === "normal") funding[0] = ladderAmount(funding[0])!;
+  else {
+    const top = LADDER[LADDER.length - 1];
+    const [lo, hi] = SPLIT_FUNDING_EXTRA;
+    const drawn: number[] = [];
+    for (let i = 0; i < funding.length; i++) {
+      const need = Math.max(LADDER[0], funding[i]);
+      // near the top rung, draw from what is left between the need and the top
+      const over = need * (1 + hi) > top;
+      const from = over ? need : need * (1 + lo);
+      const to = over ? top : need * (1 + hi);
+      let f: number;
+      let tries = 0;
+      do f = Math.min(top, Math.ceil((from + (to - from) * s.uniform()) * 100) / 100);
+      while (++tries < 64 && drawn.some((d) => Math.abs(d - f) < SPLIT_FUNDING_MIN_GAP_USD));
+      drawn.push(f);
+      funding[i] = f;
+    }
+  }
+
   const pieces: Piece[] = units.map((u, index) => {
     const n = notionalOf(u);
     const equity = pieceEquity(n, leverage, maxLeverage, isolated);
@@ -240,7 +269,7 @@ export function plan(input: PlanInput, vrf: Uint8Array): Plan | PlanError {
       index,
       size: u / scale,
       notionalUsd: n,
-      fundingUsd: ladderAmount(fundingNeed(n, leverage, maxLeverage, isolated))!,
+      fundingUsd: funding[index],
       entryOffsetMs: offsets[index],
       reserveUsd: equity - n / leverage,
     };

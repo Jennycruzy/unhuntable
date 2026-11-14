@@ -53,7 +53,11 @@ describe("plan properties", () => {
         expect(sum).toBe(Math.round(r.totalSize * scale));
         const mmr = maintenanceRatio(inp.maxLeverage);
         for (const p of r.pieces) {
-          expect(LADDER).toContain(p.fundingUsd);
+          if (inp.hiding === "normal") expect(LADDER).toContain(p.fundingUsd);
+          else {
+            expect(p.fundingUsd).toBeLessThanOrEqual(LADDER[LADDER.length - 1]);
+            expect(Math.round(p.fundingUsd * 100) / 100).toBe(p.fundingUsd);
+          }
           const e = pieceEquity(p.notionalUsd, inp.leverage, inp.maxLeverage);
           expect(p.fundingUsd).toBeGreaterThanOrEqual(e + 0.002 * p.notionalUsd + 0.33);
           expect((e - mmr * p.notionalUsd) / p.notionalUsd).toBeGreaterThanOrEqual(0.18 - 1e-9);
@@ -69,6 +73,9 @@ describe("plan properties", () => {
           expect(o[0]).toBeGreaterThanOrEqual(120_000);
           expect(o[o.length - 1]).toBeLessThanOrEqual(1_200_000);
           for (let i = 1; i < o.length; i++) expect(o[i] - o[i - 1]).toBeGreaterThanOrEqual(20_000);
+          // no two pieces funded alike, unless the top rung leaves no room
+          const f = r.pieces.map((p) => p.fundingUsd).sort((a, b) => a - b);
+          if (f[f.length - 1] < LADDER[LADDER.length - 1]) for (let i = 1; i < f.length; i++) expect(f[i] - f[i - 1]).toBeGreaterThanOrEqual(0.25 - 1e-9);
         }
       }),
       { numRuns: 500 },

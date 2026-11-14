@@ -6,7 +6,7 @@ A trader sells keys to their trading. A follower buys one. Nobody, the follower 
 
 | | What the holder gets | What the holder never gets |
 | --- | --- | --- |
-| **Copy key** | Each crypto trade the trader opens, copied into the holder's own pieces: same market, side and leverage, the holder's own size. It closes when the trader's closes. | The trader's position, size, stop, take-profit, liquidation price or accounts. The holder sees only their own copy. |
+| **Copy key** | Each crypto trade the trader opens, copied into the holder's own pieces: same market, side and leverage, the holder's own size. It closes when the trader's closes, a split copy's pieces each at their own time over the next 2 to 20 minutes. | The trader's position, size, stop, take-profit, liquidation price or accounts. The holder sees only their own copy. |
 | **Viewing key** | The trader's closed trades: market, side, size, leverage, entry, exit and result. | Anything open. A trade appears only once it is over, so it cannot be hunted or front-run. |
 
 Stocks on trade.xyz are not copied: moving a follower's money onto trade.xyz needs the follower's pieces key, which only their browser holds.

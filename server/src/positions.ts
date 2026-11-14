@@ -10,7 +10,9 @@
 //              balance list). We read every policy back before going on.
 // opening:     at each piece's VRF slot the guard sets leverage and opens the piece's size.
 //              A piece whose policy is not locked is never opened.
-// closing:     the guard closes each piece, at VRF-staggered times inside 0-90 s unless now.
+// closing:     the guard closes each piece at a VRF-drawn time unless now: a one-piece position
+//              inside 0-90 s, a split one spread over 2-20 minutes so its pieces do not close
+//              together. Stops and defence never wait for this; they fire in the guard.
 
 import { traderTag } from "./tags.js";
 import {
@@ -43,6 +45,9 @@ import { ApiError, sentence, type RefusalCode } from "./refusals.js";
 
 export const EXIT_FEE_PER_PIECE = 1.2;
 export const CLOSE_SPREAD_MS = 90_000;
+/** Split positions: each piece closes at its own time in this window, at least CLOSE_SPLIT_MIN_GAP_MS apart. */
+export const CLOSE_SPLIT_MS: readonly [number, number] = [120_000, 1_200_000];
+export const CLOSE_SPLIT_MIN_GAP_MS = 20_000;
 export const FUNDING_POLL_MS = 15_000;
 export const RETRY_MS = 30_000;
 /** After this many failed tries in a row, the API shows the guard as unreachable. */
@@ -351,7 +356,9 @@ export async function createPosition(ctx: Ctx, userId: string, body: PlanBody, o
   }
   const p = await makePlan(ctx, body, Buffer.from(draw.outputHex, "hex"));
   ctx.db.transaction(() => {
-    const free = freePieces(ctx, userId, dexOf(body.coin) !== "");
+    // a split position draws which free pieces it reuses; a one-piece trade keeps the oldest first
+    const ready = freePieces(ctx, userId, dexOf(body.coin) !== "");
+    const free = p.pieces.length > 1 ? reuseOrder(ready, draw.outputHex) : ready;
     if (opts.reuseOnly && free.length < p.pieces.length) throw new ApiError("agent_needs_pieces", { need: p.pieces.length, have: free.length });
     ctx.db
       .prepare(
@@ -666,7 +673,27 @@ async function step(ctx: Ctx, pos: PositionRow): Promise<void> {
 
 export function closeOffsets(vrfHex: string, n: number): number[] {
   const s = new VrfStream(sha256(new TextEncoder().encode(`close:${vrfHex}`)));
-  return Array.from({ length: n }, () => s.int(0, CLOSE_SPREAD_MS));
+  if (n <= 1) return Array.from({ length: n }, () => s.int(0, CLOSE_SPREAD_MS));
+  const out: number[] = [];
+  for (let i = 0; i < n; i++) {
+    let o: number;
+    let tries = 0;
+    do o = s.int(CLOSE_SPLIT_MS[0], CLOSE_SPLIT_MS[1]);
+    while (++tries < 256 && out.some((p) => Math.abs(p - o) < CLOSE_SPLIT_MIN_GAP_MS));
+    out.push(o);
+  }
+  return out;
+}
+
+/** Which free pieces a position reuses: drawn from its VRF output, so the same pieces are not always paired. */
+export function reuseOrder<T>(free: T[], vrfHex: string): T[] {
+  const s = new VrfStream(sha256(new TextEncoder().encode(`reuse:${vrfHex}`)));
+  const out = [...free];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = s.int(0, i);
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
 }
 
 export function closePosition(ctx: Ctx, userId: string, id: string, now?: boolean) {

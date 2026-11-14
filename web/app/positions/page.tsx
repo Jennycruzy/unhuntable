@@ -173,6 +173,11 @@ function PositionCard({ p, account, record, onRecord }: { p: Position; account: 
           )}
         </div>
       )}
+      {live && p.pieces.length > 1 && (
+        <p className="muted small" data-testid="close-spread">
+          Close lets each piece close at its own time over 2 to 20 minutes, so they do not close together. Close now closes them all at once. A stop never waits.
+        </p>
+      )}
       <Link className="button secondary" href="/home/">
         Send home
       </Link>

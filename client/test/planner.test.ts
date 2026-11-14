@@ -9,6 +9,8 @@ import {
   isPlanError,
   isolatedLeverage,
   ladderAmount,
+  SPLIT_FUNDING_EXTRA,
+  SPLIT_FUNDING_MIN_GAP_USD,
   maintenanceRatio,
   pieceEquity,
   plan,
@@ -128,9 +130,9 @@ describe("plan shape", () => {
 });
 
 describe("plan_amounts_from_ladder", () => {
-  it("every fundingUsd is a ladder value covering equity, fees and the route fee", () => {
-    for (const [notionalUsd, leverage] of [[600, 5], [12_000, 10], [9_000, 1], [40, 2], [3_000, 3]]) {
-      const p = ok(plan(eth({ notionalUsd, leverage }), VRF_B));
+  it("a one-piece plan is funded with the smallest ladder value covering equity, fees and the route fee", () => {
+    for (const [notionalUsd, leverage] of [[600, 5], [4_000, 10], [900, 1], [40, 2], [2_000, 3]]) {
+      const p = ok(plan(eth({ notionalUsd, leverage, hiding: "normal" }), VRF_B));
       for (const x of p.pieces) {
         expect(LADDER).toContain(x.fundingUsd);
         const e = pieceEquity(x.notionalUsd, leverage, 25);
@@ -140,6 +142,56 @@ describe("plan_amounts_from_ladder", () => {
         if (lower.length) expect(lower[lower.length - 1]).toBeLessThan(fundingNeed(x.notionalUsd, leverage, 25));
       }
     }
+  });
+});
+
+describe("plan_split_funding", () => {
+  const [lo, hi] = SPLIT_FUNDING_EXTRA;
+  it("each split piece is funded with its need plus 5-50% more (or up to the top rung), in whole cents", () => {
+    const top = LADDER[LADDER.length - 1];
+    for (const [notionalUsd, leverage] of [[35, 5], [600, 5], [12_000, 10], [9_000, 1], [40, 2], [3_000, 3]]) {
+      const p = ok(plan(eth({ notionalUsd, leverage }), VRF_B));
+      expect(p.pieces.length).toBeGreaterThan(1);
+      for (const x of p.pieces) {
+        const need = Math.max(LADDER[0], fundingNeed(x.notionalUsd, leverage, 25));
+        if (need * (1 + hi) > top) {
+          expect(x.fundingUsd).toBeGreaterThanOrEqual(need);
+          expect(x.fundingUsd).toBeLessThanOrEqual(top);
+        } else {
+          expect(x.fundingUsd).toBeGreaterThanOrEqual(need * (1 + lo));
+          expect(x.fundingUsd).toBeLessThanOrEqual(need * (1 + hi) + 0.01);
+        }
+        expect(Math.round(x.fundingUsd * 100) / 100).toBe(x.fundingUsd);
+      }
+    }
+  });
+
+  it("no two pieces of one position are funded alike", () => {
+    for (const [notionalUsd, leverage] of [[35, 5], [30, 2], [600, 5], [12_000, 10]]) {
+      for (const vrf of [VRF_A, VRF_B]) {
+        const f = ok(plan(eth({ notionalUsd, leverage }), vrf)).pieces.map((x) => x.fundingUsd).sort((a, b) => a - b);
+        for (let i = 1; i < f.length; i++) expect(f[i] - f[i - 1]).toBeGreaterThanOrEqual(SPLIT_FUNDING_MIN_GAP_USD - 1e-9);
+      }
+    }
+  });
+
+  it("two equal-need pieces (the $35 ETH 5x trade) no longer get the same $12", () => {
+    const p = ok(plan(eth({ notionalUsd: 35, leverage: 5 }), VRF_A));
+    expect(p.pieces).toHaveLength(2);
+    expect(p.pieces[0].fundingUsd).not.toBe(p.pieces[1].fundingUsd);
+    for (const x of p.pieces) expect(LADDER).not.toContain(x.fundingUsd);
+  });
+
+  it("near the top rung, pieces stay within it and still cover their need", () => {
+    const p = ok(plan(eth({ notionalUsd: 50_000, leverage: 10 }), VRF_A));
+    for (const x of p.pieces) {
+      expect(x.fundingUsd).toBeLessThanOrEqual(LADDER[LADDER.length - 1]);
+      expect(x.fundingUsd).toBeGreaterThanOrEqual(fundingNeed(x.notionalUsd, 10, 25));
+    }
+  });
+
+  it("the same bytes give the same funding", () => {
+    expect(ok(plan(eth(), VRF_A)).pieces.map((x) => x.fundingUsd)).toEqual(ok(plan(eth(), VRF_A)).pieces.map((x) => x.fundingUsd));
   });
 });
 
