@@ -9,6 +9,7 @@ import type { HomeStart, HomeState, Me } from "../../lib/types";
 import { currentWallet } from "../../lib/wallet";
 import { usePiecesKey } from "../../lib/usekey";
 import { signHomeAll } from "../../lib/chainsig";
+import { fromUnits6, previewWithdraw, privateUsdc, sendWithdraw, type WithdrawPreview } from "../../lib/withdraw";
 
 /** The exit fee, said before anything starts (server/src/refusals.ts exit_fee). */
 const EXIT_FEE = "Leaving Hyperliquid costs about $1.20 per piece (Hyperliquid's new-account fee plus routing).";
@@ -25,6 +26,102 @@ async function flow(): Promise<HomeFlow> {
   const wallet = await currentWallet();
   if (!wallet) throw new Error("Sign in with your wallet again first.");
   return new HomeFlow(api, wallet);
+}
+
+/** Private balance -> the user's own NEAR account, signed here with the pieces key. */
+function Withdraw({ me }: { me: Me }) {
+  const { state: keyState } = usePiecesKey(me.accountId);
+  const [have, setHave] = useState<bigint | undefined>();
+  const [amount, setAmount] = useState("");
+  const [preview, setPreview] = useState<WithdrawPreview | undefined>();
+  const [sent, setSent] = useState<{ requestId: string; status: string } | undefined>();
+  const [error, setError] = useState<string | undefined>();
+  const [busy, setBusy] = useState(false);
+  const deps = keyState.status === "ok" ? { key: keyState.key, account: me.accountId } : undefined;
+
+  useEffect(() => {
+    if (keyState.status !== "ok") return;
+    let live = true;
+    privateUsdc({ key: keyState.key, account: me.accountId })
+      .then((u) => {
+        if (!live) return;
+        setHave(u);
+        setAmount(fromUnits6(u));
+      })
+      .catch((e) => live && setError(sentence(e)));
+    return () => {
+      live = false;
+    };
+  }, [keyState, me.accountId]);
+
+  async function act(f: () => Promise<void>) {
+    setBusy(true);
+    setError(undefined);
+    try {
+      await f();
+    } catch (e) {
+      setError(sentence(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (keyState.status === "loading") return null;
+  return (
+    <section data-testid="withdraw">
+      <h2>Withdraw</h2>
+      <p>
+        Sends USDC from your private balance to your NEAR account, <b>{me.accountId}</b>. Your pieces key on this device signs it with OutLayer directly; our
+        server is not in the path. Your private balance can only send to your own addresses.
+      </p>
+      {keyState.status !== "ok" && <Notice>Your pieces key is not on this device. Restore it from your 12 words to withdraw here.</Notice>}
+      {error && (
+        <Notice kind="error" testId="withdraw-error">
+          {error}
+        </Notice>
+      )}
+      {deps && have !== undefined && !sent && (
+        <>
+          <Facts rows={[["In your private balance", <span key="h" data-testid="withdraw-have">{fromUnits6(have)} USDC</span>]]} />
+          {have > 0n && !preview && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void act(async () => setPreview(await previewWithdraw(deps, amount, have)));
+              }}
+            >
+              <label>
+                Amount in USDC{" "}
+                <input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} data-testid="withdraw-amount" />
+              </label>{" "}
+              <button type="submit" disabled={busy}>
+                {busy ? "Checking…" : "See what arrives"}
+              </button>
+            </form>
+          )}
+          {preview && (
+            <>
+              <Notice testId="withdraw-preview">
+                {fromUnits6(preview.units)} USDC leaves your private balance. About {preview.amountOut ?? "?"} USDC arrives at {me.accountId}
+                {preview.seconds !== null ? `, in about ${preview.seconds} seconds` : ""}.
+              </Notice>
+              <button type="button" disabled={busy} onClick={() => act(async () => setSent(await sendWithdraw(deps, preview)))}>
+                {busy ? "Sending…" : "Withdraw"}
+              </button>{" "}
+              <button type="button" className="link" disabled={busy} onClick={() => setPreview(undefined)}>
+                Change the amount
+              </button>
+            </>
+          )}
+        </>
+      )}
+      {sent && (
+        <Notice kind="ok" testId="withdraw-sent">
+          Sent. OutLayer request {sent.requestId} is {sent.status}. The USDC lands in {me.accountId} on NEAR.
+        </Notice>
+      )}
+    </section>
+  );
 }
 
 function GoHome({ me }: { me: Me }) {
@@ -174,8 +271,10 @@ function GoHome({ me }: { me: Me }) {
         </>
       )}
 
+      <Withdraw me={me} />
+
       <p className="foot">
-        <a href="/exit/">Leave without us</a>
+        <a href="/exit/">Leave without us</a> brings everything home from your 12 words alone, even if our site is gone.
       </p>
     </>
   );

@@ -109,7 +109,7 @@ How the try-a-trade page is paid for, and why nobody can move money through it: 
 3. **Open a trade.** Pick BTC, ETH, SOL or a US stock on trade.xyz, then size and leverage. A big position is split into 2 to 12 separate Hyperliquid accounts, each funded on its own from your private balance, so nobody can tie them together.
 4. **Set your stop.** Your browser seals it into a box only the guard can open. It never goes on Hyperliquid's book, so there is no level for anyone to hunt.
 5. **The guard watches.** It runs inside an OutLayer TEE, checks prices every 2 minutes, fires your stop only when independent prices agree, and cuts size before liquidation. It can trade, but Hyperliquid refuses it if it tries to move money.
-6. **Go home.** Your own keys sign the money back to your private balance through NEAR Chain Signatures. If we ever disappear, the exit tool brings it home from your 12 words alone.
+6. **Go home and withdraw.** Your own keys sign the money back to your private balance through NEAR Chain Signatures. **Withdraw** then sends it from your private balance to your NEAR account, signed with your pieces key on your device straight to OutLayer; our server is not in the path, and the balance's policy on NEAR only lets it send to your own addresses. If we ever disappear, the exit tool brings it home from your 12 words alone.
 7. **Or hand it to your agent.** Give an AI agent its own key with limits on the Agents screen. It trades through the same pieces with the same sealed stops, and pays for each call itself.
 8. **Or follow a trader.** Buy a copy key and their crypto trades are copied into your own pieces; buy a viewing key and you see their closed trades. Nobody, you included, ever sees their open positions.
 
