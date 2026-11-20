@@ -47,7 +47,7 @@ test("withdraw sends the private balance to the signed-in NEAR account, signed o
     const json = (b: unknown) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(b) });
     if (path.endsWith("/confidential/balance")) return json({ balances: [{ token: USDC, balance: "21340000" }] });
     if (path.endsWith("/withdraw/dry-run")) return json({ amount_out: "12490000", time_estimate_seconds: 20 });
-    if (path.endsWith("/confidential/withdraw")) return json({ request_id: "req-1", status: "pending" });
+    if (path.endsWith("/confidential/withdraw")) return json({ request_id: "req-1", status: "submitted" });
     return route.abort("blockedbyclient");
   });
   await page.goto("/home/");
@@ -58,7 +58,7 @@ test("withdraw sends the private balance to the signed-in NEAR account, signed o
   await expect(page.getByTestId("withdraw-preview")).toHaveText("12.5 USDC leaves your private balance. About 12.49 USDC arrives at alice.near, in about 20 seconds.");
   await shot(page, "withdraw", info.project.name);
   await page.getByRole("button", { name: "Withdraw", exact: true }).click();
-  await expect(page.getByTestId("withdraw-sent")).toContainText("OutLayer request req-1 is pending.");
+  await expect(page.getByTestId("withdraw-sent")).toHaveText("Sent. OutLayer took it as request req-1; the USDC lands in alice.near on NEAR in about 20 seconds.");
   const sends = sent.filter((s) => s.path.endsWith("/withdraw") || s.path.endsWith("/dry-run"));
   expect(sends).toHaveLength(2);
   for (const s of sends) {

@@ -27,11 +27,11 @@ describe("withdrawing from the private balance", () => {
   it("asks what arrives, then sends to the signed-in NEAR account only", async () => {
     const s = scriptedFetch([
       ["POST /wallet/v1/confidential/withdraw/dry-run", { body: { amount_out: "12490000", time_estimate_seconds: 20 } }],
-      ["POST /wallet/v1/confidential/withdraw", { body: { request_id: "req-1", status: "pending" } }],
+      ["POST /wallet/v1/confidential/withdraw", { body: { request_id: "req-1", status: "submitted" } }],
     ]);
     const p = await previewWithdraw(deps(s.fetch), "12.5", 21_340_000n);
     expect(p).toEqual({ units: "12500000", amountOut: "12.49", seconds: 20 });
-    expect(await sendWithdraw(deps(s.fetch), p)).toEqual({ requestId: "req-1", status: "pending" });
+    expect(await sendWithdraw(deps(s.fetch), p)).toEqual({ requestId: "req-1", status: "submitted" });
     for (const r of s.sent) expect(JSON.parse(r.body)).toEqual({ chain: "near", to: "alice.near", amount: "12500000", token: USDC_NEAR });
     expect(s.sent.map((r) => r.url)).toEqual(["https://api.outlayer.ai/wallet/v1/confidential/withdraw/dry-run", "https://api.outlayer.ai/wallet/v1/confidential/withdraw"]);
   });

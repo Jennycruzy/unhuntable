@@ -117,7 +117,7 @@ function Withdraw({ me }: { me: Me }) {
       )}
       {sent && (
         <Notice kind="ok" testId="withdraw-sent">
-          Sent. OutLayer request {sent.requestId} is {sent.status}. The USDC lands in {me.accountId} on NEAR.
+          Sent. OutLayer took it as request {sent.requestId}; the USDC lands in {me.accountId} on NEAR{preview?.seconds != null ? ` in about ${preview.seconds} seconds` : ""}.
         </Notice>
       )}
     </section>
