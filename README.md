@@ -160,7 +160,7 @@ A trader sells keys so others can follow or copy their trading. On a public exch
 
 ## What ran on mainnet with real money
 
-All of these are observed results on NEAR, NEAR Intents, OutLayer and Hyperliquid mainnet with small amounts, except the one row marked testnet.
+All of these are observed results on NEAR, NEAR Intents, OutLayer and Hyperliquid mainnet with small amounts.
 
 | What we did | What happened |
 | --- | --- |
@@ -178,7 +178,7 @@ All of these are observed results on NEAR, NEAR Intents, OutLayer and Hyperliqui
 | The sealed stop was moved below the price and the guard ticked | [The stop fired](https://nearblocks.io/txns/6ewnHXXtwTjBvqdEqYdDkoVc3oE3ew2b6prZ5MAVCz4c) as a reduce-only close at 178.22. A second tick fired nothing. The piece then moved its money back from trade.xyz through NEAR. The whole trade cost under one cent. |
 | An AI agent called the live site through the MCP server, paying with x402 | [0.002 USDC moved](https://nearblocks.io/txns/7VcZWHJzgrauZaY6irWh1BiHGcr7kDch92UG69MFvMBD) from the agent's own NEAR account to `unhuntable.near` in a delegated `ft_transfer` our relayer submitted; the call ran after the payment settled. A [second paid call](https://nearblocks.io/txns/6XQ9FdGdfuhGYJcinGyHedhqoBCvxorQ1figfR2RAdaL) took 4.5 seconds end to end. |
 | The same agent tried to open above its size limit, and with no ready piece | Both refused before payment; the agent's USDC balance shows only the two paid calls. |
-| Asked the contract to sign the same request twice (NEAR testnet) | Refused: "the piece key did not sign this action". |
+| Sent the contract a request it had already signed, byte for byte, on mainnet | [Refused](https://nearblocks.io/txns/C9cgTemakUyNhzLgZS5bESuH5K5bakcGdPs7JnPmfDBn): "the piece key did not sign this action". The request was piece C's used move ([first run](https://nearblocks.io/txns/CALA24Gya1fLd8No2wzukUSM8cQ29eaBAUActpFLVGvc)); the piece's counter had moved on, so the old signature no longer matches. It cost only gas. |
 | Deposited 15 USDT from BNB Chain into an OutLayer wallet | Arrived as 14.978224 USDC in the wallet's NEAR Intents balance, then moved into its confidential balance. |
 | Moved 3 USDC from a confidential balance to a piece's own Hyperliquid account | Arrived as 2.678831 USDC in the piece's perp account in under 3 minutes, sent by 1Click's shared payer, which made about 2,000 sends to 991 different accounts in the same 12 hours. |
 | The piece's own wallet approved the guard's agent key | Hyperliquid answered `ok`. |
