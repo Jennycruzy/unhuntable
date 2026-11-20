@@ -28,7 +28,7 @@ cd tools && npm install --no-package-lock && cd ..
 node tools/check-ai-hunt.cjs docs/proof/private-ai-mainnet.json
 ```
 
-Three lines end in `yes`: the signed text holds the hashes of the exact request and response bytes, the signature recovers to the enclave's address, and that address is a signing key in NEAR AI's public attestation report for the model. The last line shows the answer as our server saw it: ciphertext.
+Three lines end in `yes`: the signed text holds the hashes of the exact request and response bytes, the signature recovers to the enclave's address, and that address is the key bound in an attestation the tool fetched with its own fresh nonce and verified with NEAR AI's SDK (Intel TDX quote up to date, NVIDIA GPU evidence verified). The last line shows the answer as our server saw it: ciphertext.
 
 ## Proof run on mainnet
 

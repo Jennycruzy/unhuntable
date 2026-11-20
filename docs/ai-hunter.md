@@ -50,7 +50,7 @@ For every answer, the model's enclave signs `<model>:<sha256 of the request>:<sh
 
 1. The signed text holds the hashes of **our** request and response bytes.
 2. The signature recovers to the address the enclave claims.
-3. That address is a signing key in NEAR AI's hardware attestation for the model.
+3. That address is the key bound in the model's hardware attestation. For every answer the server fetches that signer's attestation with a fresh random nonce and verifies it with NEAR AI's own SDK (`@nearai/inference-sdk`): the Intel TDX quote must carry the nonce and be up to date, NVIDIA must verify the GPU evidence, and the signing key must be the one bound in the quote. Then the signature over the exact bytes is checked against that key (`server/src/nearai.ts`). The result, nonce included, is stored with the hunt and shown beside it.
 
 The owner can download the signed question and answer from the result, and check it alone:
 
@@ -59,7 +59,7 @@ cd tools && npm install --no-package-lock && cd ..
 node tools/check-ai-hunt.cjs docs/proof/ai-hunt-mainnet.json
 ```
 
-The attestation report it reads is public (`https://cloud-api.near.ai/v1/attestation/report?model=...`); no NEAR AI account is needed.
+The tool makes the same check on your computer with a nonce of its own: fresh nonce, Intel TDX quote, NVIDIA GPU evidence, key bound in the quote, signature over the bytes. NEAR AI's attestation is public, so no NEAR AI account is needed.
 
 ## Proof runs on mainnet
 

@@ -23,10 +23,15 @@ export function againstChance(s: AiHuntScore): string {
 /** What the enclave signature shows, in one plain line. */
 export function proofLine(p: AiHuntProof): string {
   const c = p.checks;
-  if (c.hashesMatch && c.signatureValid && c.inAttestation) return "Signed inside NEAR AI's TEE: the question and answer are exactly what the model saw and said.";
+  if (c.hashesMatch && c.signatureValid && c.inAttestation) {
+    if (p.enclave?.verified)
+      return "Signed inside NEAR AI's TEE: the question and answer are exactly what the model saw and said. Its enclave was verified for this answer with a fresh nonce: Intel TDX quote up to date, NVIDIA GPU evidence verified, signing key bound in the quote.";
+    return "Signed inside NEAR AI's TEE: the question and answer are exactly what the model saw and said.";
+  }
   if (!p.signed) return "NEAR AI did not return a signature for this answer.";
   const failed = [!c.hashesMatch && "the hashes", !c.signatureValid && "the signature", !c.inAttestation && "the attestation"].filter(Boolean).join(", ");
-  return `The signature check did not hold for ${failed}.`;
+  const why = !c.inAttestation && p.enclave?.reason ? ` The enclave check said: ${p.enclave.reason}` : "";
+  return `The signature check did not hold for ${failed}.${why}`;
 }
 
 /** The hunter's guess of the whole position. */

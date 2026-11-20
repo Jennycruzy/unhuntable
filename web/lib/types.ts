@@ -154,6 +154,8 @@ export interface AiHuntProof {
   responseSha256: string;
   signed: { text: string; signature: string; signingAddress: string } | null;
   checks: { hashesMatch: boolean; signatureValid: boolean; inAttestation: boolean };
+  /** The enclave check our server made for this answer, with a fresh nonce. Absent on older hunts. */
+  enclave?: { nonce: string | null; verified: boolean; tcbStatus: string | null; gpu: string | null; signingAddress: string | null; checkedMs: number; reason?: string };
 }
 
 export interface AiHunt {

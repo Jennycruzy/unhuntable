@@ -1,9 +1,11 @@
 // NEAR AI Cloud: an OpenAI-style chat API whose models run inside TEEs (Intel TDX + NVIDIA
 // confidential GPUs). For every answer the model's enclave signs
 //   "<model>:<sha256 of the request body>:<sha256 of the response body>"
-// with a key that appears in the model's hardware attestation. We keep the exact bytes we
-// sent and got back, so anyone holding them can redo the check: hash both, recover the
-// signer from the signature, and find that signer in NEAR AI's attestation report.
+// with a key bound into the model's hardware attestation. After each answer we fetch that
+// signer's attestation with a fresh random nonce and verify it here: the Intel TDX quote
+// (it must carry our nonce and be up to date), NVIDIA's verdict on the GPU evidence, and the
+// signing key bound in the quote. Then the signature over our exact bytes is checked against
+// that verified key. We keep the bytes, so anyone can redo the signature check later.
 import { createHash } from "node:crypto";
 import { secp256k1 } from "@noble/curves/secp256k1";
 import { keccak_256 } from "@noble/hashes/sha3";
@@ -30,6 +32,23 @@ export interface Signed {
   signingAddress: string;
 }
 
+/** The enclave check made for one answer, with a nonce fresh for that answer. */
+export interface Enclave {
+  /** The random nonce we sent; the verified quote carries it, so it was made for this check. */
+  nonce: string | null;
+  /** The TDX quote, the GPU evidence and the key bound in the quote all verified, and the answer's signer is that key. */
+  verified: boolean;
+  tcbStatus: string | null;
+  gpu: string | null;
+  signingAddress: string | null;
+  checkedMs: number;
+  /** Why it did not verify, in plain words. */
+  reason?: string;
+}
+
+/** Verify the enclave that signed `signed`, and the signature over these exact bytes. */
+export type EnclaveVerifier = (model: string, request: string, response: string, signed: Signed) => Promise<Omit<Enclave, "checkedMs">>;
+
 export interface Proof {
   model: string;
   chatId: string;
@@ -42,9 +61,11 @@ export interface Proof {
     hashesMatch: boolean;
     /** The signature recovers to the address the enclave claims. */
     signatureValid: boolean;
-    /** That address is a signing key in the model's current hardware attestation. */
+    /** That address is the key bound in a hardware attestation we verified with a fresh nonce. */
     inAttestation: boolean;
   };
+  /** The fresh-nonce enclave check behind `inAttestation`. Absent on hunts made before it existed. */
+  enclave?: Enclave;
 }
 
 export interface Answer {
@@ -85,15 +106,60 @@ export function checkProof(model: string, request: string, response: string, sig
   };
 }
 
+const plainReason = (e: unknown): string => {
+  const code = (e as { code?: unknown })?.code;
+  return typeof code === "string" ? code : e instanceof Error ? e.message.slice(0, 160) : "unknown";
+};
+
+/**
+ * The check NEAR AI documents, made with its own SDK: fetch the signer's attestation with a fresh
+ * nonce, verify the TDX quote (nonce bound, TCB UpToDate), require NVIDIA's verdict on the GPU
+ * evidence, take the key bound in the quote, then verify the signature over our exact bytes.
+ */
+export function sdkVerifier(base = NEARAI_URL): EnclaveVerifier {
+  return async (model, request, response, signed) => {
+    const sdk = await import("@nearai/inference-sdk/node");
+    const client = new sdk.AttestationClient({ baseUrl: base });
+    const fetched = await client.fetchModelAttestations({ model, signingAlgo: "ecdsa", signingAddress: signed.signingAddress });
+    const nonce = fetched.clientBinding.nonce;
+    const verifiers = { tdxQuote: sdk.createTdxQuoteVerifier(), gpuEvidence: sdk.createGpuEvidenceVerifier() };
+    const enc = new TextEncoder();
+    let reason = "NEAR AI returned no attestation for this signer.";
+    for (const attestation of fetched.attestations) {
+      try {
+        const v = await sdk.verifyModelAttestation({ attestation, clientBinding: fetched.clientBinding, verifiers, policy: { gpuEvidence: "required", acceptedTcbStatuses: ["UpToDate"] } });
+        if (v.signer.signingAddress.toLowerCase() !== signed.signingAddress.toLowerCase()) {
+          reason = "The verified enclave's key is not the answer's signer.";
+          continue;
+        }
+        sdk.verifyModelResponse({
+          requestBody: enc.encode(request),
+          responseBody: enc.encode(response),
+          signature: { kind: "provider_tee", signer: v.signer, signedText: signed.text, signature: signed.signature },
+          attestation: v,
+        });
+        return { nonce, verified: true, tcbStatus: String(v.tcbStatus), gpu: String(v.gpuEvidence), signingAddress: v.signer.signingAddress };
+      } catch (e) {
+        reason = plainReason(e);
+      }
+    }
+    return { nonce, verified: false, tcbStatus: null, gpu: null, signingAddress: null, reason };
+  };
+}
+
 export class NearAi {
   private readonly f: typeof fetch;
+  private readonly verify: EnclaveVerifier;
   constructor(
     private readonly key: string,
     private readonly base = NEARAI_URL,
     f?: typeof fetch,
     readonly model = NEARAI_MODEL,
+    verify?: EnclaveVerifier,
+    private readonly now: () => number = Date.now,
   ) {
     this.f = f ?? ((...a) => fetch(...a));
+    this.verify = verify ?? sdkVerifier(base);
   }
 
   private headers(): Record<string, string> {
@@ -141,19 +207,23 @@ export class NearAi {
     if (typeof content !== "string" || typeof chatId !== "string") throw new NearAiError("NEAR AI Cloud's answer has no message.");
 
     let signed: Signed | null = null;
-    let attested: string[] = [];
     try {
       const s = await this.getJson(`/signature/${encodeURIComponent(chatId)}?model=${encodeURIComponent(this.model)}&signing_algo=ecdsa`);
       if (typeof s?.text === "string" && typeof s?.signature === "string" && typeof s?.signing_address === "string") {
         signed = { text: s.text, signature: s.signature, signingAddress: s.signing_address };
       }
-      const att = await this.getJson(`/attestation/report?model=${encodeURIComponent(this.model)}&signing_algo=ecdsa`);
-      attested = (Array.isArray(att?.model_attestations) ? att.model_attestations : [])
-        .map((m: any) => m?.signing_address)
-        .filter((a: unknown): a is string => typeof a === "string");
     } catch {
       // the answer stands; the page shows which checks could not be made
     }
+    let enclave: Enclave | undefined;
+    if (signed) {
+      try {
+        enclave = { ...(await this.verify(this.model, request, response, signed)), checkedMs: this.now() };
+      } catch (e) {
+        enclave = { nonce: null, verified: false, tcbStatus: null, gpu: null, signingAddress: null, checkedMs: this.now(), reason: `NEAR AI's attestation could not be checked: ${plainReason(e)}` };
+      }
+    }
+    const attested = enclave?.verified && enclave.signingAddress ? [enclave.signingAddress] : [];
     return {
       content,
       request,
@@ -165,6 +235,7 @@ export class NearAi {
         responseSha256: sha256Hex(response),
         signed,
         checks: checkProof(this.model, request, response, signed, attested),
+        ...(enclave ? { enclave } : {}),
       },
     };
   }

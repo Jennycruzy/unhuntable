@@ -5,7 +5,7 @@ import { AiHunter, HUNTS_PER_USER_PER_DAY, LINEUP_SIZE, firstFunding, gatherCase
 import { newId } from "../src/db.js";
 import { Pacer } from "../src/huntmap.js";
 import { buildServer } from "../src/index.js";
-import { NearAi, checkProof, recoverSigner, sha256Hex, type Answer } from "../src/nearai.js";
+import { NearAi, checkProof, recoverSigner, sha256Hex, type Answer, type EnclaveVerifier } from "../src/nearai.js";
 import { testConfig } from "./helpers.js";
 import { addUser, addWallet, harness, T0 } from "./world.js";
 
@@ -44,7 +44,17 @@ describe("NEAR AI answer proof", () => {
     expect(checkProof("m/x", req, res, null, [])).toEqual({ hashesMatch: false, signatureValid: false, inAttestation: false });
   });
 
-  it("asks NEAR AI Cloud, then fetches and checks the signature and the attestation", async () => {
+  /** Stands in for the SDK check: records what it was asked and answers as told. */
+  const verifier = (out: Partial<Awaited<ReturnType<EnclaveVerifier>>> = {}) => {
+    const calls: Parameters<EnclaveVerifier>[] = [];
+    const v: EnclaveVerifier = async (...a) => {
+      calls.push(a);
+      return { nonce: "ab".repeat(32), verified: true, tcbStatus: "UpToDate", gpu: "verified", signingAddress: ENCLAVE_ADDR, ...out };
+    };
+    return { v, calls };
+  };
+
+  it("asks NEAR AI Cloud, then fetches the signature and verifies the enclave with a fresh nonce", async () => {
     const seen: string[] = [];
     const f = (async (url: string, init?: RequestInit) => {
       seen.push(url);
@@ -60,14 +70,59 @@ describe("NEAR AI answer proof", () => {
         const text = `m/x:${sha256Hex((f as any).req)}:${sha256Hex((f as any).res)}`;
         return new Response(JSON.stringify({ text, signature: sign(text), signing_address: ENCLAVE_ADDR, signing_algo: "ecdsa" }));
       }
-      if (url.includes("/attestation/report")) return new Response(JSON.stringify({ model_attestations: [{ signing_address: ENCLAVE_ADDR }] }));
       throw new Error(url);
     }) as typeof fetch;
-    const a = await new NearAi("sk-test", "https://nearai.test/v1", f, "m/x").chatJson("sys", "user");
+    const { v, calls } = verifier();
+    const a = await new NearAi("sk-test", "https://nearai.test/v1", f, "m/x", v, () => 42).chatJson("sys", "user");
     expect(a.content).toBe('{"same_owner":[]}');
     expect(a.proof.checks).toEqual({ hashesMatch: true, signatureValid: true, inAttestation: true });
     expect(a.proof.requestSha256).toBe(sha256Hex(a.request));
-    expect(seen).toHaveLength(3);
+    expect(a.proof.enclave).toEqual({ nonce: "ab".repeat(32), verified: true, tcbStatus: "UpToDate", gpu: "verified", signingAddress: ENCLAVE_ADDR, checkedMs: 42 });
+    // the enclave check gets the exact bytes and the signer of this answer
+    expect(calls).toHaveLength(1);
+    expect(calls[0]![0]).toBe("m/x");
+    expect(calls[0]![1]).toBe(a.request);
+    expect(calls[0]![2]).toBe(a.response);
+    expect(calls[0]![3].signingAddress).toBe(ENCLAVE_ADDR);
+    // no unauthenticated report read: only the chat and the signature go to NEAR AI from here
+    expect(seen).toHaveLength(2);
+    expect(seen.some((u) => u.includes("/attestation/report"))).toBe(false);
+  });
+
+  /** NEAR AI answers the chat and signs it with the throwaway enclave key. */
+  const signingCloud = () => {
+    const st: { req?: string; res?: string } = {};
+    return (async (url: string, init?: RequestInit) => {
+      if (url.endsWith("/chat/completions")) {
+        st.req = String(init!.body);
+        st.res = JSON.stringify({ id: "chat-1", choices: [{ message: { content: "{}" } }] });
+        return new Response(st.res);
+      }
+      const text = `m/x:${sha256Hex(st.req!)}:${sha256Hex(st.res!)}`;
+      return new Response(JSON.stringify({ text, signature: sign(text), signing_address: ENCLAVE_ADDR }));
+    }) as typeof fetch;
+  };
+
+  it("does not count the attestation when the enclave does not verify", async () => {
+    const { v } = verifier({ verified: false, tcbStatus: null, gpu: null, signingAddress: null, reason: "tdx.tcb_out_of_date" });
+    const a = await new NearAi("k", "https://nearai.test/v1", signingCloud(), "m/x", v).chatJson("s", "u");
+    expect(a.proof.checks).toEqual({ hashesMatch: true, signatureValid: true, inAttestation: false });
+    expect(a.proof.enclave).toMatchObject({ verified: false, reason: "tdx.tcb_out_of_date" });
+  });
+
+  it("does not count an enclave whose verified key is some other address", async () => {
+    const { v } = verifier({ signingAddress: "0x" + "12".repeat(20) });
+    const a = await new NearAi("k", "https://nearai.test/v1", signingCloud(), "m/x", v).chatJson("s", "u");
+    expect(a.proof.checks.inAttestation).toBe(false);
+  });
+
+  it("keeps the answer and says why when the attestation cannot be fetched", async () => {
+    const v: EnclaveVerifier = async () => {
+      throw Object.assign(new Error("down"), { code: "api.request_failed" });
+    };
+    const a = await new NearAi("k", "https://nearai.test/v1", signingCloud(), "m/x", v).chatJson("s", "u");
+    expect(a.proof.checks).toEqual({ hashesMatch: true, signatureValid: true, inAttestation: false });
+    expect(a.proof.enclave).toMatchObject({ verified: false, nonce: null, reason: "NEAR AI's attestation could not be checked: api.request_failed" });
   });
 
   it("keeps the answer and says so when the signature cannot be fetched", async () => {
@@ -75,9 +130,12 @@ describe("NEAR AI answer proof", () => {
       if (url.endsWith("/chat/completions")) return new Response(JSON.stringify({ id: "c2", choices: [{ message: { content: "{}" } }] }));
       return new Response("nope", { status: 500 });
     }) as typeof fetch;
-    const a = await new NearAi("k", "https://nearai.test/v1", f, "m/x").chatJson("s", "u");
+    const { v, calls } = verifier();
+    const a = await new NearAi("k", "https://nearai.test/v1", f, "m/x", v).chatJson("s", "u");
     expect(a.proof.signed).toBeNull();
     expect(a.proof.checks.signatureValid).toBe(false);
+    expect(a.proof.enclave).toBeUndefined();
+    expect(calls).toHaveLength(0);
   });
 
   it("names a failed request plainly", async () => {

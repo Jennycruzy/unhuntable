@@ -96,6 +96,6 @@ cd tools && npm install --no-package-lock && cd ..
 node tools/check-ai-hunt.cjs docs/proof/ai-hunt-mainnet.json
 ```
 
-→ three `yes` lines: the signed text holds the hashes of the exact request and response bytes, the signature recovers to the enclave's address, and that address is a signing key in NEAR AI's public attestation report for the model. Then it prints what the hunter answered. The same check works on any receipt downloaded from a hunt in the app.
+→ three `yes` lines: the signed text holds the hashes of the exact request and response bytes, the signature recovers to the enclave's address, and that address is the key bound in an attestation the tool fetched with its own fresh nonce and verified with NEAR AI's SDK (Intel TDX quote up to date, NVIDIA GPU evidence verified). It prints the nonce it sent. Then it prints what the hunter answered. The same check works on any receipt downloaded from a hunt in the app.
 
 [Back to the README](../README.md)

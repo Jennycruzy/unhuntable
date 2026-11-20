@@ -7,8 +7,10 @@
 // 1. Hash the exact request and response bytes and rebuild the text the enclave signs:
 //    "<model>:<sha256 request>:<sha256 response>".
 // 2. Recover who signed that text (EIP-191 personal message).
-// 3. Ask NEAR AI Cloud's public attestation report (no key needed) whether that signer is a
-//    signing key of the model's TEE.
+// 3. Fetch that signer's hardware attestation from NEAR AI Cloud (no key needed) with a fresh
+//    random nonce, and verify it here with NEAR AI's own SDK: the Intel TDX quote must carry
+//    the nonce and be up to date, NVIDIA must verify the GPU evidence, and the signing key
+//    must be the one bound in the quote. Then check the signature against that verified key.
 const { createHash } = require("node:crypto");
 const { readFileSync } = require("node:fs");
 const { verifyMessage } = require("ethers");
@@ -36,13 +38,44 @@ const ok = (b) => (b ? "yes" : "NO");
   const hashes = signed.text === text;
   const signer = verifyMessage(signed.text, signed.signature).toLowerCase();
   const sigOk = signer === signed.signingAddress.toLowerCase();
-  const res = await fetch(`https://cloud-api.near.ai/v1/attestation/report?model=${encodeURIComponent(model)}&signing_algo=ecdsa`);
-  const att = await res.json();
-  const keys = (att.model_attestations || []).map((m) => String(m.signing_address).toLowerCase());
-  const attested = keys.includes(signer);
+  const sdk = await import("@nearai/inference-sdk/node");
+  const client = new sdk.AttestationClient({ baseUrl: "https://cloud-api.near.ai/v1" });
+  let fetched = { attestations: [], clientBinding: { nonce: null } };
+  try {
+    fetched = await client.fetchModelAttestations({ model, signingAlgo: "ecdsa", signingAddress: signer });
+  } catch (e) {
+    console.log(`attestation fetch failed: ${e.code || e.message}`);
+  }
+  const verifiers = { tdxQuote: sdk.createTdxQuoteVerifier(), gpuEvidence: sdk.createGpuEvidenceVerifier() };
+  let v = null;
+  let why = "NEAR AI returned no attestation for this signer (a restarted enclave gets a new key)";
+  for (const attestation of fetched.attestations) {
+    try {
+      const got = await sdk.verifyModelAttestation({ attestation, clientBinding: fetched.clientBinding, verifiers, policy: { gpuEvidence: "required", acceptedTcbStatuses: ["UpToDate"] } });
+      if (got.signer.signingAddress.toLowerCase() === signer) {
+        v = got;
+        break;
+      }
+      why = "the verified enclave's key is another address";
+    } catch (e) {
+      why = e.code || e.message;
+    }
+  }
+  let bound = false;
+  if (v) {
+    try {
+      const enc = new TextEncoder();
+      sdk.verifyModelResponse({ requestBody: enc.encode(r.request), responseBody: enc.encode(r.response), signature: { kind: "provider_tee", signer: v.signer, signedText: signed.text, signature: signed.signature }, attestation: v });
+      bound = true;
+    } catch (e) {
+      why = e.code || e.message;
+    }
+  }
+  const attested = Boolean(v) && bound;
   console.log(`signed text is our hashes:          ${ok(hashes)}`);
   console.log(`signature recovers ${signer}: ${ok(sigOk)}`);
-  console.log(`signer is in the TEE attestation:   ${ok(attested)}${attested ? "" : ` (attested now: ${keys.join(", ") || "none"}; a restarted enclave gets a new key)`}`);
+  if (fetched.clientBinding.nonce) console.log(`fresh nonce sent:                   ${fetched.clientBinding.nonce}`);
+  console.log(`enclave verified, signer is its key: ${ok(attested)}${attested ? ` (Intel TDX ${v.tcbStatus}, NVIDIA GPU ${v.gpuEvidence})` : ` (${why})`}`);
   const content = JSON.parse(r.response).choices[0].message.content;
   if (/^[0-9a-f]+$/i.test(content)) console.log(`\nThe answer is encrypted to the asker's browser key (NEAR AI E2EE); only that browser could read it:\n${content.slice(0, 96)}…`);
   else console.log(`\nThe hunter answered:\n${content}`);

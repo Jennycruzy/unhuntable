@@ -31,6 +31,15 @@ describe("NEAR AI hunter words", () => {
     expect(proofLine(proof({ signatureValid: false }, false))).toBe("NEAR AI did not return a signature for this answer.");
   });
 
+  it("names the fresh-nonce enclave check when it held, and its reason when it did not", () => {
+    const enclave = { nonce: "ab", verified: true, tcbStatus: "UpToDate", gpu: "verified", signingAddress: "0x1", checkedMs: 1 };
+    expect(proofLine({ ...proof(), enclave })).toBe(
+      "Signed inside NEAR AI's TEE: the question and answer are exactly what the model saw and said. Its enclave was verified for this answer with a fresh nonce: Intel TDX quote up to date, NVIDIA GPU evidence verified, signing key bound in the quote.",
+    );
+    const failed = { ...enclave, verified: false, tcbStatus: null, gpu: null, signingAddress: null, reason: "tdx.tcb_out_of_date" };
+    expect(proofLine({ ...proof({ inAttestation: false }), enclave: failed })).toBe("The signature check did not hold for the attestation. The enclave check said: tdx.tcb_out_of_date");
+  });
+
   it("reads the hunter's guess of the whole position", () => {
     const h = (combined: { side: string | null; usd: number | null }) => ({ answer: { combined } }) as unknown as AiHunt;
     expect(guessLine(h({ side: "long", usd: 301.4 }))).toBe("Long, about $301.");

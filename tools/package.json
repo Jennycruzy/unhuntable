@@ -12,6 +12,7 @@
   "type": "commonjs",
   "dependencies": {
     "@ethereum-attestation-service/eas-sdk": "^2.10.0",
+    "@nearai/inference-sdk": "0.3.0",
     "ethers": "^6.17.0"
   }
 }
